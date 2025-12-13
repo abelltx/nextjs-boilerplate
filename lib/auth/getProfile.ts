@@ -10,8 +10,10 @@ export type Profile = {
 export async function getProfile() {
   const supabase = await supabaseServer();
 
-  const { data: userData } = await supabase.auth.getUser();
+  const { data: userData, error: userErr } = await supabase.auth.getUser();
   const user = userData.user;
+
+  if (userErr) console.error("getUser error:", userErr);
   if (!user) return { user: null, profile: null };
 
   const { data: profile, error } = await supabase
@@ -20,7 +22,8 @@ export async function getProfile() {
     .eq("id", user.id)
     .single();
 
-  if (error) return { user, profile: null };
+  if (error) console.error("profiles select error:", error);
 
+  if (error) return { user, profile: null };
   return { user, profile: profile as Profile };
 }
