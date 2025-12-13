@@ -1,5 +1,4 @@
-﻿@"
-import { redirect } from "next/navigation";
+﻿import { redirect } from "next/navigation";
 import { supabaseServer } from "@/lib/supabase/server";
 import { getProfile } from "@/lib/auth/getProfile";
 import AdminClient from "./AdminClient";
@@ -33,4 +32,3 @@ export default async function AdminPage() {
     />
   );
 }
-"@ | Set-Content -Path .\app\admin\page.tsx -Encoding utf8
