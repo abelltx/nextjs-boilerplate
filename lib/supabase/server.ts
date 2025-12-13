@@ -9,14 +9,12 @@ export async function supabaseServer() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
+        // READ ONLY in Server Components / Pages
         getAll() {
           return cookieStore.getAll();
         },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, options);
-          });
-        },
+        // No-op: Next 16 forbids setting cookies here
+        setAll() {},
       },
     }
   );
