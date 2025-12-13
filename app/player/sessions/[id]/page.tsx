@@ -3,7 +3,20 @@ import { getProfile } from "@/lib/auth/getProfile";
 import { supabaseServer } from "@/lib/supabase/server";
 import PlayerSessionRealtime from "@/components/PlayerSessionRealtime";
 
-export default async function PlayerSessionPage({ params }: { params: { id: string } }) {
+export default async function PlayerSessionPage({
+  params,
+}: {
+  params: { id: string } | Promise<{ id: string }>;
+}) {
+  // ✅ Make params resilient in prod builds
+  const p = await Promise.resolve(params);
+  const sessionId = p?.id;
+  console.error("PLAYER SESSION PARAM CHECK:", { params: p, sessionId });
+
+
+  // ✅ Prevent uuid "undefined" crashes + send player to join screen
+  if (!sessionId || sessionId === "undefined") redirect("/player/join");
+
   const { user } = await getProfile();
   if (!user) redirect("/login");
 
@@ -13,7 +26,7 @@ export default async function PlayerSessionPage({ params }: { params: { id: stri
   const { data: session, error: sErr } = await supabase
     .from("sessions")
     .select("id,name,story_text")
-    .eq("id", params.id)
+    .eq("id", sessionId)
     .single();
 
   if (sErr) throw new Error(`Failed to load session: ${sErr.message}`);
@@ -22,7 +35,7 @@ export default async function PlayerSessionPage({ params }: { params: { id: stri
   const { data: state, error: stErr } = await supabase
     .from("session_state")
     .select("*")
-    .eq("session_id", params.id)
+    .eq("session_id", sessionId)
     .single();
 
   if (stErr) throw new Error(`Failed to load session state: ${stErr.message}`);
@@ -39,7 +52,7 @@ export default async function PlayerSessionPage({ params }: { params: { id: stri
 
         {/* Timer + encounter + roll prompt update in realtime */}
         <div style={{ minWidth: 260 }}>
-          <PlayerSessionRealtime sessionId={params.id} initialState={state} />
+          <PlayerSessionRealtime sessionId={sessionId} initialState={state} />
         </div>
       </header>
 
