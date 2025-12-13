@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth/getProfile";
 import { supabaseServer } from "@/lib/supabase/server";
 import PlayerSessionRealtime from "@/components/PlayerSessionRealtime";
+import StoryRealtime from "@/components/StoryRealtime";
 
 export default async function PlayerSessionPage({
   params,
@@ -58,17 +59,8 @@ export default async function PlayerSessionPage({
 
       <section style={{ border: "1px solid #ddd", borderRadius: 12, padding: 16 }}>
         <h2 style={{ marginTop: 0 }}>Story</h2>
-        <div
-          style={{
-            whiteSpace: "pre-wrap",
-            lineHeight: 1.5,
-            padding: 12,
-            borderRadius: 10,
-            border: "1px solid #ccc",
-          }}
-        >
-          {session.story_text || "Storyteller hasn’t posted story text yet."}
-        </div>
+<StoryRealtime sessionId={sessionId} initialStoryText={session.story_text || ""} />
+
         <div style={{ marginTop: 8, opacity: 0.7, fontSize: 13 }}>
           MVP note: read-only. Timer + rolls update live.
         </div>
