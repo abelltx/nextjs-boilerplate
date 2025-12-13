@@ -3,7 +3,8 @@
 export type Profile = {
   id: string;
   email: string;
-  role: "player" | "storyteller" | string;
+  is_storyteller: boolean;
+  is_admin: boolean;
 };
 
 export async function getProfile() {
@@ -15,13 +16,11 @@ export async function getProfile() {
 
   const { data: profile, error } = await supabase
     .from("profiles")
-    .select("id,email,role")
+    .select("id,email,is_storyteller,is_admin")
     .eq("id", user.id)
     .single();
 
-  if (error) {
-    return { user, profile: null };
-  }
+  if (error) return { user, profile: null };
 
   return { user, profile: profile as Profile };
 }

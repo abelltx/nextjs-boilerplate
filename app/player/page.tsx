@@ -3,13 +3,15 @@ import { getProfile } from "@/lib/auth/getProfile";
 import { supabaseServer } from "@/lib/supabase/server";
 
 export default async function PlayerPage() {
-  // 1) Require login + get role
   const { user, profile } = await getProfile();
   if (!user) redirect("/login");
 
   const supabase = await supabaseServer();
 
-  // 2) Get (or create) the player's character (MVP: first character only)
+  const accessLabel = profile
+    ? `${profile.is_admin ? "admin " : ""}${profile.is_storyteller ? "storyteller " : ""}player`.trim()
+    : "unknown";
+
   const { data: existingCharacters, error: charReadErr } = await supabase
     .from("characters")
     .select("id,user_id,name,class,level,created_at")
@@ -17,41 +19,28 @@ export default async function PlayerPage() {
     .order("created_at", { ascending: true })
     .limit(1);
 
-  if (charReadErr) {
-    throw new Error(`Failed to load character: ${charReadErr.message}`);
-  }
+  if (charReadErr) throw new Error(`Failed to load character: ${charReadErr.message}`);
 
   let character = existingCharacters?.[0] ?? null;
 
   if (!character) {
     const { data: created, error: charCreateErr } = await supabase
       .from("characters")
-      .insert({
-        user_id: user.id,
-        name: "Neweyes Adventurer",
-        class: "Pilgrim",
-        level: 1,
-      })
+      .insert({ user_id: user.id, name: "Neweyes Adventurer", class: "Pilgrim", level: 1 })
       .select("id,user_id,name,class,level,created_at")
       .single();
 
-    if (charCreateErr) {
-      throw new Error(`Failed to create character: ${charCreateErr.message}`);
-    }
-
+    if (charCreateErr) throw new Error(`Failed to create character: ${charCreateErr.message}`);
     character = created;
   }
 
-  // 3) Get (or create) story_state
   const { data: storyRow, error: storyReadErr } = await supabase
     .from("story_state")
     .select("user_id, story_text, updated_at")
     .eq("user_id", user.id)
     .maybeSingle();
 
-  if (storyReadErr) {
-    throw new Error(`Failed to load story: ${storyReadErr.message}`);
-  }
+  if (storyReadErr) throw new Error(`Failed to load story: ${storyReadErr.message}`);
 
   let storyText = storyRow?.story_text ?? "";
 
@@ -62,24 +51,19 @@ export default async function PlayerPage() {
         "Welcome to Neweyes Online.\n\nYour story will appear here. (MVP: read-only for now.)",
     });
 
-    if (storyCreateErr) {
-      throw new Error(`Failed to create story: ${storyCreateErr.message}`);
-    }
+    if (storyCreateErr) throw new Error(`Failed to create story: ${storyCreateErr.message}`);
 
     storyText =
       "Welcome to Neweyes Online.\n\nYour story will appear here. (MVP: read-only for now.)";
   }
 
-  // 4) Load inventory for that character
   const { data: inventory, error: invErr } = await supabase
     .from("inventory_items")
     .select("id,name,quantity,created_at")
     .eq("character_id", character.id)
     .order("created_at", { ascending: true });
 
-  if (invErr) {
-    throw new Error(`Failed to load inventory: ${invErr.message}`);
-  }
+  if (invErr) throw new Error(`Failed to load inventory: ${invErr.message}`);
 
   return (
     <main style={{ maxWidth: 920, margin: "40px auto", padding: 16, display: "grid", gap: 16 }}>
@@ -88,7 +72,7 @@ export default async function PlayerPage() {
           <h1 style={{ fontSize: 28, fontWeight: 900, margin: 0 }}>Player Dashboard</h1>
           <div style={{ opacity: 0.8, marginTop: 6 }}>
             <span>Signed in as: <b>{user.email}</b></span>
-            <span style={{ marginLeft: 12 }}>Role: <b>{profile?.role ?? "unknown"}</b></span>
+            <span style={{ marginLeft: 12 }}>Access: <b>{accessLabel}</b></span>
           </div>
         </div>
 
@@ -98,7 +82,6 @@ export default async function PlayerPage() {
       </header>
 
       <section style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        {/* Character card */}
         <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 16 }}>
           <h2 style={{ marginTop: 0 }}>Character</h2>
           <div style={{ display: "grid", gap: 8 }}>
@@ -106,13 +89,11 @@ export default async function PlayerPage() {
             <div><b>Class:</b> {character.class}</div>
             <div><b>Level:</b> {character.level}</div>
           </div>
-
           <div style={{ marginTop: 14, opacity: 0.7, fontSize: 13 }}>
             MVP note: one character per user (for now).
           </div>
         </div>
 
-        {/* Inventory */}
         <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 16 }}>
           <h2 style={{ marginTop: 0 }}>Inventory</h2>
 
@@ -132,7 +113,6 @@ export default async function PlayerPage() {
         </div>
       </section>
 
-      {/* Story text area */}
       <section style={{ border: "1px solid #ddd", borderRadius: 12, padding: 16 }}>
         <h2 style={{ marginTop: 0 }}>Story</h2>
         <textarea
