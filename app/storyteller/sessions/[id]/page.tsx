@@ -1,9 +1,25 @@
 import TimerClient from '@/components/TimerClient';
 import { getDmSession, updateStoryText, updateState } from './actions';
 
-export default async function DmScreenPage({ params }: { params: { id: string } }) {
-  const { session, state, joins } = await getDmSession(params.id);
+import { redirect } from "next/navigation";
+import TimerClient from "@/components/TimerClient";
+import { getDmSession, updateStoryText, updateState } from "./actions";
 
+export default async function DmScreenPage({
+  params,
+}: {
+  params: { id: string } | Promise<{ id: string }>;
+}) {
+  const p = await Promise.resolve(params);
+  const sessionId = p?.id;
+
+ if (!sessionId || sessionId === "undefined") redirect("/storyteller/sessions");
+
+  const { session, state, joins } = await getDmSession(sessionId);
+
+if (!sessionId || sessionId === "undefined") {
+  throw new Error(`getDmSession: invalid sessionId: ${String(sessionId)}`);
+}
   const encounterPct =
     state.encounter_total > 0 ? Math.round((state.encounter_current / state.encounter_total) * 100) : 0;
 

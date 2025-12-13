@@ -2,31 +2,38 @@
 
 import { supabaseServer } from "@/lib/supabase/server";
 
-
 export async function getDmSession(sessionId: string) {
+  if (!sessionId) throw new Error("getDmSession called without sessionId");
+  // ...
+}
+export async function getDmSession(sessionId: string) {
+  if (!sessionId || sessionId === "undefined") {
+    throw new Error(`getDmSession: invalid sessionId: ${String(sessionId)}`);
+  }
+
   const supabase = await supabaseServer();
 
   const { data: session, error: sErr } = await supabase
-    .from('sessions')
-    .select('id,name,join_code,story_text,storyteller_id')
-    .eq('id', sessionId)
+    .from("sessions")
+    .select("id,name,join_code,story_text,storyteller_id")
+    .eq("id", sessionId)
     .single();
 
   if (sErr) throw new Error(sErr.message);
 
   const { data: state, error: stErr } = await supabase
-    .from('session_state')
-    .select('*')
-    .eq('session_id', sessionId)
+    .from("session_state")
+    .select("*")
+    .eq("session_id", sessionId)
     .single();
 
   if (stErr) throw new Error(stErr.message);
 
   const { data: joins } = await supabase
-    .from('session_players')
-    .select('player_id, joined_at')
-    .eq('session_id', sessionId)
-    .order('joined_at', { ascending: true });
+    .from("session_players")
+    .select("player_id, joined_at")
+    .eq("session_id", sessionId)
+    .order("joined_at", { ascending: true });
 
   return { session, state, joins: joins ?? [] };
 }
