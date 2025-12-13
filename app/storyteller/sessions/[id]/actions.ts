@@ -1,11 +1,7 @@
-'use server';
+"use server";
 
 import { supabaseServer } from "@/lib/supabase/server";
 
-export async function getDmSession(sessionId: string) {
-  if (!sessionId) throw new Error("getDmSession called without sessionId");
-  // ...
-}
 export async function getDmSession(sessionId: string) {
   if (!sessionId || sessionId === "undefined") {
     throw new Error(`getDmSession: invalid sessionId: ${String(sessionId)}`);
@@ -39,25 +35,28 @@ export async function getDmSession(sessionId: string) {
 }
 
 export async function updateStoryText(sessionId: string, formData: FormData) {
+  if (!sessionId || sessionId === "undefined") {
+    throw new Error(`updateStoryText: invalid sessionId: ${String(sessionId)}`);
+  }
+
   const supabase = await supabaseServer();
-  const story_text = String(formData.get('story_text') || '');
+  const story_text = String(formData.get("story_text") ?? "");
 
-  const { error } = await supabase
-    .from('sessions')
-    .update({ story_text })
-    .eq('id', sessionId);
-
+  const { error } = await supabase.from("sessions").update({ story_text }).eq("id", sessionId);
   if (error) throw new Error(error.message);
 }
 
 export async function updateState(sessionId: string, patch: any) {
+  if (!sessionId || sessionId === "undefined") {
+    throw new Error(`updateState: invalid sessionId: ${String(sessionId)}`);
+  }
+
   const supabase = await supabaseServer();
 
-  // always bump updated_at so timer math works
   const { error } = await supabase
-    .from('session_state')
+    .from("session_state")
     .update({ ...patch, updated_at: new Date().toISOString() })
-    .eq('session_id', sessionId);
+    .eq("session_id", sessionId);
 
   if (error) throw new Error(error.message);
 }
