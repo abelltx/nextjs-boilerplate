@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import TimerClient from "@/components/TimerClient";
 import { getDmSession, updateStoryText, updateState } from "./actions";
+import { createClient } from "@/utils/supabase/server";
+import { EpisodePicker } from "@/components/EpisodePicker";
 
 export default async function DmScreenPage({
   params,
@@ -13,15 +15,20 @@ export default async function DmScreenPage({
  if (!sessionId || sessionId === "undefined") redirect("/storyteller/sessions");
 
   const { session, state, joins } = await getDmSession(sessionId);
+  const supabase = await createClient();
+const { data: episodes, error: epErr } = await supabase
+  .from("episodes")
+  .select("id,title,episode_code,tags")
+  .order("created_at", { ascending: false });
 
-if (!sessionId || sessionId === "undefined") {
-  throw new Error(`getDmSession: invalid sessionId: ${String(sessionId)}`);
-}
+if (epErr) console.error(epErr);
+  
   const encounterPct =
     state.encounter_total > 0 ? Math.round((state.encounter_current / state.encounter_total) * 100) : 0;
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-4">
+      <EpisodePicker sessionId={sessionId} episodes={episodes ?? []} />
       {/* TOP BAR */}
       <div className="grid grid-cols-12 gap-3">
         <div className="col-span-8 border rounded-xl p-4">
