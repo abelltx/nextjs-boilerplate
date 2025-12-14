@@ -23,14 +23,23 @@ async function requireAdminServer() {
 export default async function AdminEpisodeEditPage({
   params,
 }: {
-  params: { id: string };
+  params: { id?: string } | Promise<{ id?: string }>;
 }) {
+  const p = await Promise.resolve(params as any);
+  const id = p?.id;
+
+  if (!id || id === "undefined") redirect("/admin/episodes");
+
+  // simple UUID sanity check
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+  if (!isUuid) redirect("/admin/episodes");
+
   const supabase = await requireAdminServer();
 
   const { data: episode, error } = await supabase
     .from("episodes")
     .select("*")
-    .eq("id", params.id)
+    .eq("id", id)
     .single();
 
   if (error) throw new Error(error.message);
