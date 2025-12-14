@@ -20,19 +20,28 @@ async function requireAdminServer() {
   return supabase;
 }
 
+// Strict UUID v1-v5 check (prevents "undefined" and other garbage reaching Postgres)
+function isUuid(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const v = value.trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
+}
+
 export default async function AdminEpisodeEditPage({
   params,
 }: {
   params: { id?: string } | Promise<{ id?: string }>;
 }) {
-  const p = await Promise.resolve(params as any);
-  const id = p?.id;
+  // Next sometimes passes params as a Promise in App Router. This handles both safely.
+  const resolvedParams = await Promise.resolve(params);
+  const rawId = resolvedParams?.id;
 
-  if (!id || id === "undefined") redirect("/admin/episodes");
+  // HARD GUARD: never let undefined/invalid ids hit Supabase
+  if (!rawId || rawId === "undefined" || !isUuid(rawId)) {
+    redirect("/admin/episodes");
+  }
 
-  // simple UUID sanity check
-  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-  if (!isUuid) redirect("/admin/episodes");
+  const id = rawId.trim();
 
   const supabase = await requireAdminServer();
 
