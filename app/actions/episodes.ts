@@ -16,7 +16,6 @@ export async function loadEpisodeToSessionAction(sessionId: string, episodeId: s
 
   if (error) throw new Error(error.message);
 
-  // Refresh pages that show session content
   revalidatePath(`/storyteller/sessions/${sessionId}`);
   revalidatePath(`/storyteller/sessions`);
 }

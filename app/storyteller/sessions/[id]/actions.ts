@@ -11,7 +11,7 @@ export async function getDmSession(sessionId: string) {
 
   const { data: session, error: sErr } = await supabase
     .from("sessions")
-    .select("id,name,join_code,story_text,storyteller_id")
+    .select("id,name,join_code,story_text,storyteller_id,episode_id")
     .eq("id", sessionId)
     .single();
 

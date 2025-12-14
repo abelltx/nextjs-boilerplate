@@ -3,6 +3,8 @@ import TimerClient from "@/components/TimerClient";
 import { getDmSession, updateStoryText, updateState } from "./actions";
 import { createClient } from "@/utils/supabase/server";
 import { EpisodePicker } from "@/components/EpisodePicker";
+import BlockNavigator from "@/components/BlockNavigator";
+
 
 export default async function DmScreenPage({
   params,
@@ -16,6 +18,30 @@ export default async function DmScreenPage({
 
   const { session, state, joins } = await getDmSession(sessionId);
   const supabase = await createClient();
+
+let blocks: any[] = [];
+
+// fetch episode_id safely (avoids TS type mismatch)
+const { data: sessionRow, error: sesErr } = await supabase
+  .from("sessions")
+  .select("episode_id")
+  .eq("id", sessionId)
+  .single();
+
+if (sesErr) {
+  console.error("Failed to load session episode_id:", sesErr.message);
+} else if (sessionRow?.episode_id) {
+  const { data } = await supabase
+    .from("episode_blocks")
+    .select("id,sort_order,block_type,audience,mode,title,body,image_url")
+    .eq("episode_id", sessionRow.episode_id)
+    .order("sort_order", { ascending: true });
+
+  blocks = data ?? [];
+}
+
+
+
 const { data: episodes, error: epErr } = await supabase
   .from("episodes")
   .select("id,title,episode_code,tags")
@@ -112,6 +138,7 @@ if (epErr) console.error(epErr);
           </div>
         </div>
       </div>
+<BlockNavigator sessionId={session.id} blocks={blocks} />
 
       {/* MIDDLE BAR */}
       <div className="grid grid-cols-12 gap-3">

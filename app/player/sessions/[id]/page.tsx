@@ -58,13 +58,62 @@ export default async function PlayerSessionPage({
       </header>
 
       <section style={{ border: "1px solid #ddd", borderRadius: 12, padding: 16 }}>
-        <h2 style={{ marginTop: 0 }}>Story</h2>
-<StoryRealtime sessionId={sessionId} initialStoryText={session.story_text || ""} />
+  <h2 style={{ marginTop: 0 }}>Story</h2>
 
-        <div style={{ marginTop: 8, opacity: 0.7, fontSize: 13 }}>
-          MVP note: read-only. Timer + rolls update live.
+  {/* 🔴 Presented by Storyteller (explicit visibility) */}
+  {(state.presented_title || state.presented_body || state.presented_image_url) && (
+    <div
+      style={{
+        border: "1px solid #ccc",
+        borderRadius: 10,
+        padding: 14,
+        marginBottom: 16,
+        background: "#fafafa",
+      }}
+    >
+      <div style={{ fontSize: 11, letterSpacing: 1, opacity: 0.6, marginBottom: 6 }}>
+        PRESENTED BY STORYTELLER
+      </div>
+
+      {state.presented_title && (
+        <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>
+          {state.presented_title}
         </div>
-      </section>
+      )}
+
+      {state.presented_body && (
+        <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
+          {state.presented_body}
+        </div>
+      )}
+
+      {state.presented_image_url && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={state.presented_image_url}
+          alt="Storyteller visual"
+          style={{
+            marginTop: 12,
+            maxWidth: "100%",
+            borderRadius: 10,
+            border: "1px solid #ddd",
+          }}
+        />
+      )}
+    </div>
+  )}
+
+  {/* 🟡 Baseline story feed (existing behavior) */}
+  <StoryRealtime
+    sessionId={sessionId}
+    initialStoryText={session.story_text || ""}
+  />
+
+  <div style={{ marginTop: 8, opacity: 0.7, fontSize: 13 }}>
+    MVP note: read-only. Timer + rolls update live.
+  </div>
+</section>
+
     </main>
   );
 }
