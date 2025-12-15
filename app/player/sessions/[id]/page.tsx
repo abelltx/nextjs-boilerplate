@@ -1,3 +1,7 @@
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const fetchCache = "force-no-store";
+
 import { redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth/getProfile";
 import { supabaseServer } from "@/lib/supabase/server";
@@ -59,7 +63,6 @@ export default async function PlayerSessionPage({
           </div>
         </div>
 
-        {/* Timer + encounter + roll prompt update in realtime */}
         <div style={{ minWidth: 260 }}>
           <PlayerSessionRealtime sessionId={sessionId} initialState={state} />
         </div>
@@ -68,10 +71,10 @@ export default async function PlayerSessionPage({
       <section style={{ border: "1px solid #ddd", borderRadius: 12, padding: 16 }}>
         <h2 style={{ marginTop: 0 }}>Story</h2>
 
-        {/* ✅ Presented by Storyteller (LIVE, driven by session_state realtime) */}
+        {/* Presented by Storyteller (LIVE) */}
         <PresentedBlockRealtime sessionId={sessionId} initialState={state} />
 
-        {/* Baseline story feed (existing behavior) */}
+        {/* Baseline story feed */}
         <StoryRealtime sessionId={sessionId} initialStoryText={session.story_text || ""} />
 
         <div style={{ marginTop: 8, opacity: 0.7, fontSize: 13 }}>
