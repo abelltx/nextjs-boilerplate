@@ -3,20 +3,28 @@ import { getProfile } from "@/lib/auth/getProfile";
 import { supabaseServer } from "@/lib/supabase/server";
 import PlayerSessionRealtime from "@/components/PlayerSessionRealtime";
 import StoryRealtime from "@/components/StoryRealtime";
+import PresentedBlockRealtime from "@/components/PresentedBlockRealtime";
+
+function isUuid(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const v = value.trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
+}
 
 export default async function PlayerSessionPage({
   params,
 }: {
   params: { id: string } | Promise<{ id: string }>;
 }) {
-  // ✅ Make params resilient in prod builds
   const p = await Promise.resolve(params);
-  const sessionId = p?.id;
-  console.error("PLAYER SESSION PARAM CHECK:", { params: p, sessionId });
+  const rawSessionId = p?.id;
 
+  // Prevent uuid "undefined" crashes + send player to join screen
+  if (!rawSessionId || rawSessionId === "undefined" || !isUuid(rawSessionId)) {
+    redirect("/player/join");
+  }
 
-  // ✅ Prevent uuid "undefined" crashes + send player to join screen
-  if (!sessionId || sessionId === "undefined") redirect("/player/join");
+  const sessionId = rawSessionId.trim();
 
   const { user } = await getProfile();
   if (!user) redirect("/login");
@@ -32,7 +40,7 @@ export default async function PlayerSessionPage({
 
   if (sErr) throw new Error(`Failed to load session: ${sErr.message}`);
 
-  // state (timer, encounter, roll prompt)
+  // state (timer, encounter, roll prompt + presented fields)
   const { data: state, error: stErr } = await supabase
     .from("session_state")
     .select("*")
@@ -58,62 +66,18 @@ export default async function PlayerSessionPage({
       </header>
 
       <section style={{ border: "1px solid #ddd", borderRadius: 12, padding: 16 }}>
-  <h2 style={{ marginTop: 0 }}>Story</h2>
+        <h2 style={{ marginTop: 0 }}>Story</h2>
 
-  {/* 🔴 Presented by Storyteller (explicit visibility) */}
-  {(state.presented_title || state.presented_body || state.presented_image_url) && (
-    <div
-      style={{
-        border: "1px solid #ccc",
-        borderRadius: 10,
-        padding: 14,
-        marginBottom: 16,
-        background: "#fafafa",
-      }}
-    >
-      <div style={{ fontSize: 11, letterSpacing: 1, opacity: 0.6, marginBottom: 6 }}>
-        PRESENTED BY STORYTELLER
-      </div>
+        {/* ✅ Presented by Storyteller (LIVE, driven by session_state realtime) */}
+        <PresentedBlockRealtime sessionId={sessionId} initialState={state} />
 
-      {state.presented_title && (
-        <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>
-          {state.presented_title}
+        {/* Baseline story feed (existing behavior) */}
+        <StoryRealtime sessionId={sessionId} initialStoryText={session.story_text || ""} />
+
+        <div style={{ marginTop: 8, opacity: 0.7, fontSize: 13 }}>
+          MVP note: read-only. Timer + rolls update live.
         </div>
-      )}
-
-      {state.presented_body && (
-        <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
-          {state.presented_body}
-        </div>
-      )}
-
-      {state.presented_image_url && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={state.presented_image_url}
-          alt="Storyteller visual"
-          style={{
-            marginTop: 12,
-            maxWidth: "100%",
-            borderRadius: 10,
-            border: "1px solid #ddd",
-          }}
-        />
-      )}
-    </div>
-  )}
-
-  {/* 🟡 Baseline story feed (existing behavior) */}
-  <StoryRealtime
-    sessionId={sessionId}
-    initialStoryText={session.story_text || ""}
-  />
-
-  <div style={{ marginTop: 8, opacity: 0.7, fontSize: 13 }}>
-    MVP note: read-only. Timer + rolls update live.
-  </div>
-</section>
-
+      </section>
     </main>
   );
 }
