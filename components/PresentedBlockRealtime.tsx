@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/utils/supabase/client";
 
 type PresentedState = {
@@ -19,6 +19,7 @@ export default function PresentedBlockRealtime({
   sessionId: string;
   initialState: PresentedState;
 }) {
+  const supabase = useMemo(() => createClient(), []);
   const [presented, setPresented] = useState<PresentedState>({
     presented_block_id: initialState.presented_block_id ?? null,
     presented_title: initialState.presented_title ?? null,
@@ -27,17 +28,21 @@ export default function PresentedBlockRealtime({
     presented_block_type: initialState.presented_block_type ?? null,
     presented_updated_at: initialState.presented_updated_at ?? null,
   });
-  
-const channel = supabase
-  .channel(`presented-block-${sessionId}`)
-  .on(/* ... */)
-  .subscribe((status) => {
-    console.log("PresentedBlockRealtime status:", status);
-  });
 
   useEffect(() => {
-    const supabase = createClient();
+    // In case sessionId changes (rare), reset baseline
+    setPresented({
+      presented_block_id: initialState.presented_block_id ?? null,
+      presented_title: initialState.presented_title ?? null,
+      presented_body: initialState.presented_body ?? null,
+      presented_image_url: initialState.presented_image_url ?? null,
+      presented_block_type: initialState.presented_block_type ?? null,
+      presented_updated_at: initialState.presented_updated_at ?? null,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
 
+  useEffect(() => {
     const channel = supabase
       .channel(`presented-block-${sessionId}`)
       .on(
@@ -49,6 +54,9 @@ const channel = supabase
           filter: `session_id=eq.${sessionId}`,
         },
         (payload) => {
+          // Helps debug if it fires in prod
+          console.log("PresentedBlockRealtime UPDATE payload:", payload);
+
           const row = payload.new as any;
           setPresented({
             presented_block_id: row.presented_block_id ?? null,
@@ -60,20 +68,19 @@ const channel = supabase
           });
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log("PresentedBlockRealtime status:", status);
+      });
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [sessionId]);
+  }, [supabase, sessionId]);
 
-  const hasPresented =
-    !!presented.presented_block_id ||
-    !!presented.presented_title ||
-    !!presented.presented_body ||
-    !!presented.presented_image_url;
+  const hasAnything =
+    !!presented.presented_title || !!presented.presented_body || !!presented.presented_image_url;
 
-  if (!hasPresented) {
+  if (!hasAnything) {
     return (
       <div
         style={{
@@ -81,14 +88,13 @@ const channel = supabase
           borderRadius: 10,
           padding: 14,
           marginBottom: 16,
-          background: "#fff",
-          opacity: 0.9,
+          background: "#fafafa",
         }}
       >
         <div style={{ fontSize: 11, letterSpacing: 1, opacity: 0.6, marginBottom: 6 }}>
           PRESENTED BY STORYTELLER
         </div>
-        <div style={{ fontSize: 14, opacity: 0.8 }}>Waiting for the storyteller…</div>
+        <div style={{ opacity: 0.75 }}>Waiting for the storyteller…</div>
       </div>
     );
   }
@@ -107,10 +113,9 @@ const channel = supabase
         PRESENTED BY STORYTELLER
       </div>
 
-      {(presented.presented_block_type || presented.presented_title) && (
+      {presented.presented_title && (
         <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>
-          {presented.presented_block_type ? `${presented.presented_block_type.toUpperCase()}` : ""}
-          {presented.presented_title ? ` — ${presented.presented_title}` : ""}
+          {presented.presented_title}
         </div>
       )}
 
