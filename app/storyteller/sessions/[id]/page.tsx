@@ -32,9 +32,8 @@ export default async function DmScreenPage({
   const { session, state, joins } = await getDmSession(sessionId);
   const supabase = await createClient();
 
+  // Load blocks for the currently loaded episode on this session
   let blocks: any[] = [];
-
-  // fetch episode_id safely
   const { data: sessionRow, error: sesErr } = await supabase
     .from("sessions")
     .select("episode_id")
@@ -61,7 +60,7 @@ export default async function DmScreenPage({
 
   if (epErr) console.error(epErr);
 
-  // Only blocks players are allowed to see
+  // Presentable blocks = anything not storyteller-only
   const presentable = (blocks ?? []).filter((b: any) => b.audience !== "storyteller");
   const totalPresentable = presentable.length;
 
@@ -178,7 +177,7 @@ export default async function DmScreenPage({
         </div>
       </div>
 
-      {/* PLAYER PROJECTION (Accordion + X of XX + Present Controls) */}
+      {/* PLAYER PROJECT */}
       <div className="border rounded-xl p-4 space-y-3">
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -269,9 +268,7 @@ export default async function DmScreenPage({
                       redirect(`/storyteller/sessions/${session.id}`);
                     }}
                   >
-                    <button className="px-3 py-2 rounded bg-black text-white">
-                      Present to Players
-                    </button>
+                    <button className="px-3 py-2 rounded bg-black text-white">Present to Players</button>
                   </form>
                 </div>
               </details>
@@ -280,17 +277,14 @@ export default async function DmScreenPage({
         </div>
       </div>
 
-      {/* MIDDLE BAR */}
+      {/* EPISODE PROGRESS + ROLLS */}
       <div className="grid grid-cols-12 gap-3">
-        {/* Episode Progress (replaces Encounter Progress meter) */}
         <div className="col-span-6 border rounded-xl p-4">
           <div className="flex items-center justify-between">
             <div>
               <div className="text-xs uppercase text-gray-500">Episode Progress</div>
               <div className="font-bold">
-                {totalPresentable === 0
-                  ? "No presentable blocks"
-                  : `Block ${currentHuman || 0} / ${totalPresentable}`}
+                {totalPresentable === 0 ? "No presentable blocks" : `Block ${currentHuman || 0} / ${totalPresentable}`}
               </div>
             </div>
             <div className="text-2xl font-bold">{episodePct}%</div>
@@ -305,7 +299,6 @@ export default async function DmScreenPage({
           </div>
         </div>
 
-        {/* Keep your Encounter data alive (optional controls stay here) */}
         <div className="col-span-6 border rounded-xl p-4">
           <div className="text-xs uppercase text-gray-500">Roll Requests (physical dice)</div>
           <div className="mt-2 flex flex-wrap gap-2">
