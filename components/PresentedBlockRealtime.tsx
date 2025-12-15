@@ -27,6 +27,13 @@ export default function PresentedBlockRealtime({
     presented_block_type: initialState.presented_block_type ?? null,
     presented_updated_at: initialState.presented_updated_at ?? null,
   });
+  
+const channel = supabase
+  .channel(`presented-block-${sessionId}`)
+  .on(/* ... */)
+  .subscribe((status) => {
+    console.log("PresentedBlockRealtime status:", status);
+  });
 
   useEffect(() => {
     const supabase = createClient();
