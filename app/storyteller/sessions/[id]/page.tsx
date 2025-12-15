@@ -1,9 +1,12 @@
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const fetchCache = "force-no-store";
+
 import { redirect } from "next/navigation";
 import TimerClient from "@/components/TimerClient";
 import { getDmSession, updateStoryText, updateState } from "./actions";
 import { createClient } from "@/utils/supabase/server";
 import { EpisodePicker } from "@/components/EpisodePicker";
-import BlockNavigator from "@/components/BlockNavigator";
 import { presentBlockToPlayersAction, clearPresentedAction } from "@/app/actions/present";
 
 function isUuid(value: unknown): value is string {
@@ -31,7 +34,7 @@ export default async function DmScreenPage({
 
   let blocks: any[] = [];
 
-  // fetch episode_id safely (avoids TS type mismatch)
+  // fetch episode_id safely
   const { data: sessionRow, error: sesErr } = await supabase
     .from("sessions")
     .select("episode_id")
@@ -58,21 +61,21 @@ export default async function DmScreenPage({
 
   if (epErr) console.error(epErr);
 
-  // Only blocks players are allowed to see (keep numbering aligned with what can be presented)
+  // Only blocks players are allowed to see
   const presentable = (blocks ?? []).filter((b: any) => b.audience !== "storyteller");
   const totalPresentable = presentable.length;
 
   const currentIdx = presentable.findIndex((b: any) => b.id === state.presented_block_id);
   const currentHuman = currentIdx >= 0 ? currentIdx + 1 : 0;
 
-  const encounterPct =
-    state.encounter_total > 0 ? Math.round((state.encounter_current / state.encounter_total) * 100) : 0;
-
   const canBack = currentIdx > 0;
   const canNext = totalPresentable > 0 && (currentIdx === -1 || currentIdx < totalPresentable - 1);
 
   const nextIdx = currentIdx === -1 ? 0 : currentIdx + 1;
   const backIdx = currentIdx - 1;
+
+  const episodePct =
+    totalPresentable > 0 ? Math.round(((currentHuman || 0) / totalPresentable) * 100) : 0;
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-4">
@@ -132,6 +135,7 @@ export default async function DmScreenPage({
                 action={async () => {
                   "use server";
                   await updateState(session.id, { timer_status: "running" });
+                  redirect(`/storyteller/sessions/${session.id}`);
                 }}
               >
                 <button className="px-3 py-2 rounded bg-black text-white text-sm">Start</button>
@@ -141,6 +145,7 @@ export default async function DmScreenPage({
                 action={async () => {
                   "use server";
                   await updateState(session.id, { timer_status: "paused" });
+                  redirect(`/storyteller/sessions/${session.id}`);
                 }}
               >
                 <button className="px-3 py-2 rounded border text-sm">Pause</button>
@@ -153,6 +158,7 @@ export default async function DmScreenPage({
                     timer_status: "stopped",
                     remaining_seconds: state.duration_seconds,
                   });
+                  redirect(`/storyteller/sessions/${session.id}`);
                 }}
               >
                 <button className="px-3 py-2 rounded border text-sm">Reset</button>
@@ -162,6 +168,7 @@ export default async function DmScreenPage({
                 action={async () => {
                   "use server";
                   await updateState(session.id, { remaining_seconds: state.remaining_seconds + 300 });
+                  redirect(`/storyteller/sessions/${session.id}`);
                 }}
               >
                 <button className="px-3 py-2 rounded border text-sm">+5 min</button>
@@ -171,18 +178,18 @@ export default async function DmScreenPage({
         </div>
       </div>
 
-      {/* STORYBOARD NAV (Present/Clear/Next/Back + Accordions) */}
+      {/* PLAYER PROJECTION (Accordion + X of XX + Present Controls) */}
       <div className="border rounded-xl p-4 space-y-3">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <div className="text-xs uppercase text-gray-500">Player Projection</div>
+            <div className="text-xs uppercase text-gray-500">Player Project</div>
             <div className="text-sm text-gray-700">
               {totalPresentable ? (
                 <>
                   Block <b>{currentHuman || 0}</b> of <b>{totalPresentable}</b>
                 </>
               ) : (
-                "No presentable blocks (create blocks with audience = players or both)."
+                "No presentable blocks (set audience = players or both)."
               )}
             </div>
           </div>
@@ -192,6 +199,7 @@ export default async function DmScreenPage({
               action={async () => {
                 "use server";
                 await clearPresentedAction(session.id);
+                redirect(`/storyteller/sessions/${session.id}`);
               }}
             >
               <button className="px-3 py-2 rounded border">Clear</button>
@@ -203,6 +211,7 @@ export default async function DmScreenPage({
                 if (canBack) {
                   await presentBlockToPlayersAction(session.id, presentable[backIdx].id);
                 }
+                redirect(`/storyteller/sessions/${session.id}`);
               }}
             >
               <button className="px-3 py-2 rounded border" disabled={!canBack}>
@@ -216,6 +225,7 @@ export default async function DmScreenPage({
                 if (canNext) {
                   await presentBlockToPlayersAction(session.id, presentable[nextIdx].id);
                 }
+                redirect(`/storyteller/sessions/${session.id}`);
               }}
             >
               <button className="px-3 py-2 rounded bg-black text-white" disabled={!canNext}>
@@ -256,6 +266,7 @@ export default async function DmScreenPage({
                     action={async () => {
                       "use server";
                       await presentBlockToPlayersAction(session.id, b.id);
+                      redirect(`/storyteller/sessions/${session.id}`);
                     }}
                   >
                     <button className="px-3 py-2 rounded bg-black text-white">
@@ -269,56 +280,32 @@ export default async function DmScreenPage({
         </div>
       </div>
 
-      {/* Keep your existing BlockNavigator if you still want it (it will now be redundant) */}
-      <BlockNavigator sessionId={session.id} blocks={blocks} />
-
       {/* MIDDLE BAR */}
       <div className="grid grid-cols-12 gap-3">
+        {/* Episode Progress (replaces Encounter Progress meter) */}
         <div className="col-span-6 border rounded-xl p-4">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-xs uppercase text-gray-500">Encounter Progress</div>
+              <div className="text-xs uppercase text-gray-500">Episode Progress</div>
               <div className="font-bold">
-                {state.encounter_total === 0
-                  ? "No encounters set"
-                  : `Encounter ${state.encounter_current} / ${state.encounter_total}`}
+                {totalPresentable === 0
+                  ? "No presentable blocks"
+                  : `Block ${currentHuman || 0} / ${totalPresentable}`}
               </div>
             </div>
-            <div className="text-2xl font-bold">{encounterPct}%</div>
+            <div className="text-2xl font-bold">{episodePct}%</div>
           </div>
 
           <div className="mt-3 h-2 rounded bg-gray-200 overflow-hidden">
-            <div className="h-2 bg-black" style={{ width: `${encounterPct}%` }} />
+            <div className="h-2 bg-black" style={{ width: `${episodePct}%` }} />
           </div>
 
-          <div className="mt-3 flex gap-2">
-            <form
-              action={async () => {
-                "use server";
-                await updateState(session.id, { encounter_total: Math.max(0, state.encounter_total + 1) });
-              }}
-            >
-              <button className="px-3 py-2 rounded border text-sm">+ total</button>
-            </form>
-            <form
-              action={async () => {
-                "use server";
-                await updateState(session.id, { encounter_current: Math.min(state.encounter_total, state.encounter_current + 1) });
-              }}
-            >
-              <button className="px-3 py-2 rounded border text-sm">Next</button>
-            </form>
-            <form
-              action={async () => {
-                "use server";
-                await updateState(session.id, { encounter_current: Math.max(0, state.encounter_current - 1) });
-              }}
-            >
-              <button className="px-3 py-2 rounded border text-sm">Back</button>
-            </form>
+          <div className="mt-3 text-xs text-gray-600">
+            This meter follows what you present to players (blocks with audience = players/both).
           </div>
         </div>
 
+        {/* Keep your Encounter data alive (optional controls stay here) */}
         <div className="col-span-6 border rounded-xl p-4">
           <div className="text-xs uppercase text-gray-500">Roll Requests (physical dice)</div>
           <div className="mt-2 flex flex-wrap gap-2">
@@ -333,6 +320,7 @@ export default async function DmScreenPage({
                     roll_prompt: `Roll your ${die.toUpperCase()} now`,
                     roll_target: "all",
                   });
+                  redirect(`/storyteller/sessions/${session.id}`);
                 }}
               >
                 <button className="px-3 py-2 rounded bg-black text-white text-sm">Roll {die}</button>
@@ -343,6 +331,7 @@ export default async function DmScreenPage({
               action={async () => {
                 "use server";
                 await updateState(session.id, { roll_open: false, roll_die: null, roll_prompt: null });
+                redirect(`/storyteller/sessions/${session.id}`);
               }}
             >
               <button className="px-3 py-2 rounded border text-sm">Close Roll</button>
@@ -371,6 +360,7 @@ export default async function DmScreenPage({
             action={async (fd) => {
               "use server";
               await updateStoryText(session.id, fd);
+              redirect(`/storyteller/sessions/${session.id}`);
             }}
             className="mt-2 space-y-2"
           >
