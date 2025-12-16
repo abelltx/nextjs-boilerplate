@@ -112,7 +112,7 @@ export default async function DmScreenPage({
   const currentSceneHuman = presentedSceneIdx >= 0 ? presentedSceneIdx + 1 : 0;
   const completedCount = scenes.filter((s) => completedSceneIds.includes(s.scene.id)).length;
 
-  // Episode Progress = completion (or you can switch to current scene if you prefer)
+  // Episode Progress = completion %
   const episodePct = totalScenes > 0 ? Math.round((completedCount / totalScenes) * 100) : 0;
 
   return (
@@ -125,7 +125,9 @@ export default async function DmScreenPage({
             <div>
               <div className="text-xs uppercase text-gray-500">Session</div>
               <div className="text-xl font-bold">{session.name}</div>
-              <div className="mt-1 text-xs text-gray-500">Session ID: <span className="font-mono">{session.id}</span></div>
+              <div className="mt-1 text-xs text-gray-500">
+                Session ID: <span className="font-mono">{session.id}</span>
+              </div>
             </div>
 
             <div className="text-right">
@@ -149,7 +151,7 @@ export default async function DmScreenPage({
           </div>
         </div>
 
-        {/* Right side: Episode Picker + Timer + Controls in one compact stack */}
+        {/* Right side: Episode Picker + Timer + Controls */}
         <div className="col-span-5 space-y-3">
           <div className="border rounded-xl p-4 space-y-3">
             <div className="flex items-center justify-between gap-3">
@@ -177,11 +179,7 @@ export default async function DmScreenPage({
               </form>
             </div>
 
-            <TimerClient
-              remainingSeconds={state.remaining_seconds}
-              status={state.timer_status}
-              updatedAt={state.updated_at}
-            />
+            <TimerClient remainingSeconds={state.remaining_seconds} status={state.timer_status} updatedAt={state.updated_at} />
 
             <div className="flex flex-wrap gap-2">
               <form
@@ -226,8 +224,8 @@ export default async function DmScreenPage({
             <div className="text-sm text-gray-700">
               {totalScenes ? (
                 <>
-                  Current: <b>{currentSceneHuman || 0}</b> of <b>{totalScenes}</b> • Completed:{" "}
-                  <b>{completedCount}</b> of <b>{totalScenes}</b>
+                  Current: <b>{currentSceneHuman || 0}</b> of <b>{totalScenes}</b> • Completed: <b>{completedCount}</b> of{" "}
+                  <b>{totalScenes}</b>
                 </>
               ) : (
                 "No scenes found (add block_type = scene)."
@@ -250,15 +248,28 @@ export default async function DmScreenPage({
 
         <div className="space-y-2">
           {scenes.map((s, si) => {
-            const sceneLive =
-              s.scene.id === presentedId || s.children.some((c) => c.id === presentedId);
+            const sceneLive = s.scene.id === presentedId || s.children.some((c) => c.id === presentedId);
             const sceneDone = completedSceneIds.includes(s.scene.id);
+
+            const presentableChildren = (s.children ?? []).filter((c) => isPresentable(c));
+            const firstChild = presentableChildren[0];
+
+            const liveChildIdx = presentedId ? presentableChildren.findIndex((c) => c.id === presentedId) : -1;
+
+            const nextInScene = liveChildIdx === -1 ? firstChild : presentableChildren[liveChildIdx + 1];
+            const canNextInScene = Boolean(nextInScene);
+
+            const nextScene = scenes[si + 1];
+            const nextSceneFirst = nextScene?.children?.find((c) => isPresentable(c)) ?? null;
+            const canNextScene = Boolean(nextSceneFirst);
 
             return (
               <details key={s.scene.id} className={`border rounded-lg p-2 ${sceneLive ? "bg-gray-50" : ""}`}>
                 <summary className="cursor-pointer flex items-center justify-between gap-3">
                   <div className="text-sm">
-                    <span className="text-gray-500 mr-2">Scene {si + 1} of {totalScenes}</span>
+                    <span className="text-gray-500 mr-2">
+                      Scene {si + 1} of {totalScenes}
+                    </span>
                     <span className="font-semibold">{s.scene.title ?? "Scene"}</span>
                     {sceneLive ? <span className="ml-2 text-xs text-green-700">(LIVE)</span> : null}
                     {sceneDone ? <span className="ml-2 text-xs text-blue-700">(DONE)</span> : null}
@@ -270,7 +281,9 @@ export default async function DmScreenPage({
                   {/* Optional: Scene body */}
                   {s.scene.body ? <div className="text-sm whitespace-pre-wrap">{s.scene.body}</div> : null}
 
-                  <div className="flex items-center justify-between gap-3">
+                  {/* SCENE ACTION BAR */}
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    {/* Completion */}
                     <form
                       action={async () => {
                         "use server";
@@ -286,20 +299,68 @@ export default async function DmScreenPage({
                       </button>
                     </form>
 
-                    <form
-                      action={async () => {
-                        "use server";
-                        // Present the scene header itself (optional)
-                        if (isPresentable(s.scene)) {
-                          await presentBlockToPlayersAction(session.id, s.scene.id);
-                        }
-                        redirect(`/storyteller/sessions/${session.id}`);
-                      }}
-                    >
-                      <button className="px-3 py-2 rounded border text-sm" disabled={!isPresentable(s.scene)}>
-                        Present Scene Title
-                      </button>
-                    </form>
+                    {/* Navigation */}
+                    <div className="flex flex-wrap gap-2">
+                      {/* Present Scene = first presentable child */}
+                      <form
+                        action={async () => {
+                          "use server";
+                          if (firstChild) {
+                            await presentBlockToPlayersAction(session.id, firstChild.id);
+                          }
+                          redirect(`/storyteller/sessions/${session.id}`);
+                        }}
+                      >
+                        <button className="px-3 py-2 rounded border text-sm" disabled={!firstChild}>
+                          Present Scene
+                        </button>
+                      </form>
+
+                      {/* Next in Scene */}
+                      <form
+                        action={async () => {
+                          "use server";
+                          if (nextInScene) {
+                            await presentBlockToPlayersAction(session.id, nextInScene.id);
+                          }
+                          redirect(`/storyteller/sessions/${session.id}`);
+                        }}
+                      >
+                        <button className="px-3 py-2 rounded bg-black text-white text-sm" disabled={!canNextInScene}>
+                          Next in Scene ▶
+                        </button>
+                      </form>
+
+                      {/* Next Scene */}
+                      <form
+                        action={async () => {
+                          "use server";
+                          if (nextSceneFirst) {
+                            await presentBlockToPlayersAction(session.id, nextSceneFirst.id);
+                          }
+                          redirect(`/storyteller/sessions/${session.id}`);
+                        }}
+                      >
+                        <button className="px-3 py-2 rounded border text-sm" disabled={!canNextScene}>
+                          Next Scene ⇢
+                        </button>
+                      </form>
+
+                      {/* Keep your old button (optional): Present Scene Title */}
+                      <form
+                        action={async () => {
+                          "use server";
+                          if (isPresentable(s.scene)) {
+                            await presentBlockToPlayersAction(session.id, s.scene.id);
+                          }
+                          redirect(`/storyteller/sessions/${session.id}`);
+                        }}
+                      >
+                        <button className="px-3 py-2 rounded border text-sm" disabled={!isPresentable(s.scene)}>
+                          Present Scene Title
+                        </button>
+                      </form>
+                    </div>
                   </div>
 
                   {/* Nested blocks within the scene */}
@@ -332,7 +393,7 @@ export default async function DmScreenPage({
                                 </div>
                               ) : null}
 
-                              {/* Encounter meta preview inside encounter block */}
+                              {/* Encounter meta preview INSIDE the encounter block */}
                               {encounter ? (
                                 <div className="border rounded-lg p-3 bg-gray-50 space-y-2">
                                   <div className="text-xs uppercase text-gray-500">Encounter</div>
@@ -347,7 +408,8 @@ export default async function DmScreenPage({
                                         <div key={m.id || mi} className="border rounded p-2 bg-white">
                                           <div className="font-semibold">{m.name || `Monster ${mi + 1}`}</div>
                                           <div className="text-xs text-gray-600">
-                                            AC {m.ac ?? "—"} • HP {m.hp ?? "—"} • ATK {m.attack ?? "—"} • DMG {m.damage ?? "—"}
+                                            AC {m.ac ?? "—"} • HP {m.hp ?? "—"} • ATK {m.attack ?? "—"} • DMG{" "}
+                                            {m.damage ?? "—"}
                                           </div>
                                         </div>
                                       ))}
@@ -395,9 +457,7 @@ export default async function DmScreenPage({
               <div className="font-bold">
                 {totalScenes === 0 ? "No scenes" : `Scene ${Math.max(1, currentSceneHuman || 1)} / ${totalScenes}`}
               </div>
-              <div className="text-xs text-gray-600 mt-1">
-                Completion is driven by “Mark Scene Complete”.
-              </div>
+              <div className="text-xs text-gray-600 mt-1">Completion is driven by “Mark Scene Complete”.</div>
             </div>
             <div className="text-2xl font-bold">{episodePct}%</div>
           </div>
