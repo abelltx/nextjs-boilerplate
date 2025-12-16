@@ -71,11 +71,11 @@ export default async function PlayerSessionPage({
       <section style={{ border: "1px solid #ddd", borderRadius: 12, padding: 16 }}>
         <h2 style={{ marginTop: 0 }}>Story</h2>
 
-        {/* Presented by Storyteller (LIVE) */}
         <PresentedBlockRealtime sessionId={sessionId} initialState={state} />
-
-        {/* Baseline story feed */}
+        {!(state.presented_title || state.presented_body || state.presented_image_url) && (
         <StoryRealtime sessionId={sessionId} initialStoryText={session.story_text || ""} />
+  )}
+
 
         <div style={{ marginTop: 8, opacity: 0.7, fontSize: 13 }}>
           MVP note: read-only. Timer + rolls update live.

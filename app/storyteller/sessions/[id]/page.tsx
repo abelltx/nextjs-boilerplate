@@ -45,7 +45,7 @@ export default async function DmScreenPage({
   } else if (sessionRow?.episode_id) {
     const { data, error: blkErr } = await supabase
       .from("episode_blocks")
-      .select("id,sort_order,block_type,audience,mode,title,body,image_url")
+      .select("id,sort_order,block_type,audience,mode,title,body,image_url,meta")
       .eq("episode_id", sessionRow.episode_id)
       .order("sort_order", { ascending: true });
 
