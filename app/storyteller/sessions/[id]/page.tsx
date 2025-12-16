@@ -52,6 +52,33 @@ export default async function DmScreenPage({
     if (blkErr) console.error("Failed to load episode_blocks:", blkErr.message);
     blocks = data ?? [];
   }
+function EncounterPreview({ b }: { b: any }) {
+  const monsters = b?.meta?.monsters ?? [];
+  const notes = b?.meta?.notes;
+
+  return (
+    <div className="border rounded-lg p-3 bg-gray-50 space-y-2">
+      <div className="text-xs uppercase text-gray-500">Encounter (preview)</div>
+
+      {notes ? <div className="text-sm whitespace-pre-wrap">{notes}</div> : null}
+
+      {monsters.length ? (
+        <div className="space-y-2">
+          {monsters.map((m: any, i: number) => (
+            <div key={m?.id ?? i} className="border rounded p-2 bg-white">
+              <div className="font-semibold">{m?.name ?? `Monster ${i + 1}`}</div>
+              <div className="text-xs text-gray-600">
+                AC {m?.ac ?? "—"} • HP {m?.hp ?? "—"} • ATK {m?.attack ?? "—"} • DMG {m?.damage ?? "—"}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-sm text-gray-600">No monsters in meta yet.</div>
+      )}
+    </div>
+  );
+}
 
   const { data: episodes, error: epErr } = await supabase
     .from("episodes")
@@ -62,6 +89,8 @@ export default async function DmScreenPage({
 
   // Presentable blocks = anything not storyteller-only
   const presentable = (blocks ?? []).filter((b: any) => b.audience !== "storyteller");
+  const storytellerOnly = (blocks ?? []).filter((b: any) => b.audience === "storyteller");
+  const encounters = storytellerOnly.filter((b: any) => String(b.block_type).toLowerCase() === "encounter");
   const totalPresentable = presentable.length;
 
   const currentIdx = presentable.findIndex((b: any) => b.id === state.presented_block_id);
@@ -178,104 +207,147 @@ export default async function DmScreenPage({
       </div>
 
       {/* PLAYER PROJECT */}
-      <div className="border rounded-xl p-4 space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <div className="text-xs uppercase text-gray-500">Player Project</div>
-            <div className="text-sm text-gray-700">
-              {totalPresentable ? (
-                <>
-                  Block <b>{currentHuman || 0}</b> of <b>{totalPresentable}</b>
-                </>
-              ) : (
-                "No presentable blocks (set audience = players or both)."
-              )}
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <form
-              action={async () => {
-                "use server";
-                await clearPresentedAction(session.id);
-                redirect(`/storyteller/sessions/${session.id}`);
-              }}
-            >
-              <button className="px-3 py-2 rounded border">Clear</button>
-            </form>
-
-            <form
-              action={async () => {
-                "use server";
-                if (canBack) {
-                  await presentBlockToPlayersAction(session.id, presentable[backIdx].id);
-                }
-                redirect(`/storyteller/sessions/${session.id}`);
-              }}
-            >
-              <button className="px-3 py-2 rounded border" disabled={!canBack}>
-                ◀ Back
-              </button>
-            </form>
-
-            <form
-              action={async () => {
-                "use server";
-                if (canNext) {
-                  await presentBlockToPlayersAction(session.id, presentable[nextIdx].id);
-                }
-                redirect(`/storyteller/sessions/${session.id}`);
-              }}
-            >
-              <button className="px-3 py-2 rounded bg-black text-white" disabled={!canNext}>
-                Next ▶
-              </button>
-            </form>
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          {presentable.map((b: any, i: number) => {
-            const isCurrent = b.id === state.presented_block_id;
-            return (
-              <details key={b.id} className={`border rounded-lg p-2 ${isCurrent ? "bg-gray-50" : ""}`}>
-                <summary className="cursor-pointer flex items-center justify-between gap-3">
-                  <div className="text-sm">
-                    <span className="text-gray-500 mr-2">
-                      {i + 1} of {totalPresentable}
-                    </span>
-                    <span className="font-semibold">{b.block_type}</span>
-                    {b.title ? ` — ${b.title}` : ""}
-                    {isCurrent ? <span className="ml-2 text-xs text-green-700">(LIVE)</span> : null}
-                  </div>
-                  <div className="text-xs text-gray-500 font-mono">#{b.sort_order}</div>
-                </summary>
-
-                <div className="mt-2 space-y-2">
-                  {b.body ? <div className="whitespace-pre-wrap text-sm">{b.body}</div> : null}
-
-                  {b.image_url ? (
-                    <div className="rounded border overflow-hidden">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={b.image_url} alt="Block" className="w-full h-auto" />
-                    </div>
-                  ) : null}
-
-                  <form
-                    action={async () => {
-                      "use server";
-                      await presentBlockToPlayersAction(session.id, b.id);
-                      redirect(`/storyteller/sessions/${session.id}`);
-                    }}
-                  >
-                    <button className="px-3 py-2 rounded bg-black text-white">Present to Players</button>
-                  </form>
-                </div>
-              </details>
-            );
-          })}
-        </div>
+      {/* PLAYER PROJECT */}
+<div className="border rounded-xl p-4 space-y-4">
+  <div className="flex items-center justify-between gap-3">
+    <div>
+      <div className="text-xs uppercase text-gray-500">Player Project</div>
+      <div className="text-sm text-gray-700">
+        {totalPresentable
+          ? <>Block <b>{currentHuman || 0}</b> of <b>{totalPresentable}</b></>
+          : "No player-visible blocks"}
       </div>
+    </div>
+
+    <div className="flex gap-2">
+      <form
+        action={async () => {
+          "use server";
+          await clearPresentedAction(session.id);
+          redirect(`/storyteller/sessions/${session.id}`);
+        }}
+      >
+        <button className="px-3 py-2 rounded border">Clear</button>
+      </form>
+
+      <form
+        action={async () => {
+          "use server";
+          if (canBack) {
+            await presentBlockToPlayersAction(session.id, presentable[backIdx].id);
+          }
+          redirect(`/storyteller/sessions/${session.id}`);
+        }}
+      >
+        <button className="px-3 py-2 rounded border" disabled={!canBack}>
+          ◀ Back
+        </button>
+      </form>
+
+      <form
+        action={async () => {
+          "use server";
+          if (canNext) {
+            await presentBlockToPlayersAction(session.id, presentable[nextIdx].id);
+          }
+          redirect(`/storyteller/sessions/${session.id}`);
+        }}
+      >
+        <button className="px-3 py-2 rounded bg-black text-white" disabled={!canNext}>
+          Next ▶
+        </button>
+      </form>
+    </div>
+  </div>
+
+  {/* PLAYER-VISIBLE BLOCKS */}
+  <div className="space-y-2">
+    {presentable.map((b: any, i: number) => {
+      const isCurrent = b.id === state.presented_block_id;
+      return (
+        <details key={b.id} className={`border rounded-lg p-2 ${isCurrent ? "bg-gray-50" : ""}`}>
+          <summary className="cursor-pointer flex items-center justify-between gap-3">
+            <div className="text-sm">
+              <span className="text-gray-500 mr-2">{i + 1} of {totalPresentable}</span>
+              <span className="font-semibold">{b.block_type}</span>
+              {b.title ? ` — ${b.title}` : ""}
+              {isCurrent ? <span className="ml-2 text-xs text-green-700">(LIVE)</span> : null}
+            </div>
+            <div className="text-xs text-gray-500 font-mono">#{b.sort_order}</div>
+          </summary>
+
+          <div className="mt-2 space-y-2">
+            {b.body && <div className="whitespace-pre-wrap text-sm">{b.body}</div>}
+
+            {b.image_url && (
+              <div className="rounded border overflow-hidden">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={b.image_url} alt="Block" className="w-full h-auto" />
+              </div>
+            )}
+
+            <form
+              action={async () => {
+                "use server";
+                await presentBlockToPlayersAction(session.id, b.id);
+                redirect(`/storyteller/sessions/${session.id}`);
+              }}
+            >
+              <button className="px-3 py-2 rounded bg-black text-white">
+                Present to Players
+              </button>
+            </form>
+          </div>
+        </details>
+      );
+    })}
+  </div>
+
+  {/* STORYTELLER-ONLY ENCOUNTERS */}
+  <div className="pt-4 border-t space-y-2">
+    <div className="text-xs uppercase text-gray-500">Storyteller Only • Encounters</div>
+
+    {blocks
+      .filter(
+        (b: any) =>
+          String(b.block_type).toLowerCase() === "encounter"
+      )
+      .map((b: any) => (
+        <details key={b.id} className="border rounded-lg p-2 bg-gray-50">
+          <summary className="cursor-pointer flex items-center justify-between">
+            <div className="text-sm font-semibold">
+              {b.title || "Encounter"} <span className="text-xs text-gray-500">(ST)</span>
+            </div>
+            <div className="text-xs text-gray-500 font-mono">#{b.sort_order}</div>
+          </summary>
+
+          <div className="mt-2 space-y-2">
+            {b.meta?.notes && (
+              <div className="text-sm whitespace-pre-wrap">
+                <b>Notes:</b> {b.meta.notes}
+              </div>
+            )}
+
+            {Array.isArray(b.meta?.monsters) && b.meta.monsters.length ? (
+              <div className="space-y-2">
+                {b.meta.monsters.map((m: any, i: number) => (
+                  <div key={m.id || i} className="border rounded p-2 bg-white">
+                    <div className="font-semibold">{m.name || `Monster ${i + 1}`}</div>
+                    <div className="text-xs text-gray-600">
+                      AC {m.ac ?? "—"} • HP {m.hp ?? "—"} • ATK {m.attack ?? "—"} • DMG {m.damage ?? "—"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-sm text-gray-600">No monsters defined in meta.</div>
+            )}
+          </div>
+        </details>
+      ))}
+  </div>
+</div>
+
 
       {/* EPISODE PROGRESS + ROLLS */}
       <div className="grid grid-cols-12 gap-3">
