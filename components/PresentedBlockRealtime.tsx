@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -25,17 +25,12 @@ export default function PresentedBlockRealtime({
   initialState: any;
   presentableIds?: string[];
 }) {
-  const [state, setState] = useState<PresentedState>({
-    presented_block_id: initialState?.presented_block_id ?? null,
-    presented_title: initialState?.presented_title ?? null,
-    presented_body: initialState?.presented_body ?? null,
-    presented_image_url: initialState?.presented_image_url ?? null,
-    presented_updated_at: initialState?.presented_updated_at ?? null,
-  });
+  const [state, setState] = useState<PresentedState>(initialState);
 
+  // Subscribe to session_state changes for THIS session
   useEffect(() => {
     const channel = supabase
-      .channel(`presented-${sessionId}`)
+      .channel(`presented-state-${sessionId}`)
       .on(
         "postgres_changes",
         {
@@ -45,14 +40,8 @@ export default function PresentedBlockRealtime({
           filter: `session_id=eq.${sessionId}`,
         },
         (payload) => {
-          const n: any = payload.new ?? {};
-          setState({
-            presented_block_id: n.presented_block_id ?? null,
-            presented_title: n.presented_title ?? null,
-            presented_body: n.presented_body ?? null,
-            presented_image_url: n.presented_image_url ?? null,
-            presented_updated_at: n.presented_updated_at ?? null,
-          });
+          // payload.new is the updated session_state row
+          setState(payload.new as any);
         }
       )
       .subscribe();
@@ -62,50 +51,92 @@ export default function PresentedBlockRealtime({
     };
   }, [sessionId]);
 
-  const total = presentableIds.length;
-  const idx =
-    state.presented_block_id && total > 0
-      ? presentableIds.indexOf(state.presented_block_id)
-      : -1;
-  const human = idx >= 0 ? idx + 1 : 0;
+  const progress = useMemo(() => {
+    if (!presentableIds.length) return { idx: 0, total: 0, pct: 0 };
 
-  const show =
+    const currentId = state.presented_block_id ?? null;
+    const i = currentId ? presentableIds.indexOf(currentId) : -1;
+    const idx = i >= 0 ? i + 1 : 0;
+    const total = presentableIds.length;
+    const pct = total > 0 ? Math.round((idx / total) * 100) : 0;
+
+    return { idx, total, pct };
+  }, [presentableIds, state.presented_block_id]);
+
+  const hasPresented =
     !!state.presented_title || !!state.presented_body || !!state.presented_image_url;
 
-  if (!show) return null;
-
   return (
-    <div style={{ border: "1px solid #ccc", borderRadius: 10, padding: 14, marginBottom: 16, background: "#fafafa" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 6 }}>
-        <div style={{ fontSize: 11, letterSpacing: 1, opacity: 0.6 }}>
-          PRESENTED BY STORYTELLER
-        </div>
-        {total > 0 ? (
-          <div style={{ fontSize: 11, opacity: 0.65 }}>
-            Episode Progress: <b>{human}</b> / <b>{total}</b>
+    <div style={{ display: "grid", gap: 12, marginBottom: 12 }}>
+      {/* Episode Progress */}
+      {progress.total > 0 ? (
+        <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 12 }}>
+          <div style={{ fontSize: 11, textTransform: "uppercase", opacity: 0.7 }}>
+            Episode Progress
           </div>
-        ) : null}
-      </div>
-
-      {state.presented_title ? (
-        <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>
-          {state.presented_title}
+          <div style={{ marginTop: 6, fontSize: 14, fontWeight: 800 }}>
+            {progress.idx} / {progress.total}
+          </div>
+          <div
+            style={{
+              marginTop: 8,
+              height: 8,
+              background: "#eee",
+              borderRadius: 999,
+              overflow: "hidden",
+            }}
+          >
+            <div style={{ height: 8, width: `${progress.pct}%`, background: "#111" }} />
+          </div>
         </div>
       ) : null}
 
-      {state.presented_body ? (
-        <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
-          {state.presented_body}
-        </div>
-      ) : null}
+      {/* Presented Block */}
+      {hasPresented ? (
+        <div
+          style={{
+            border: "1px solid #ccc",
+            borderRadius: 12,
+            padding: 14,
+            background: "#fafafa",
+          }}
+        >
+          <div style={{ fontSize: 11, letterSpacing: 1, opacity: 0.6, marginBottom: 6 }}>
+            PRESENTED BY STORYTELLER
+          </div>
 
-      {state.presented_image_url ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={state.presented_image_url}
-          alt="Storyteller visual"
-          style={{ marginTop: 12, maxWidth: "100%", borderRadius: 10, border: "1px solid #ddd" }}
-        />
+          {state.presented_title ? (
+            <div style={{ fontSize: 20, fontWeight: 900, marginBottom: 8 }}>
+              {state.presented_title}
+            </div>
+          ) : null}
+
+          {state.presented_body ? (
+            <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
+              {state.presented_body}
+            </div>
+          ) : null}
+
+          {state.presented_image_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={state.presented_image_url}
+              alt="Storyteller visual"
+              style={{
+                marginTop: 12,
+                maxWidth: "100%",
+                borderRadius: 10,
+                border: "1px solid #ddd",
+              }}
+            />
+          ) : null}
+
+          {state.presented_updated_at ? (
+            <div style={{ marginTop: 10, fontSize: 12, opacity: 0.6 }}>
+              Updated: {new Date(state.presented_updated_at).toLocaleString()}
+            </div>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );
