@@ -1,12 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+import { supabaseBrowser } from "@/lib/supabase/browserClient";
 
 function fmt(sec: number) {
   const s = Math.max(0, Math.floor(sec));
@@ -18,24 +13,20 @@ function fmt(sec: number) {
 export default function PlayerSessionRealtime({
   sessionId,
   initialState,
-  presentableIds,
 }: {
   sessionId: string;
   initialState: any;
-  presentableIds: string[];
 }) {
   const [state, setState] = useState(initialState);
   const [nowMs, setNowMs] = useState(Date.now());
 
-  // tick for display only (server is authoritative via updated_at)
   useEffect(() => {
     const t = setInterval(() => setNowMs(Date.now()), 250);
     return () => clearInterval(t);
   }, []);
 
-  // realtime subscription
   useEffect(() => {
-    const channel = supabase
+    const channel = supabaseBrowser
       .channel(`session-state-${sessionId}`)
       .on(
         "postgres_changes",
@@ -45,16 +36,17 @@ export default function PlayerSessionRealtime({
           table: "session_state",
           filter: `session_id=eq.${sessionId}`,
         },
-        (payload) => setState(payload.new)
+        (payload) => {
+          setState(payload.new as any);
+        }
       )
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      supabaseBrowser.removeChannel(channel);
     };
   }, [sessionId]);
 
-  // --- Timer math ---
   const baseMs = useMemo(() => new Date(state.updated_at).getTime(), [state.updated_at]);
 
   const liveRemaining =
@@ -62,18 +54,13 @@ export default function PlayerSessionRealtime({
       ? state.remaining_seconds - (nowMs - baseMs) / 1000
       : state.remaining_seconds;
 
-  // --- Episode progress (based on presented_block_id) ---
-  const presentedId = (state?.presented_block_id ?? null) as string | null;
-
-  const total = presentableIds?.length ?? 0;
-  const idx = presentedId && total > 0 ? presentableIds.indexOf(presentedId) : -1;
-
-  const human = idx >= 0 ? idx + 1 : 0;
-  const pct = total > 0 ? Math.round((human / total) * 100) : 0;
+  const pct =
+    state.encounter_total > 0
+      ? Math.round((state.encounter_current / state.encounter_total) * 100)
+      : 0;
 
   return (
     <div style={{ display: "grid", gap: 10 }}>
-      {/* Timer */}
       <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 12, display: "flex", gap: 10 }}>
         <div style={{ fontSize: 22 }}>⌛</div>
         <div>
@@ -83,24 +70,16 @@ export default function PlayerSessionRealtime({
         </div>
       </div>
 
-      {/* Episode progress */}
       <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 12 }}>
-        <div style={{ fontSize: 11, textTransform: "uppercase", opacity: 0.7 }}>Episode Progress</div>
-
+        <div style={{ fontSize: 11, textTransform: "uppercase", opacity: 0.7 }}>Encounter</div>
         <div style={{ marginTop: 8, height: 8, background: "#eee", borderRadius: 999, overflow: "hidden" }}>
           <div style={{ height: 8, width: `${pct}%`, background: "#111" }} />
         </div>
-
         <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>
-          {total === 0
-            ? "No episode loaded (or no presentable blocks)."
-            : human === 0
-              ? `0 / ${total} (waiting for Storyteller to present a block)`
-              : `${human} / ${total}`}
+          {state.encounter_total === 0 ? "No encounters set" : `${state.encounter_current} / ${state.encounter_total}`}
         </div>
       </div>
 
-      {/* Roll prompt */}
       {state.roll_open ? (
         <div style={{ border: "1px solid #111", borderRadius: 12, padding: 12, background: "#111", color: "#fff" }}>
           <div style={{ fontSize: 11, textTransform: "uppercase", opacity: 0.8 }}>Roll Request</div>
