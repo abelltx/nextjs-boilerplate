@@ -18,9 +18,11 @@ function fmt(sec: number) {
 export default function PlayerSessionRealtime({
   sessionId,
   initialState,
+  presentableIds,
 }: {
   sessionId: string;
   initialState: any;
+  presentableIds: string[];
 }) {
   const [state, setState] = useState(initialState);
   const [nowMs, setNowMs] = useState(Date.now());
@@ -43,9 +45,7 @@ export default function PlayerSessionRealtime({
           table: "session_state",
           filter: `session_id=eq.${sessionId}`,
         },
-        (payload) => {
-          setState(payload.new);
-        }
+        (payload) => setState(payload.new)
       )
       .subscribe();
 
@@ -54,6 +54,7 @@ export default function PlayerSessionRealtime({
     };
   }, [sessionId]);
 
+  // --- Timer math ---
   const baseMs = useMemo(() => new Date(state.updated_at).getTime(), [state.updated_at]);
 
   const liveRemaining =
@@ -61,8 +62,14 @@ export default function PlayerSessionRealtime({
       ? state.remaining_seconds - (nowMs - baseMs) / 1000
       : state.remaining_seconds;
 
-  const pct =
-    state.encounter_total > 0 ? Math.round((state.encounter_current / state.encounter_total) * 100) : 0;
+  // --- Episode progress (based on presented_block_id) ---
+  const presentedId = (state?.presented_block_id ?? null) as string | null;
+
+  const total = presentableIds?.length ?? 0;
+  const idx = presentedId && total > 0 ? presentableIds.indexOf(presentedId) : -1;
+
+  const human = idx >= 0 ? idx + 1 : 0;
+  const pct = total > 0 ? Math.round((human / total) * 100) : 0;
 
   return (
     <div style={{ display: "grid", gap: 10 }}>
@@ -76,14 +83,20 @@ export default function PlayerSessionRealtime({
         </div>
       </div>
 
-      {/* Encounter progress */}
+      {/* Episode progress */}
       <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 12 }}>
-        <div style={{ fontSize: 11, textTransform: "uppercase", opacity: 0.7 }}>Encounter</div>
+        <div style={{ fontSize: 11, textTransform: "uppercase", opacity: 0.7 }}>Episode Progress</div>
+
         <div style={{ marginTop: 8, height: 8, background: "#eee", borderRadius: 999, overflow: "hidden" }}>
           <div style={{ height: 8, width: `${pct}%`, background: "#111" }} />
         </div>
+
         <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>
-          {state.encounter_total === 0 ? "No encounters set" : `${state.encounter_current} / ${state.encounter_total}`}
+          {total === 0
+            ? "No episode loaded (or no presentable blocks)."
+            : human === 0
+              ? `0 / ${total} (waiting for Storyteller to present a block)`
+              : `${human} / ${total}`}
         </div>
       </div>
 

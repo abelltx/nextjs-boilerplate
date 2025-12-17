@@ -8,6 +8,19 @@ function requireUuid(id: string, label: string) {
   if (!ok) throw new Error(`Invalid ${label}`);
 }
 
+function parseMetaJson(raw: FormDataEntryValue | null): any {
+  if (!raw) return {};
+  const s = String(raw).trim();
+  if (!s) return {};
+  try {
+    return JSON.parse(s);
+  } catch {
+    // Don’t brick the whole save if JSON is malformed.
+    // Store an error wrapper so you can see what went wrong.
+    return { __meta_error: "Invalid JSON", __raw: s };
+  }
+}
+
 export async function addEpisodeBlockAction(episodeId: string, fd: FormData) {
   requireUuid(episodeId, "episodeId");
   const supabase = await createClient();
@@ -18,6 +31,7 @@ export async function addEpisodeBlockAction(episodeId: string, fd: FormData) {
   const title = String(fd.get("title") ?? "").trim() || null;
   const body = String(fd.get("body") ?? "").trim() || null;
   const image_url = String(fd.get("image_url") ?? "").trim() || null;
+  const meta = parseMetaJson(fd.get("meta_json"));
 
   // Next sort_order = max + 10 (gives room for later inserts without reshuffling)
   const { data: last } = await supabase
@@ -39,7 +53,7 @@ export async function addEpisodeBlockAction(episodeId: string, fd: FormData) {
     title,
     body,
     image_url,
-    meta: {}, // keep flexible
+    meta,
   });
 
   if (error) throw new Error(error.message);
@@ -52,7 +66,7 @@ export async function updateEpisodeBlockAction(blockId: string, episodeId: strin
   requireUuid(episodeId, "episodeId");
   const supabase = await createClient();
 
-  const patch = {
+  const patch: any = {
     block_type: String(fd.get("block_type") ?? "scene"),
     audience: String(fd.get("audience") ?? "both"),
     mode: String(fd.get("mode") ?? "display"),
@@ -60,6 +74,11 @@ export async function updateEpisodeBlockAction(blockId: string, episodeId: strin
     body: String(fd.get("body") ?? "").trim() || null,
     image_url: String(fd.get("image_url") ?? "").trim() || null,
   };
+
+  // Only update meta if the field is present (prevents wiping meta accidentally)
+  if (fd.has("meta_json")) {
+    patch.meta = parseMetaJson(fd.get("meta_json"));
+  }
 
   const { error } = await supabase.from("episode_blocks").update(patch).eq("id", blockId);
   if (error) throw new Error(error.message);
@@ -111,10 +130,16 @@ export async function moveEpisodeBlockAction(blockId: string, episodeId: string,
   }
 
   // Swap sort_order
-  const { error: e1 } = await supabase.from("episode_blocks").update({ sort_order: neighbor.sort_order }).eq("id", current.id);
+  const { error: e1 } = await supabase
+    .from("episode_blocks")
+    .update({ sort_order: neighbor.sort_order })
+    .eq("id", current.id);
   if (e1) throw new Error(e1.message);
 
-  const { error: e2 } = await supabase.from("episode_blocks").update({ sort_order: order }).eq("id", neighbor.id);
+  const { error: e2 } = await supabase
+    .from("episode_blocks")
+    .update({ sort_order: order })
+    .eq("id", neighbor.id);
   if (e2) throw new Error(e2.message);
 
   revalidatePath(`/admin/episodes/${episodeId}`);

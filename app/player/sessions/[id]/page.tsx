@@ -1,7 +1,3 @@
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
-export const fetchCache = "force-no-store";
-
 import { redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth/getProfile";
 import { supabaseServer } from "@/lib/supabase/server";
@@ -23,7 +19,6 @@ export default async function PlayerSessionPage({
   const p = await Promise.resolve(params);
   const rawSessionId = p?.id;
 
-  // Prevent uuid "undefined" crashes + send player to join screen
   if (!rawSessionId || rawSessionId === "undefined" || !isUuid(rawSessionId)) {
     redirect("/player/join");
   }
@@ -35,16 +30,16 @@ export default async function PlayerSessionPage({
 
   const supabase = await supabaseServer();
 
-  // session (story text)
+  // session
   const { data: session, error: sErr } = await supabase
     .from("sessions")
-    .select("id,name,story_text")
+    .select("id,name,story_text,episode_id")
     .eq("id", sessionId)
     .single();
 
   if (sErr) throw new Error(`Failed to load session: ${sErr.message}`);
 
-  // state (timer, encounter, roll prompt + presented fields)
+  // state
   const { data: state, error: stErr } = await supabase
     .from("session_state")
     .select("*")
@@ -52,6 +47,21 @@ export default async function PlayerSessionPage({
     .single();
 
   if (stErr) throw new Error(`Failed to load session state: ${stErr.message}`);
+
+  // Build episode progress index (presentable blocks only)
+  let presentableIds: string[] = [];
+  if (session.episode_id) {
+    const { data: blocks } = await supabase
+      .from("episode_blocks")
+      .select("id,sort_order,audience")
+      .eq("episode_id", session.episode_id)
+      .order("sort_order", { ascending: true });
+
+    presentableIds =
+      (blocks ?? [])
+        .filter((b: any) => b.audience !== "storyteller")
+        .map((b: any) => b.id) ?? [];
+  }
 
   return (
     <main style={{ maxWidth: 920, margin: "40px auto", padding: 16, display: "grid", gap: 16 }}>
@@ -63,19 +73,29 @@ export default async function PlayerSessionPage({
           </div>
         </div>
 
+        {/* Timer + roll prompt update in realtime */}
         <div style={{ minWidth: 260 }}>
-          <PlayerSessionRealtime sessionId={sessionId} initialState={state} />
+          <PlayerSessionRealtime
+            sessionId={sessionId}
+            initialState={state}
+            presentableIds={presentableIds}
+          />
+
         </div>
       </header>
 
       <section style={{ border: "1px solid #ddd", borderRadius: 12, padding: 16 }}>
         <h2 style={{ marginTop: 0 }}>Story</h2>
 
-        <PresentedBlockRealtime sessionId={sessionId} initialState={state} />
-        {!(state.presented_title || state.presented_body || state.presented_image_url) && (
-        <StoryRealtime sessionId={sessionId} initialStoryText={session.story_text || ""} />
-  )}
+        {/* Presented by Storyteller (LIVE) + Episode Progress */}
+        <PresentedBlockRealtime
+          sessionId={sessionId}
+          initialState={state}
+          presentableIds={presentableIds}
+        />
 
+        {/* Announcement board (always-on) */}
+        <StoryRealtime sessionId={sessionId} initialStoryText={session.story_text || ""} />
 
         <div style={{ marginTop: 8, opacity: 0.7, fontSize: 13 }}>
           MVP note: read-only. Timer + rolls update live.

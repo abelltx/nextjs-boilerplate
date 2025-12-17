@@ -38,17 +38,14 @@ export default async function AdminEpisodeEditPage({
 }: {
   params: { id?: string } | Promise<{ id?: string }>;
 }) {
-  // Next sometimes passes params as a Promise in App Router. This handles both safely.
   const resolvedParams = await Promise.resolve(params);
   const rawId = resolvedParams?.id;
 
-  // HARD GUARD: never let undefined/invalid ids hit Supabase
   if (!rawId || rawId === "undefined" || !isUuid(rawId)) {
     redirect("/admin/episodes");
   }
 
   const id = rawId.trim();
-
   const supabase = await requireAdminServer();
 
   const { data: episode, error } = await supabase
@@ -83,7 +80,6 @@ export default async function AdminEpisodeEditPage({
   }
   if (current.scene || current.items.length) sceneGroups.push(current);
 
-  const tagsString = (episode.tags ?? []).join(", ");
   const mins = Math.round((episode.default_duration_seconds ?? 0) / 60);
 
   return (
@@ -117,10 +113,11 @@ export default async function AdminEpisodeEditPage({
       <div className="grid grid-cols-12 gap-4">
         {/* EDIT FORM */}
         <form
-          className="col-span-7 border rounded-xl p-4 space-y-4"
+          className="col-span-8 border rounded-xl p-4 space-y-4"
           action={async (fd) => {
             "use server";
             await updateEpisodeAction(episode.id, fd);
+            redirect(`/admin/episodes/${episode.id}`);
           }}
         >
           <div className="grid grid-cols-2 gap-3">
@@ -145,110 +142,78 @@ export default async function AdminEpisodeEditPage({
             </label>
 
             <label className="space-y-1">
-              <div className="text-xs uppercase text-gray-500">Default Duration (seconds)</div>
+              <div className="text-xs uppercase text-gray-500">Duration (minutes)</div>
               <input
-                name="default_duration_seconds"
+                name="default_duration_minutes"
                 type="number"
                 className="w-full border rounded-lg p-2"
-                defaultValue={episode.default_duration_seconds ?? 2700}
+                defaultValue={Number.isFinite(mins) ? mins : 0}
                 min={0}
               />
             </label>
 
             <label className="space-y-1">
-              <div className="text-xs uppercase text-gray-500">Default Encounters</div>
+              <div className="text-xs uppercase text-gray-500">Map Upload</div>
               <input
-                name="default_encounter_total"
-                type="number"
+                name="map_file"
+                type="file"
+                accept="image/*"
                 className="w-full border rounded-lg p-2"
-                defaultValue={episode.default_encounter_total ?? 5}
-                min={0}
               />
+              <div className="text-[11px] text-gray-500">
+                Upload replaces the current map. If you don’t pick a file, the map stays as-is.
+              </div>
             </label>
           </div>
 
           <label className="space-y-1 block">
-            <div className="text-xs uppercase text-gray-500">Story Text (fallback)</div>
+            <div className="text-xs uppercase text-gray-500">Announcement Board</div>
             <textarea
               name="story_text"
               className="w-full border rounded-lg p-3 h-56 font-serif"
               defaultValue={episode.story_text ?? ""}
+              placeholder="Always-visible message for players (announcements, reminders, etc.)"
             />
           </label>
 
-          <div className="grid grid-cols-2 gap-3">
-            <label className="space-y-1">
-              <div className="text-xs uppercase text-gray-500">Summary</div>
-              <textarea
-                name="summary"
-                className="w-full border rounded-lg p-2 h-20"
-                defaultValue={episode.summary ?? ""}
-              />
-            </label>
-
-            <label className="space-y-1">
-              <div className="text-xs uppercase text-gray-500">Tags (comma-separated)</div>
-              <input
-                name="tags"
-                className="w-full border rounded-lg p-2"
-                defaultValue={tagsString}
-              />
-            </label>
-
-            <label className="space-y-1">
-              <div className="text-xs uppercase text-gray-500">Map Image URL</div>
-              <input
-                name="map_image_url"
-                className="w-full border rounded-lg p-2"
-                defaultValue={episode.map_image_url ?? ""}
-              />
-            </label>
-
-            <label className="space-y-1">
-              <div className="text-xs uppercase text-gray-500">NPC Image URL</div>
-              <input
-                name="npc_image_url"
-                className="w-full border rounded-lg p-2"
-                defaultValue={episode.npc_image_url ?? ""}
-              />
-            </label>
-          </div>
+          <label className="space-y-1 block">
+            <div className="text-xs uppercase text-gray-500">Summary</div>
+            <textarea
+              name="summary"
+              className="w-full border rounded-lg p-2 h-20"
+              defaultValue={episode.summary ?? ""}
+              placeholder="Short summary (admin-only)"
+            />
+          </label>
 
           <button className="px-4 py-2 rounded bg-black text-white">Save Changes</button>
         </form>
 
-        {/* PREVIEW */}
-        <div className="col-span-5 border rounded-xl p-4 space-y-3">
-          <div className="text-xs uppercase text-gray-500">Preview</div>
+        {/* SMALL INFO BOX (no player preview here anymore) */}
+        <div className="col-span-4 border rounded-xl p-4 space-y-3">
+          <div className="text-xs uppercase text-gray-500">Episode Info</div>
 
           <div className="rounded-lg border p-3">
             <div className="text-sm font-semibold">{episode.title}</div>
             <div className="text-xs text-gray-600">
-              {episode.episode_code ?? "No code"} • {mins} min •{" "}
-              {episode.default_encounter_total ?? 0} encounters
+              {episode.episode_code ?? "No code"} • {mins} min
             </div>
-            {episode.tags?.length ? (
-              <div className="mt-2 text-xs text-gray-600">Tags: {episode.tags.join(", ")}</div>
-            ) : null}
           </div>
 
-          <div className="rounded-lg border p-3 whitespace-pre-wrap text-sm leading-relaxed max-h-[420px] overflow-auto">
-            {episode.story_text ?? ""}
-          </div>
-
-          {episode.map_image_url && (
+          {episode.map_image_url ? (
             <div className="rounded-lg border overflow-hidden">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={episode.map_image_url} alt="Map" className="w-full h-auto" />
             </div>
+          ) : (
+            <div className="text-sm text-gray-600">No map uploaded yet.</div>
           )}
 
-          {episode.npc_image_url && (
-            <div className="rounded-lg border overflow-hidden">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={episode.npc_image_url} alt="NPC" className="w-full h-auto" />
+          {episode.summary ? (
+            <div className="rounded-lg border p-3 text-sm text-gray-700 whitespace-pre-wrap">
+              {episode.summary}
             </div>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -267,6 +232,7 @@ export default async function AdminEpisodeEditPage({
           action={async (fd) => {
             "use server";
             await addEpisodeBlockAction(episode.id, fd);
+            redirect(`/admin/episodes/${episode.id}`);
           }}
         >
           <div className="grid grid-cols-4 gap-2">
@@ -274,10 +240,13 @@ export default async function AdminEpisodeEditPage({
               <div className="text-xs uppercase text-gray-500">Type</div>
               <select name="block_type" className="w-full border rounded p-2">
                 <option value="scene">scene</option>
-                <option value="narration">narration</option>
+                <option value="objective">objective</option>
+                <option value="map">map</option>
+                <option value="npc">npc</option>
+                <option value="loot">loot</option>
+                <option value="attire">attire</option>
+                <option value="narrative">narrative</option>
                 <option value="note">note</option>
-                <option value="player_text">player_text</option>
-                <option value="image">image</option>
                 <option value="encounter">encounter</option>
               </select>
             </label>
@@ -302,9 +271,7 @@ export default async function AdminEpisodeEditPage({
             </label>
 
             <div className="flex items-end">
-              <button className="w-full px-3 py-2 rounded bg-black text-white">
-                Add Block
-              </button>
+              <button className="w-full px-3 py-2 rounded bg-black text-white">Add Block</button>
             </div>
           </div>
 
@@ -316,12 +283,17 @@ export default async function AdminEpisodeEditPage({
           <textarea
             name="body"
             placeholder="Body text (optional)"
-            className="w-full border rounded p-2 h-28"
+            className="w-full border rounded p-2 h-24"
           />
           <input
             name="image_url"
             placeholder="Image URL (optional)"
             className="w-full border rounded p-2"
+          />
+          <textarea
+            name="meta_json"
+            placeholder={`Meta JSON (optional)\nExample:\n{\n  "attire_required": ["Shepherd cloak"],\n  "loot_potential": ["Olives"]\n}`}
+            className="w-full border rounded p-2 h-28 font-mono text-[12px]"
           />
         </form>
 
@@ -341,36 +313,22 @@ export default async function AdminEpisodeEditPage({
                   </div>
                 ) : null}
 
-                {/* Edit Scene block itself (optional) */}
                 {g.scene ? (
                   <details className="mt-2">
-                    <summary className="text-xs cursor-pointer text-gray-600">
-                      Edit scene header
-                    </summary>
+                    <summary className="text-xs cursor-pointer text-gray-600">Edit scene header</summary>
 
                     <form
                       className="mt-2 space-y-2"
                       action={async (fd) => {
                         "use server";
                         await updateEpisodeBlockAction(g.scene.id, episode.id, fd);
+                        redirect(`/admin/episodes/${episode.id}`);
                       }}
                     >
                       <div className="grid grid-cols-3 gap-2">
-                        <input
-                          name="block_type"
-                          className="border rounded p-2"
-                          defaultValue={g.scene.block_type}
-                        />
-                        <input
-                          name="audience"
-                          className="border rounded p-2"
-                          defaultValue={g.scene.audience}
-                        />
-                        <input
-                          name="mode"
-                          className="border rounded p-2"
-                          defaultValue={g.scene.mode}
-                        />
+                        <input name="block_type" className="border rounded p-2" defaultValue={g.scene.block_type} />
+                        <input name="audience" className="border rounded p-2" defaultValue={g.scene.audience} />
+                        <input name="mode" className="border rounded p-2" defaultValue={g.scene.mode} />
                       </div>
 
                       <input
@@ -394,6 +352,13 @@ export default async function AdminEpisodeEditPage({
                         placeholder="Scene image URL (optional)"
                       />
 
+                      <textarea
+                        name="meta_json"
+                        className="w-full border rounded p-2 h-28 font-mono text-[12px]"
+                        defaultValue={g.scene.meta ? JSON.stringify(g.scene.meta, null, 2) : ""}
+                        placeholder="Meta JSON (optional)"
+                      />
+
                       <div className="flex gap-2">
                         <button className="px-3 py-2 rounded border">Save Scene</button>
 
@@ -401,11 +366,10 @@ export default async function AdminEpisodeEditPage({
                           action={async () => {
                             "use server";
                             await deleteEpisodeBlockAction(g.scene.id, episode.id);
+                            redirect(`/admin/episodes/${episode.id}`);
                           }}
                         >
-                          <button className="px-3 py-2 rounded border text-red-600">
-                            Delete Scene
-                          </button>
+                          <button className="px-3 py-2 rounded border text-red-600">Delete Scene</button>
                         </form>
                       </div>
                     </form>
@@ -416,9 +380,7 @@ export default async function AdminEpisodeEditPage({
               {/* Scene Blocks */}
               <div className="p-3 space-y-3">
                 {g.items.length === 0 ? (
-                  <div className="text-sm text-gray-500 italic">
-                    No blocks under this scene yet.
-                  </div>
+                  <div className="text-sm text-gray-500 italic">No blocks under this scene yet.</div>
                 ) : null}
 
                 {g.items.map((b: any) => (
@@ -426,8 +388,7 @@ export default async function AdminEpisodeEditPage({
                     <div className="flex items-center justify-between gap-3">
                       <div className="text-xs text-gray-600">
                         <span className="font-mono">#{b.sort_order}</span> •{" "}
-                        <span className="font-semibold">{b.block_type}</span> •{" "}
-                        {b.audience} • {b.mode}
+                        <span className="font-semibold">{b.block_type}</span> • {b.audience} • {b.mode}
                       </div>
 
                       <div className="flex gap-2">
@@ -435,6 +396,7 @@ export default async function AdminEpisodeEditPage({
                           action={async () => {
                             "use server";
                             await moveEpisodeBlockAction(b.id, episode.id, "up");
+                            redirect(`/admin/episodes/${episode.id}`);
                           }}
                         >
                           <button className="px-2 py-1 border rounded">↑</button>
@@ -444,6 +406,7 @@ export default async function AdminEpisodeEditPage({
                           action={async () => {
                             "use server";
                             await moveEpisodeBlockAction(b.id, episode.id, "down");
+                            redirect(`/admin/episodes/${episode.id}`);
                           }}
                         >
                           <button className="px-2 py-1 border rounded">↓</button>
@@ -453,11 +416,10 @@ export default async function AdminEpisodeEditPage({
                           action={async () => {
                             "use server";
                             await deleteEpisodeBlockAction(b.id, episode.id);
+                            redirect(`/admin/episodes/${episode.id}`);
                           }}
                         >
-                          <button className="px-2 py-1 border rounded text-red-600">
-                            Delete
-                          </button>
+                          <button className="px-2 py-1 border rounded text-red-600">Delete</button>
                         </form>
                       </div>
                     </div>
@@ -467,24 +429,13 @@ export default async function AdminEpisodeEditPage({
                       action={async (fd) => {
                         "use server";
                         await updateEpisodeBlockAction(b.id, episode.id, fd);
+                        redirect(`/admin/episodes/${episode.id}`);
                       }}
                     >
                       <div className="grid grid-cols-3 gap-2">
-                        <input
-                          name="block_type"
-                          className="border rounded p-2"
-                          defaultValue={b.block_type}
-                        />
-                        <input
-                          name="audience"
-                          className="border rounded p-2"
-                          defaultValue={b.audience}
-                        />
-                        <input
-                          name="mode"
-                          className="border rounded p-2"
-                          defaultValue={b.mode}
-                        />
+                        <input name="block_type" className="border rounded p-2" defaultValue={b.block_type} />
+                        <input name="audience" className="border rounded p-2" defaultValue={b.audience} />
+                        <input name="mode" className="border rounded p-2" defaultValue={b.mode} />
                       </div>
 
                       <input
@@ -508,6 +459,13 @@ export default async function AdminEpisodeEditPage({
                         placeholder="Image URL"
                       />
 
+                      <textarea
+                        name="meta_json"
+                        className="w-full border rounded p-2 h-28 font-mono text-[12px]"
+                        defaultValue={b.meta ? JSON.stringify(b.meta, null, 2) : ""}
+                        placeholder="Meta JSON (optional)"
+                      />
+
                       <button className="px-3 py-2 rounded border">Save Block</button>
                     </form>
 
@@ -526,7 +484,7 @@ export default async function AdminEpisodeEditPage({
 
         {!sceneGroups.length ? (
           <div className="text-sm text-gray-500 italic">
-            No blocks yet. Add a <b>scene</b> first, then narration/player_text/image blocks under it.
+            No blocks yet. Add a <b>scene</b> first, then objective/narrative/note/encounter blocks under it.
           </div>
         ) : null}
       </div>
