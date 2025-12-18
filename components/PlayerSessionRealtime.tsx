@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/utils/supabase/client";
 
 function fmt(sec: number) {
@@ -20,13 +20,24 @@ export default function PlayerSessionRealtime({
   const [state, setState] = useState(initialState);
   const [nowMs, setNowMs] = useState(Date.now());
 
+  // keep a stable ref so React doesn't miss updates
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  // display tick only
   useEffect(() => {
     const t = setInterval(() => setNowMs(Date.now()), 250);
     return () => clearInterval(t);
   }, []);
 
+  // REALTIME
   useEffect(() => {
     const supabase = createClient();
+
+    // sanity check — this MUST log a user id
+    supabase.auth.getSession().then(({ data }) => {
+      console.log("[PlayerSessionRealtime] auth user:", data.session?.user?.id);
+    });
 
     const channel = supabase
       .channel(`session-state-${sessionId}`)
@@ -39,6 +50,7 @@ export default function PlayerSessionRealtime({
           filter: `session_id=eq.${sessionId}`,
         },
         (payload) => {
+          console.log("[PlayerSessionRealtime] payload:", payload.new);
           setState(payload.new);
         }
       )
@@ -51,7 +63,10 @@ export default function PlayerSessionRealtime({
     };
   }, [sessionId]);
 
-  const baseMs = useMemo(() => new Date(state.updated_at).getTime(), [state.updated_at]);
+  const baseMs = useMemo(
+    () => new Date(state.updated_at).getTime(),
+    [state.updated_at]
+  );
 
   const liveRemaining =
     state.timer_status === "running"
@@ -65,36 +80,101 @@ export default function PlayerSessionRealtime({
 
   return (
     <div style={{ display: "grid", gap: 10 }}>
-      <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 12, display: "flex", gap: 10 }}>
+      {/* TIMER */}
+      <div
+        style={{
+          border: "1px solid #ddd",
+          borderRadius: 12,
+          padding: 12,
+          display: "flex",
+          gap: 10,
+        }}
+      >
         <div style={{ fontSize: 22 }}>⌛</div>
         <div>
-          <div style={{ fontSize: 11, textTransform: "uppercase", opacity: 0.7 }}>Session Timer</div>
-          <div style={{ fontFamily: "monospace", fontSize: 22, fontWeight: 900 }}>{fmt(liveRemaining)}</div>
-          <div style={{ fontSize: 12, opacity: 0.7 }}>{state.timer_status}</div>
+          <div style={{ fontSize: 11, textTransform: "uppercase", opacity: 0.7 }}>
+            Session Timer
+          </div>
+          <div
+            style={{
+              fontFamily: "monospace",
+              fontSize: 22,
+              fontWeight: 900,
+            }}
+          >
+            {fmt(liveRemaining)}
+          </div>
+          <div style={{ fontSize: 12, opacity: 0.7 }}>
+            {state.timer_status}
+          </div>
         </div>
       </div>
 
-      <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 12 }}>
-        <div style={{ fontSize: 11, textTransform: "uppercase", opacity: 0.7 }}>Encounter</div>
-        <div style={{ marginTop: 8, height: 8, background: "#eee", borderRadius: 999, overflow: "hidden" }}>
-          <div style={{ height: 8, width: `${pct}%`, background: "#111" }} />
+      {/* EPISODE / ENCOUNTER PROGRESS */}
+      <div
+        style={{
+          border: "1px solid #ddd",
+          borderRadius: 12,
+          padding: 12,
+        }}
+      >
+        <div style={{ fontSize: 11, textTransform: "uppercase", opacity: 0.7 }}>
+          Episode Progress
+        </div>
+        <div
+          style={{
+            marginTop: 8,
+            height: 8,
+            background: "#eee",
+            borderRadius: 999,
+            overflow: "hidden",
+          }}
+        >
+          <div
+            style={{
+              height: 8,
+              width: `${pct}%`,
+              background: "#111",
+            }}
+          />
         </div>
         <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>
-          {state.encounter_total === 0 ? "No encounters set" : `${state.encounter_current} / ${state.encounter_total}`}
+          {state.encounter_total === 0
+            ? "No progress set"
+            : `${state.encounter_current} / ${state.encounter_total}`}
         </div>
       </div>
 
-      {state.roll_open ? (
-        <div style={{ border: "1px solid #111", borderRadius: 12, padding: 12, background: "#111", color: "#fff" }}>
-          <div style={{ fontSize: 11, textTransform: "uppercase", opacity: 0.8 }}>Roll Request</div>
-          <div style={{ fontSize: 16, fontWeight: 900, marginTop: 6 }}>
+      {/* ROLL PROMPT */}
+      {state.roll_open && (
+        <div
+          style={{
+            border: "1px solid #111",
+            borderRadius: 12,
+            padding: 12,
+            background: "#111",
+            color: "#fff",
+          }}
+        >
+          <div
+            style={{ fontSize: 11, textTransform: "uppercase", opacity: 0.8 }}
+          >
+            Roll Request
+          </div>
+          <div
+            style={{
+              fontSize: 16,
+              fontWeight: 900,
+              marginTop: 6,
+            }}
+          >
             {state.roll_prompt || "Roll now"}
           </div>
           <div style={{ fontSize: 12, opacity: 0.85, marginTop: 4 }}>
             Use real dice. Tell your Storyteller your result.
           </div>
         </div>
-      ) : null}
+      )}
     </div>
   );
 }

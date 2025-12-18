@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/utils/supabase/client";
 
 type PresentedState = {
@@ -22,9 +22,16 @@ export default function PresentedBlockRealtime({
   presentableIds?: string[];
 }) {
   const [state, setState] = useState<PresentedState>(initialState);
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   useEffect(() => {
     const supabase = createClient();
+
+    // MUST log a user id
+    supabase.auth.getSession().then(({ data }) => {
+      console.log("[PresentedBlockRealtime] auth user:", data.session?.user?.id);
+    });
 
     const channel = supabase
       .channel(`presented-block-${sessionId}`)
@@ -37,13 +44,11 @@ export default function PresentedBlockRealtime({
           filter: `session_id=eq.${sessionId}`,
         },
         (payload) => {
-          // payload.new should be the updated session_state row
+          console.log("[PresentedBlockRealtime] payload:", payload.new);
           setState(payload.new as PresentedState);
         }
       )
       .subscribe((status) => {
-        // Helpful for debugging in browser console
-        // (you should see SUBSCRIBED)
         console.log("[PresentedBlockRealtime] channel status:", status);
       });
 
@@ -62,7 +67,9 @@ export default function PresentedBlockRealtime({
   }, [presentableIds, state.presented_block_id]);
 
   const hasPresented =
-    !!state.presented_title || !!state.presented_body || !!state.presented_image_url;
+    !!state.presented_title ||
+    !!state.presented_body ||
+    !!state.presented_image_url;
 
   if (!hasPresented) {
     return progress ? (
@@ -75,7 +82,9 @@ export default function PresentedBlockRealtime({
           background: "#fafafa",
         }}
       >
-        <div style={{ fontSize: 11, letterSpacing: 1, opacity: 0.6 }}>EPISODE PROGRESS</div>
+        <div style={{ fontSize: 11, letterSpacing: 1, opacity: 0.6 }}>
+          EPISODE PROGRESS
+        </div>
         <div style={{ marginTop: 6, fontSize: 14 }}>
           Block <b>{progress.human}</b> / <b>{progress.total}</b>
         </div>
@@ -94,25 +103,36 @@ export default function PresentedBlockRealtime({
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-        <div style={{ fontSize: 11, letterSpacing: 1, opacity: 0.6 }}>PRESENTED BY STORYTELLER</div>
-        {progress ? (
+        <div style={{ fontSize: 11, letterSpacing: 1, opacity: 0.6 }}>
+          PRESENTED BY STORYTELLER
+        </div>
+        {progress && (
           <div style={{ fontSize: 12, opacity: 0.75 }}>
             Block <b>{progress.human}</b> / <b>{progress.total}</b>
           </div>
-        ) : null}
+        )}
       </div>
 
-      {state.presented_title ? (
-        <div style={{ fontSize: 20, fontWeight: 700, marginTop: 8, marginBottom: 8 }}>
+      {state.presented_title && (
+        <div
+          style={{
+            fontSize: 20,
+            fontWeight: 700,
+            marginTop: 8,
+            marginBottom: 8,
+          }}
+        >
           {state.presented_title}
         </div>
-      ) : null}
+      )}
 
-      {state.presented_body ? (
-        <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{state.presented_body}</div>
-      ) : null}
+      {state.presented_body && (
+        <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
+          {state.presented_body}
+        </div>
+      )}
 
-      {state.presented_image_url ? (
+      {state.presented_image_url && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={state.presented_image_url}
@@ -124,7 +144,7 @@ export default function PresentedBlockRealtime({
             border: "1px solid #ddd",
           }}
         />
-      ) : null}
+      )}
     </div>
   );
 }
