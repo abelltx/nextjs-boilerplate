@@ -1,13 +1,32 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createClient } from "@/utils/supabase/client";
+import { supabaseBrowser } from "@/lib/supabase/browser";
 
-function fmt(sec: number) {
-  const s = Math.max(0, Math.floor(sec));
-  const m = Math.floor(s / 60);
-  const r = s % 60;
-  return `${m}:${String(r).padStart(2, "0")}`;
+type SessionState = {
+  session_id: string;
+
+  // Timer
+  timer_status: "running" | "paused" | "stopped" | null;
+  remaining_seconds: number | null;
+  updated_at?: string | null; // if you have it
+
+  // Rolls
+  roll_open: boolean | null;
+  roll_die: string | null; // "d20", etc
+  roll_prompt: string | null;
+  roll_target: string | null;
+};
+
+function clamp0(n: number) {
+  return n < 0 ? 0 : n;
+}
+
+function formatMMSS(totalSeconds: number) {
+  const s = clamp0(Math.floor(totalSeconds));
+  const mm = Math.floor(s / 60);
+  const ss = s % 60;
+  return `${mm}:${String(ss).padStart(2, "0")}`;
 }
 
 export default function PlayerSessionRealtime({
@@ -17,164 +36,130 @@ export default function PlayerSessionRealtime({
   sessionId: string;
   initialState: any;
 }) {
-  const [state, setState] = useState(initialState);
-  const [nowMs, setNowMs] = useState(Date.now());
+  const [state, setState] = useState<SessionState>(() => initialState as SessionState);
 
-  // keep a stable ref so React doesn't miss updates
-  const stateRef = useRef(state);
-  stateRef.current = state;
+  // local ticking for timer UI (so it counts down smoothly even if DB updates are sparse)
+  const [displayRemaining, setDisplayRemaining] = useState<number>(() => initialState?.remaining_seconds ?? 0);
 
-  // display tick only
+  const lastStateRef = useRef<SessionState>(initialState as SessionState);
+
+  // Keep displayRemaining synced whenever state changes from server/realtime/poll
   useEffect(() => {
-    const t = setInterval(() => setNowMs(Date.now()), 250);
-    return () => clearInterval(t);
-  }, []);
+    const next = Number(state?.remaining_seconds ?? 0);
+    setDisplayRemaining(next);
+  }, [state?.remaining_seconds]);
 
-  // REALTIME
+  // Smooth countdown tick when running
   useEffect(() => {
-    const supabase = createClient();
+    if (state?.timer_status !== "running") return;
 
-    // sanity check — this MUST log a user id
-    supabase.auth.getSession().then(({ data }) => {
-      console.log("[PlayerSessionRealtime] auth user:", data.session?.user?.id);
-    });
+    const tick = setInterval(() => {
+      setDisplayRemaining((prev) => clamp0(prev - 1));
+    }, 1000);
 
-    const channel = supabase
-      .channel(`session-state-${sessionId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "session_state",
-          filter: `session_id=eq.${sessionId}`,
-        },
-        (payload) => {
-          console.log("[PlayerSessionRealtime] payload:", payload.new);
-          setState(payload.new);
-        }
-      )
-      .subscribe((status) => {
-        console.log("[PlayerSessionRealtime] channel status:", status);
-      });
+    return () => clearInterval(tick);
+  }, [state?.timer_status]);
+
+  // Unified updater to avoid rerenders when nothing changes
+  const applyNewState = (next: SessionState) => {
+    const prev = lastStateRef.current;
+
+    const changed =
+      prev?.timer_status !== next?.timer_status ||
+      prev?.remaining_seconds !== next?.remaining_seconds ||
+      prev?.roll_open !== next?.roll_open ||
+      prev?.roll_die !== next?.roll_die ||
+      prev?.roll_prompt !== next?.roll_prompt ||
+      prev?.roll_target !== next?.roll_target;
+
+    if (changed) {
+      lastStateRef.current = next;
+      setState(next);
+    }
+  };
+
+  useEffect(() => {
+    const supabase = supabaseBrowser();
+    let channel: any;
+    let pollId: any;
+
+    const fetchLatest = async () => {
+      const { data, error } = await supabase
+        .from("session_state")
+        .select("session_id,timer_status,remaining_seconds,updated_at,roll_open,roll_die,roll_prompt,roll_target")
+        .eq("session_id", sessionId)
+        .single();
+
+      if (!error && data) {
+        applyNewState(data as any);
+      }
+    };
+
+    (async () => {
+      await supabase.auth.getSession();
+
+      channel = supabase
+        .channel(`state:${sessionId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "session_state",
+            filter: `session_id=eq.${sessionId}`,
+          },
+          (payload) => {
+            const next = payload.new as any as SessionState;
+            if (next) applyNewState(next);
+          }
+        )
+        .subscribe();
+    })();
+
+    // Poll fallback (covers realtime flakiness)
+    pollId = setInterval(fetchLatest, 1000);
+    fetchLatest(); // sync immediately
 
     return () => {
-      supabase.removeChannel(channel);
+      if (pollId) clearInterval(pollId);
+      if (channel) supabase.removeChannel(channel);
     };
   }, [sessionId]);
 
-  const baseMs = useMemo(
-    () => new Date(state.updated_at).getTime(),
-    [state.updated_at]
-  );
-
-  const liveRemaining =
-    state.timer_status === "running"
-      ? state.remaining_seconds - (nowMs - baseMs) / 1000
-      : state.remaining_seconds;
-
-  const pct =
-    state.encounter_total > 0
-      ? Math.round((state.encounter_current / state.encounter_total) * 100)
-      : 0;
+  const timerLabel = useMemo(() => {
+    const status = state?.timer_status ?? "stopped";
+    const secs = Number(displayRemaining ?? 0);
+    return { status, mmss: formatMMSS(secs) };
+  }, [state?.timer_status, displayRemaining]);
 
   return (
-    <div style={{ display: "grid", gap: 10 }}>
-      {/* TIMER */}
-      <div
-        style={{
-          border: "1px solid #ddd",
-          borderRadius: 12,
-          padding: 12,
-          display: "flex",
-          gap: 10,
-        }}
-      >
-        <div style={{ fontSize: 22 }}>⌛</div>
-        <div>
-          <div style={{ fontSize: 11, textTransform: "uppercase", opacity: 0.7 }}>
-            Session Timer
-          </div>
-          <div
-            style={{
-              fontFamily: "monospace",
-              fontSize: 22,
-              fontWeight: 900,
-            }}
-          >
-            {fmt(liveRemaining)}
-          </div>
-          <div style={{ fontSize: 12, opacity: 0.7 }}>
-            {state.timer_status}
-          </div>
-        </div>
+    <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
+        <div style={{ fontSize: 12, opacity: 0.7, textTransform: "uppercase" }}>Timer</div>
+        <div style={{ fontSize: 12, opacity: 0.7 }}>{String(timerLabel.status).toUpperCase()}</div>
       </div>
 
-      {/* EPISODE / ENCOUNTER PROGRESS */}
-      <div
-        style={{
-          border: "1px solid #ddd",
-          borderRadius: 12,
-          padding: 12,
-        }}
-      >
-        <div style={{ fontSize: 11, textTransform: "uppercase", opacity: 0.7 }}>
-          Episode Progress
-        </div>
-        <div
-          style={{
-            marginTop: 8,
-            height: 8,
-            background: "#eee",
-            borderRadius: 999,
-            overflow: "hidden",
-          }}
-        >
-          <div
-            style={{
-              height: 8,
-              width: `${pct}%`,
-              background: "#111",
-            }}
-          />
-        </div>
-        <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>
-          {state.encounter_total === 0
-            ? "No progress set"
-            : `${state.encounter_current} / ${state.encounter_total}`}
-        </div>
-      </div>
+      <div style={{ fontSize: 34, fontWeight: 900, marginTop: 6 }}>{timerLabel.mmss}</div>
 
-      {/* ROLL PROMPT */}
-      {state.roll_open && (
-        <div
-          style={{
-            border: "1px solid #111",
-            borderRadius: 12,
-            padding: 12,
-            background: "#111",
-            color: "#fff",
-          }}
-        >
-          <div
-            style={{ fontSize: 11, textTransform: "uppercase", opacity: 0.8 }}
-          >
-            Roll Request
+      <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #eee" }}>
+        <div style={{ fontSize: 12, opacity: 0.7, textTransform: "uppercase" }}>Roll</div>
+
+        {state?.roll_open ? (
+          <div style={{ marginTop: 6 }}>
+            <div style={{ fontSize: 18, fontWeight: 800 }}>
+              {state.roll_die ? `Roll ${state.roll_die.toUpperCase()}` : "Roll"}
+            </div>
+            <div style={{ marginTop: 4, whiteSpace: "pre-wrap" }}>
+              {state.roll_prompt ?? "Roll now."}
+            </div>
+            <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>
+              Target: <b>{state.roll_target ?? "all"}</b>
+            </div>
           </div>
-          <div
-            style={{
-              fontSize: 16,
-              fontWeight: 900,
-              marginTop: 6,
-            }}
-          >
-            {state.roll_prompt || "Roll now"}
-          </div>
-          <div style={{ fontSize: 12, opacity: 0.85, marginTop: 4 }}>
-            Use real dice. Tell your Storyteller your result.
-          </div>
-        </div>
-      )}
+        ) : (
+          <div style={{ marginTop: 6, opacity: 0.7 }}>(No roll request.)</div>
+        )}
+      </div>
     </div>
   );
 }
