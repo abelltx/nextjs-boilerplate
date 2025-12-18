@@ -28,7 +28,6 @@ export default function PresentedBlockRealtime({
   );
   const [block, setBlock] = useState<Block | null>(null);
 
-  // Load block when ID changes
   useEffect(() => {
     const supabase = supabaseBrowser();
     let cancelled = false;
@@ -61,36 +60,38 @@ export default function PresentedBlockRealtime({
     };
   }, [presentedId]);
 
-  // Realtime subscription to session_state
   useEffect(() => {
     const supabase = supabaseBrowser();
+    let channel: any;
 
-    const channel = supabase
-      .channel(`presented:${sessionId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "session_state",
-          filter: `session_id=eq.${sessionId}`,
-        },
-        (payload) => {
-          const next = (payload.new as SessionState)?.presented_block_id ?? null;
-          setPresentedId(next);
-        }
-      )
-      .subscribe((status) => console.log(`[realtime ${sessionId}]`, status));
+    (async () => {
+      // IMPORTANT: ensure auth/session is loaded before subscribing
+      await supabase.auth.getSession();
 
+      channel = supabase
+        .channel(`presented:${sessionId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "session_state",
+            filter: `session_id=eq.${sessionId}`,
+          },
+          (payload) => {
+            const next = (payload.new as SessionState)?.presented_block_id ?? null;
+            setPresentedId(next);
+          }
+        )
+        .subscribe();
+    })();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) supabase.removeChannel(channel);
     };
   }, [sessionId]);
 
-  if (!presentedId) {
-    return <div style={{ opacity: 0.7 }}>(Nothing presented yet.)</div>;
-  }
+  if (!presentedId) return <div style={{ opacity: 0.7 }}>(Nothing presented yet.)</div>;
 
   return (
     <div style={{ border: "1px solid #eee", borderRadius: 12, padding: 12, marginBottom: 12 }}>
@@ -98,19 +99,11 @@ export default function PresentedBlockRealtime({
       <div style={{ fontSize: 20, fontWeight: 800, marginTop: 6 }}>
         {block?.title || block?.block_type || "Presented"}
       </div>
-
-      {block?.body && (
-        <div style={{ whiteSpace: "pre-wrap", marginTop: 8 }}>{block.body}</div>
-      )}
-
-      {block?.image_url && (
+      {block?.body ? <div style={{ whiteSpace: "pre-wrap", marginTop: 8 }}>{block.body}</div> : null}
+      {block?.image_url ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={block.image_url}
-          alt="Presented"
-          style={{ width: "100%", borderRadius: 12, marginTop: 10 }}
-        />
-      )}
+        <img src={block.image_url} alt="Presented" style={{ width: "100%", borderRadius: 12, marginTop: 10 }} />
+      ) : null}
     </div>
   );
 }

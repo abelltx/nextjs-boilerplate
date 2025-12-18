@@ -14,25 +14,31 @@ export default function StoryRealtime({
 
   useEffect(() => {
     const supabase = supabaseBrowser();
+    let channel: any;
 
-    const channel = supabase
-      .channel(`story:${sessionId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "sessions",
-          filter: `id=eq.${sessionId}`,
-        },
-        (payload) => {
-          setText((payload.new as any)?.story_text ?? "");
-        }
-      )
-      .subscribe((status) => console.log(`[realtime ${sessionId}]`, status));
+    (async () => {
+      // IMPORTANT: ensure the browser client has loaded auth/session before subscribing
+      await supabase.auth.getSession();
+
+      channel = supabase
+        .channel(`story:${sessionId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "sessions",
+            filter: `id=eq.${sessionId}`,
+          },
+          (payload) => {
+            setText((payload.new as any)?.story_text ?? "");
+          }
+        )
+        .subscribe();
+    })();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) supabase.removeChannel(channel);
     };
   }, [sessionId]);
 
