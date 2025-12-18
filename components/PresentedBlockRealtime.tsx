@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 
 type SessionState = {
@@ -28,6 +28,9 @@ export default function PresentedBlockRealtime({
   );
   const [block, setBlock] = useState<Block | null>(null);
 
+  const lastPresentedRef = useRef<string | null>(initialState?.presented_block_id ?? null);
+
+  // Load block when presentedId changes
   useEffect(() => {
     const supabase = supabaseBrowser();
     let cancelled = false;
@@ -63,9 +66,26 @@ export default function PresentedBlockRealtime({
   useEffect(() => {
     const supabase = supabaseBrowser();
     let channel: any;
+    let pollId: any;
 
+    const fetchLatestPresented = async () => {
+      const { data, error } = await supabase
+        .from("session_state")
+        .select("presented_block_id")
+        .eq("session_id", sessionId)
+        .single();
+
+      if (!error) {
+        const next = (data as any)?.presented_block_id ?? null;
+        if (next !== lastPresentedRef.current) {
+          lastPresentedRef.current = next;
+          setPresentedId(next);
+        }
+      }
+    };
+
+    // Realtime subscription (best case)
     (async () => {
-      // IMPORTANT: ensure auth/session is loaded before subscribing
       await supabase.auth.getSession();
 
       channel = supabase
@@ -80,13 +100,23 @@ export default function PresentedBlockRealtime({
           },
           (payload) => {
             const next = (payload.new as SessionState)?.presented_block_id ?? null;
-            setPresentedId(next);
+            if (next !== lastPresentedRef.current) {
+              lastPresentedRef.current = next;
+              setPresentedId(next);
+            }
           }
         )
         .subscribe();
     })();
 
+    // Poll fallback
+    pollId = setInterval(fetchLatestPresented, 1000);
+
+    // Sync immediately
+    fetchLatestPresented();
+
     return () => {
+      if (pollId) clearInterval(pollId);
       if (channel) supabase.removeChannel(channel);
     };
   }, [sessionId]);
@@ -99,7 +129,9 @@ export default function PresentedBlockRealtime({
       <div style={{ fontSize: 20, fontWeight: 800, marginTop: 6 }}>
         {block?.title || block?.block_type || "Presented"}
       </div>
+
       {block?.body ? <div style={{ whiteSpace: "pre-wrap", marginTop: 8 }}>{block.body}</div> : null}
+
       {block?.image_url ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={block.image_url} alt="Presented" style={{ width: "100%", borderRadius: 12, marginTop: 10 }} />
