@@ -1,14 +1,13 @@
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const fetchCache = "force-no-store";
+
 import { redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth/getProfile";
 import { supabaseServer } from "@/lib/supabase/server";
 import PlayerSessionRealtime from "@/components/PlayerSessionRealtime";
 import StoryRealtime from "@/components/StoryRealtime";
 import PresentedBlockRealtime from "@/components/PresentedBlockRealtime";
-
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
-export const fetchCache = "force-no-store";
-
 
 function isUuid(value: unknown): value is string {
   if (typeof value !== "string") return false;
