@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 
 export default function StoryRealtime({
@@ -11,13 +11,31 @@ export default function StoryRealtime({
   initialStoryText: string;
 }) {
   const [text, setText] = useState(initialStoryText);
+  const lastTextRef = useRef(initialStoryText);
 
   useEffect(() => {
     const supabase = supabaseBrowser();
     let channel: any;
+    let pollId: any;
 
+    const fetchLatest = async () => {
+      const { data, error } = await supabase
+        .from("sessions")
+        .select("story_text")
+        .eq("id", sessionId)
+        .single();
+
+      if (!error) {
+        const next = data?.story_text ?? "";
+        if (next !== lastTextRef.current) {
+          lastTextRef.current = next;
+          setText(next);
+        }
+      }
+    };
+
+    // Start realtime subscription (best case)
     (async () => {
-      // IMPORTANT: ensure the browser client has loaded auth/session before subscribing
       await supabase.auth.getSession();
 
       channel = supabase
@@ -31,13 +49,24 @@ export default function StoryRealtime({
             filter: `id=eq.${sessionId}`,
           },
           (payload) => {
-            setText((payload.new as any)?.story_text ?? "");
+            const next = (payload.new as any)?.story_text ?? "";
+            if (next !== lastTextRef.current) {
+              lastTextRef.current = next;
+              setText(next);
+            }
           }
         )
         .subscribe();
     })();
 
+    // Poll fallback (covers when realtime events never arrive)
+    pollId = setInterval(fetchLatest, 1500);
+
+    // Also fetch once immediately to sync fast
+    fetchLatest();
+
     return () => {
+      if (pollId) clearInterval(pollId);
       if (channel) supabase.removeChannel(channel);
     };
   }, [sessionId]);
