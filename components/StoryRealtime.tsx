@@ -29,7 +29,7 @@ export default function StoryRealtime({
           setText((payload.new as any)?.story_text ?? "");
         }
       )
-      .subscribe();
+      .subscribe((status) => console.log(`[realtime ${sessionId}]`, status));
 
     return () => {
       supabase.removeChannel(channel);

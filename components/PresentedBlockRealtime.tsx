@@ -80,7 +80,8 @@ export default function PresentedBlockRealtime({
           setPresentedId(next);
         }
       )
-      .subscribe();
+      .subscribe((status) => console.log(`[realtime ${sessionId}]`, status));
+
 
     return () => {
       supabase.removeChannel(channel);
