@@ -1,14 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createBrowserClient } from "@supabase/ssr"; // or your preferred browser client creator
-
-function supabaseBrowser() {
-  return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
-}
+import { supabaseBrowser } from "@/lib/supabase/browser";
 
 export default function StoryRealtime({
   sessionId,
@@ -33,8 +26,7 @@ export default function StoryRealtime({
           filter: `id=eq.${sessionId}`,
         },
         (payload) => {
-          const next = (payload.new as any)?.story_text ?? "";
-          setText(next);
+          setText((payload.new as any)?.story_text ?? "");
         }
       )
       .subscribe();
