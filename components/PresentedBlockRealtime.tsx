@@ -48,13 +48,11 @@ export default function PresentedBlockRealtime({
 
   const progress = useMemo(() => {
     if (!presentableIds.length) return { idx: 0, total: 0, pct: 0 };
-
     const currentId = state.presented_block_id ?? null;
     const i = currentId ? presentableIds.indexOf(currentId) : -1;
     const idx = i >= 0 ? i + 1 : 0;
     const total = presentableIds.length;
     const pct = total > 0 ? Math.round((idx / total) * 100) : 0;
-
     return { idx, total, pct };
   }, [presentableIds, state.presented_block_id]);
 
@@ -63,7 +61,6 @@ export default function PresentedBlockRealtime({
 
   return (
     <div style={{ display: "grid", gap: 12, marginBottom: 12 }}>
-      {/* DEBUG: if this stays 0 when you click Present, the subscription is not firing */}
       <div style={{ fontSize: 12, opacity: 0.6 }}>
         Presented realtime events: <b>{eventCount}</b>
       </div>
@@ -107,12 +104,6 @@ export default function PresentedBlockRealtime({
               alt="Storyteller visual"
               style={{ marginTop: 12, maxWidth: "100%", borderRadius: 10, border: "1px solid #ddd" }}
             />
-          ) : null}
-
-          {state.presented_updated_at ? (
-            <div style={{ marginTop: 10, fontSize: 12, opacity: 0.6 }}>
-              Updated: {new Date(state.presented_updated_at).toLocaleString()}
-            </div>
           ) : null}
         </div>
       ) : null}
