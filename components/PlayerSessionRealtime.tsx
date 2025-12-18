@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { supabaseBrowser } from "@/lib/supabase/browserClient";
+import { createClient } from "@/utils/supabase/client";
 
 function fmt(sec: number) {
   const s = Math.max(0, Math.floor(sec));
@@ -26,7 +26,9 @@ export default function PlayerSessionRealtime({
   }, []);
 
   useEffect(() => {
-    const channel = supabaseBrowser
+    const supabase = createClient();
+
+    const channel = supabase
       .channel(`session-state-${sessionId}`)
       .on(
         "postgres_changes",
@@ -37,13 +39,15 @@ export default function PlayerSessionRealtime({
           filter: `session_id=eq.${sessionId}`,
         },
         (payload) => {
-          setState(payload.new as any);
+          setState(payload.new);
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log("[PlayerSessionRealtime] channel status:", status);
+      });
 
     return () => {
-      supabaseBrowser.removeChannel(channel);
+      supabase.removeChannel(channel);
     };
   }, [sessionId]);
 

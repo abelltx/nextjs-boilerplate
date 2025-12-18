@@ -1,24 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/utils/supabase/client";
 
 type PresentedState = {
-  // from session_state
   presented_block_id?: string | null;
   presented_title?: string | null;
   presented_body?: string | null;
   presented_image_url?: string | null;
   presented_updated_at?: string | null;
-
-  // other fields may exist; we keep it loose
   [key: string]: any;
 };
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
 
 export default function PresentedBlockRealtime({
   sessionId,
@@ -27,12 +19,13 @@ export default function PresentedBlockRealtime({
 }: {
   sessionId: string;
   initialState: PresentedState;
-  presentableIds?: string[]; // ✅ FIX: allow player page to pass this
+  presentableIds?: string[];
 }) {
   const [state, setState] = useState<PresentedState>(initialState);
 
-  // Realtime subscription to session_state row for this session
   useEffect(() => {
+    const supabase = createClient();
+
     const channel = supabase
       .channel(`presented-block-${sessionId}`)
       .on(
@@ -44,17 +37,21 @@ export default function PresentedBlockRealtime({
           filter: `session_id=eq.${sessionId}`,
         },
         (payload) => {
+          // payload.new should be the updated session_state row
           setState(payload.new as PresentedState);
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        // Helpful for debugging in browser console
+        // (you should see SUBSCRIBED)
+        console.log("[PresentedBlockRealtime] channel status:", status);
+      });
 
     return () => {
       supabase.removeChannel(channel);
     };
   }, [sessionId]);
 
-  // Optional: compute episode position if you pass presentableIds
   const progress = useMemo(() => {
     if (!presentableIds?.length) return null;
     const idx = state.presented_block_id
@@ -68,7 +65,6 @@ export default function PresentedBlockRealtime({
     !!state.presented_title || !!state.presented_body || !!state.presented_image_url;
 
   if (!hasPresented) {
-    // Still show progress bar if available
     return progress ? (
       <div
         style={{
@@ -79,9 +75,7 @@ export default function PresentedBlockRealtime({
           background: "#fafafa",
         }}
       >
-        <div style={{ fontSize: 11, letterSpacing: 1, opacity: 0.6 }}>
-          EPISODE PROGRESS
-        </div>
+        <div style={{ fontSize: 11, letterSpacing: 1, opacity: 0.6 }}>EPISODE PROGRESS</div>
         <div style={{ marginTop: 6, fontSize: 14 }}>
           Block <b>{progress.human}</b> / <b>{progress.total}</b>
         </div>
@@ -100,10 +94,7 @@ export default function PresentedBlockRealtime({
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-        <div style={{ fontSize: 11, letterSpacing: 1, opacity: 0.6 }}>
-          PRESENTED BY STORYTELLER
-        </div>
-
+        <div style={{ fontSize: 11, letterSpacing: 1, opacity: 0.6 }}>PRESENTED BY STORYTELLER</div>
         {progress ? (
           <div style={{ fontSize: 12, opacity: 0.75 }}>
             Block <b>{progress.human}</b> / <b>{progress.total}</b>
@@ -118,9 +109,7 @@ export default function PresentedBlockRealtime({
       ) : null}
 
       {state.presented_body ? (
-        <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
-          {state.presented_body}
-        </div>
+        <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{state.presented_body}</div>
       ) : null}
 
       {state.presented_image_url ? (
