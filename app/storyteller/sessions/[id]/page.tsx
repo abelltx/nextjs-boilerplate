@@ -2,13 +2,35 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const fetchCache = "force-no-store";
 
+import Link from "next/link";
 import { redirect } from "next/navigation";
-import TimerClient from "@/components/TimerClient";
-import { getDmSession, updateStoryText, updateState } from "./actions";
 import { createClient } from "@/utils/supabase/server";
-import { EpisodePicker } from "@/components/EpisodePicker";
-import { presentBlockToPlayersAction, clearPresentedAction } from "@/app/actions/present";
+import { updateEpisodeAction, deleteEpisodeAction } from "@/app/actions/episodesAdmin";
+import {
+  addEpisodeBlockAction,
+  updateEpisodeBlockAction,
+  deleteEpisodeBlockAction,
+  moveEpisodeBlockAction,
+} from "@/app/actions/episodeBlocksAdmin";
 
+async function requireAdminServer() {
+  const supabase = await createClient();
+  const { data: authData } = await supabase.auth.getUser();
+  if (!authData?.user) redirect("/login");
+
+  const { data: profile, error } = await supabase
+    .from("profiles")
+    .select("is_admin")
+    .eq("id", authData.user.id)
+    .single();
+
+  if (error) throw new Error(error.message);
+  if (!profile?.is_admin) redirect("/storyteller/sessions");
+
+  return supabase;
+}
+
+// Strict UUID v1-v5 check (prevents "undefined" and other garbage reaching Postgres)
 function isUuid(value: unknown): value is string {
   if (typeof value !== "string") return false;
   const v = value.trim();
@@ -30,59 +52,46 @@ type Block = {
 function isScene(b: Block) {
   return String(b.block_type).toLowerCase() === "scene";
 }
-function isEncounter(b: Block) {
-  return String(b.block_type).toLowerCase() === "encounter";
-}
-function isPresentable(b: Block) {
-  return b.audience !== "storyteller";
+
+function safeJsonStringify(value: any) {
+  try {
+    return JSON.stringify(value ?? {}, null, 2);
+  } catch {
+    return "";
+  }
 }
 
-export default async function DmScreenPage({
+export default async function AdminEpisodeEditPage({
   params,
 }: {
-  params: { id: string } | Promise<{ id: string }>;
+  params: { id?: string } | Promise<{ id?: string }>;
 }) {
-  const p = await Promise.resolve(params);
-  const rawSessionId = p?.id;
+  const resolvedParams = await Promise.resolve(params);
+  const rawId = resolvedParams?.id;
 
-  if (!rawSessionId || rawSessionId === "undefined" || !isUuid(rawSessionId)) {
-    redirect("/storyteller/sessions");
+  if (!rawId || rawId === "undefined" || !isUuid(rawId)) {
+    redirect("/admin/episodes");
   }
 
-  const sessionId = rawSessionId.trim();
-  const { session, state, joins } = await getDmSession(sessionId);
-  const supabase = await createClient();
+  const id = rawId.trim();
+  const supabase = await requireAdminServer();
 
-  // Load blocks for the currently loaded episode on this session
-  let blocks: Block[] = [];
-  const { data: sessionRow, error: sesErr } = await supabase
-    .from("sessions")
-    .select("episode_id")
-    .eq("id", sessionId)
-    .single();
+  const { data: episode, error } = await supabase.from("episodes").select("*").eq("id", id).single();
+  if (error) throw new Error(error.message);
+  if (!episode) redirect("/admin/episodes");
 
-  if (sesErr) {
-    console.error("Failed to load session episode_id:", sesErr.message);
-  } else if (sessionRow?.episode_id) {
-    const { data, error: blkErr } = await supabase
-      .from("episode_blocks")
-      .select("id,sort_order,block_type,audience,mode,title,body,image_url,meta")
-      .eq("episode_id", sessionRow.episode_id)
-      .order("sort_order", { ascending: true });
+  const { data: blocksRaw, error: blocksErr } = await supabase
+    .from("episode_blocks")
+    .select("id,sort_order,block_type,audience,mode,title,body,image_url,meta")
+    .eq("episode_id", id)
+    .order("sort_order", { ascending: true });
 
-    if (blkErr) console.error("Failed to load episode_blocks:", blkErr.message);
-    blocks = (data ?? []) as any;
-  }
+  if (blocksErr) throw new Error(blocksErr.message);
 
-  const { data: episodes, error: epErr } = await supabase
-    .from("episodes")
-    .select("id,title,episode_code,tags")
-    .order("created_at", { ascending: false });
+  const blocks: Block[] = (blocksRaw ?? []) as any;
+  const ordered = [...blocks].sort((a, b) => a.sort_order - b.sort_order);
 
-  if (epErr) console.error(epErr);
-
-  // --- Scene grouping (no new schema required) ---
-  const ordered = [...(blocks ?? [])].sort((a, b) => a.sort_order - b.sort_order);
+  // --- Scene grouping (same approach as storyteller page) ---
   const scenes: Array<{ scene: Block; children: Block[] }> = [];
   let currentScene: Block | null = null;
   let currentChildren: Block[] = [];
@@ -98,134 +107,154 @@ export default async function DmScreenPage({
   }
   if (currentScene) scenes.push({ scene: currentScene, children: currentChildren });
 
-  const completedSceneIds: string[] = Array.isArray((state as any).completed_scene_ids)
-    ? ((state as any).completed_scene_ids as string[])
-    : [];
+  const mins = Math.round((episode.default_duration_seconds ?? 0) / 60);
 
-  // Determine "current scene" based on presented_block_id
-  const presentedId = (state as any).presented_block_id as string | null;
-  const presentedSceneIdx = presentedId
-    ? scenes.findIndex((s) => s.scene.id === presentedId || s.children.some((c) => c.id === presentedId))
-    : -1;
-
-  const totalScenes = scenes.length;
-  const currentSceneHuman = presentedSceneIdx >= 0 ? presentedSceneIdx + 1 : 0;
-  const completedCount = scenes.filter((s) => completedSceneIds.includes(s.scene.id)).length;
-
-  // Episode Progress = completion %
-  const episodePct = totalScenes > 0 ? Math.round((completedCount / totalScenes) * 100) : 0;
+  // Progression: count only NON-scene blocks
+  const nonSceneBlocks = ordered.filter((b) => !isScene(b));
+  const nonSceneIndexById = new Map<string, number>();
+  nonSceneBlocks.forEach((b, idx) => nonSceneIndexById.set(b.id, idx + 1));
+  const nonSceneTotal = nonSceneBlocks.length;
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-4">
-      {/* TOP ROW: Session info (left) + Episode/Timer (right) */}
-      <div className="grid grid-cols-12 gap-3">
-        {/* Session box (compact) */}
-        <div className="col-span-7 border rounded-xl p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="text-xs uppercase text-gray-500">Session</div>
-              <div className="text-xl font-bold">{session.name}</div>
-              <div className="mt-1 text-xs text-gray-500">
-                Session ID: <span className="font-mono">{session.id}</span>
-              </div>
-            </div>
-
-            <div className="text-right">
-              <div className="text-xs uppercase text-gray-500">Join Code</div>
-              <div className="font-mono text-2xl font-bold">{session.join_code}</div>
-            </div>
-          </div>
-
-          <div className="mt-4 grid grid-cols-6 gap-2">
-            {Array.from({ length: 6 }).map((_, i) => {
-              const p = joins[i];
-              return (
-                <div key={i} className="border rounded-lg p-2 text-center">
-                  <div className="text-xs text-gray-500">Player {i + 1}</div>
-                  <div className="text-[11px] font-mono break-all">
-                    {p ? p.player_id.slice(0, 8) : "—"}
-                  </div>
-                </div>
-              );
-            })}
+      {/* HEADER */}
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="text-2xl font-bold">Edit Episode</div>
+          <div className="text-sm text-gray-600">
+            {episode.title} {episode.episode_code ? `(${episode.episode_code})` : ""}
           </div>
         </div>
 
-        {/* Right side: Episode Picker + Timer + Controls */}
-        <div className="col-span-5 space-y-3">
-          <div className="border rounded-xl p-4 space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="text-xs uppercase text-gray-500">Episode</div>
-                <div className="text-sm text-gray-700">
-                  Load / switch which episode is attached to this session
-                </div>
-              </div>
-            </div>
-            <EpisodePicker sessionId={sessionId} episodes={episodes ?? []} />
-          </div>
+        <div className="flex gap-2">
+          <Link href="/admin/episodes" className="px-4 py-2 rounded border">
+            Back
+          </Link>
 
-          <div className="border rounded-xl p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="text-xs uppercase text-gray-500">Session Timer</div>
-              <form
-                action={async () => {
-                  "use server";
-                  await updateState(session.id, { timer_status: "stopped", remaining_seconds: state.duration_seconds });
-                  redirect(`/storyteller/sessions/${session.id}`);
-                }}
-              >
-                <button className="px-3 py-2 rounded border text-sm">Reset</button>
-              </form>
-            </div>
-
-            <TimerClient remainingSeconds={state.remaining_seconds} status={state.timer_status} updatedAt={state.updated_at} />
-
-            <div className="flex flex-wrap gap-2">
-              <form
-                action={async () => {
-                  "use server";
-                  await updateState(session.id, { timer_status: "running" });
-                  redirect(`/storyteller/sessions/${session.id}`);
-                }}
-              >
-                <button className="px-3 py-2 rounded bg-black text-white text-sm">Start</button>
-              </form>
-
-              <form
-                action={async () => {
-                  "use server";
-                  await updateState(session.id, { timer_status: "paused" });
-                  redirect(`/storyteller/sessions/${session.id}`);
-                }}
-              >
-                <button className="px-3 py-2 rounded border text-sm">Pause</button>
-              </form>
-
-              <form
-                action={async () => {
-                  "use server";
-                  await updateState(session.id, { remaining_seconds: state.remaining_seconds + 300 });
-                  redirect(`/storyteller/sessions/${session.id}`);
-                }}
-              >
-                <button className="px-3 py-2 rounded border text-sm">+5 min</button>
-              </form>
-            </div>
-          </div>
+          <form
+            action={async () => {
+              "use server";
+              await deleteEpisodeAction(episode.id);
+              redirect("/admin/episodes");
+            }}
+          >
+            <button className="px-4 py-2 rounded border text-red-600">Delete</button>
+          </form>
         </div>
       </div>
 
-      {/* EPISODE TABLE OF CONTENTS (Scenes -> nested blocks) */}
+      {/* TOP ROW: Episode edit (left) + Info (right) — same vibe as storyteller */}
+      <div className="grid grid-cols-12 gap-3">
+        {/* EDIT FORM */}
+        <form
+          className="col-span-8 border rounded-xl p-4 space-y-4"
+          encType="multipart/form-data"
+          action={async (fd) => {
+            "use server";
+            await updateEpisodeAction(episode.id, fd);
+            redirect(`/admin/episodes/${episode.id}`);
+          }}
+        >
+          <div className="grid grid-cols-2 gap-3">
+            <label className="space-y-1">
+              <div className="text-xs uppercase text-gray-500">Title</div>
+              <input name="title" className="w-full border rounded-lg p-2" defaultValue={episode.title ?? ""} required />
+            </label>
+
+            <label className="space-y-1">
+              <div className="text-xs uppercase text-gray-500">Episode Code</div>
+              <input
+                name="episode_code"
+                className="w-full border rounded-lg p-2"
+                defaultValue={episode.episode_code ?? ""}
+                placeholder="GEN-007"
+              />
+            </label>
+
+            <label className="space-y-1">
+              <div className="text-xs uppercase text-gray-500">Duration (minutes)</div>
+              <input
+                name="default_duration_minutes"
+                type="number"
+                className="w-full border rounded-lg p-2"
+                defaultValue={Number.isFinite(mins) ? mins : 0}
+                min={0}
+              />
+            </label>
+
+            <label className="space-y-1">
+              <div className="text-xs uppercase text-gray-500">Map Upload</div>
+              <input name="map_file" type="file" accept="image/*" className="w-full border rounded-lg p-2" />
+              <div className="text-[11px] text-gray-500">
+                Upload replaces the current map. If you don’t pick a file, the map stays as-is.
+              </div>
+            </label>
+          </div>
+
+          <label className="space-y-1 block">
+            <div className="text-xs uppercase text-gray-500">Announcement Board</div>
+            <textarea
+              name="story_text"
+              className="w-full border rounded-lg p-3 h-40 font-serif"
+              defaultValue={episode.story_text ?? ""}
+              placeholder="Always-visible message for players (announcements, reminders, etc.)"
+            />
+          </label>
+
+          <label className="space-y-1 block">
+            <div className="text-xs uppercase text-gray-500">Summary</div>
+            <textarea
+              name="summary"
+              className="w-full border rounded-lg p-2 h-20"
+              defaultValue={episode.summary ?? ""}
+              placeholder="Short summary (admin-only)"
+            />
+          </label>
+
+          <button className="px-4 py-2 rounded bg-black text-white">Save Changes</button>
+        </form>
+
+        {/* INFO BOX */}
+        <div className="col-span-4 space-y-3">
+          <div className="border rounded-xl p-4 space-y-2">
+            <div className="text-xs uppercase text-gray-500">Episode</div>
+            <div className="text-lg font-bold">{episode.title}</div>
+            <div className="text-xs text-gray-600">
+              {episode.episode_code ?? "No code"} • {mins} min • Scenes: <b>{scenes.length}</b> • Blocks:{" "}
+              <b>{nonSceneTotal}</b>
+            </div>
+          </div>
+
+          <div className="border rounded-xl p-4 space-y-2">
+            <div className="text-xs uppercase text-gray-500">Map</div>
+            {episode.map_image_url ? (
+              <div className="rounded-lg border overflow-hidden">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={episode.map_image_url} alt="Map" className="w-full h-auto" />
+              </div>
+            ) : (
+              <div className="text-sm text-gray-600">No map uploaded yet.</div>
+            )}
+          </div>
+
+          {episode.summary ? (
+            <div className="border rounded-xl p-4">
+              <div className="text-xs uppercase text-gray-500">Summary</div>
+              <div className="mt-2 text-sm text-gray-700 whitespace-pre-wrap">{episode.summary}</div>
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      {/* STORYBOARD / TOC — align with storyteller: scenes -> nested blocks */}
       <div className="border rounded-xl p-4 space-y-3">
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="text-xs uppercase text-gray-500">Episode Table of Contents</div>
             <div className="text-sm text-gray-700">
-              {totalScenes ? (
+              {scenes.length ? (
                 <>
-                  Current: <b>{currentSceneHuman || 0}</b> of <b>{totalScenes}</b> • Completed: <b>{completedCount}</b> of{" "}
-                  <b>{totalScenes}</b>
+                  Scenes: <b>{scenes.length}</b> • Non-scene blocks: <b>{nonSceneTotal}</b>
                 </>
               ) : (
                 "No scenes found (add block_type = scene)."
@@ -233,157 +262,332 @@ export default async function DmScreenPage({
             </div>
           </div>
 
-          <div className="flex gap-2">
-            <form
-              action={async () => {
-                "use server";
-                await clearPresentedAction(session.id);
-                redirect(`/storyteller/sessions/${session.id}`);
-              }}
-            >
-              <button className="px-3 py-2 rounded border">Clear Player View</button>
-            </form>
-          </div>
+          <Link href={`/storyteller/sessions`} className="px-3 py-2 rounded border text-sm">
+            Go to Sessions
+          </Link>
         </div>
 
+        {/* GLOBAL quick add (still useful) */}
+        <details className="border rounded-lg p-2">
+          <summary className="cursor-pointer text-sm font-semibold">Quick Add (global)</summary>
+          <div className="mt-2">
+            <form
+              className="border rounded-lg p-3 space-y-2"
+              action={async (fd) => {
+                "use server";
+                await addEpisodeBlockAction(episode.id, fd);
+                redirect(`/admin/episodes/${episode.id}`);
+              }}
+            >
+              <div className="grid grid-cols-4 gap-2">
+                <label className="space-y-1">
+                  <div className="text-xs uppercase text-gray-500">Type</div>
+                  <select name="block_type" className="w-full border rounded p-2">
+                    <option value="scene">scene</option>
+                    <option value="objective">objective</option>
+                    <option value="map">map</option>
+                    <option value="narrative">narrative</option>
+                    <option value="note">note</option>
+                    <option value="hex_crawl">hex_crawl</option>
+                    <option value="encounter">encounter</option>
+                    <option value="loot">loot</option>
+                    <option value="monster">monster</option>
+                    <option value="npc">npc</option>
+                    <option value="attire">attire</option>
+                  </select>
+                </label>
+
+                <label className="space-y-1">
+                  <div className="text-xs uppercase text-gray-500">Audience</div>
+                  <select name="audience" className="w-full border rounded p-2">
+                    <option value="both">both</option>
+                    <option value="players">players</option>
+                    <option value="storyteller">storyteller</option>
+                  </select>
+                </label>
+
+                <label className="space-y-1">
+                  <div className="text-xs uppercase text-gray-500">Mode</div>
+                  <select name="mode" className="w-full border rounded p-2">
+                    <option value="display">display</option>
+                    <option value="read">read</option>
+                    <option value="prompt">prompt</option>
+                    <option value="encounter">encounter</option>
+                  </select>
+                </label>
+
+                <div className="flex items-end">
+                  <button className="w-full px-3 py-2 rounded bg-black text-white">Add Block</button>
+                </div>
+              </div>
+
+              <input name="title" placeholder="Block title (optional)" className="w-full border rounded p-2" />
+              <textarea name="body" placeholder="Body text (optional)" className="w-full border rounded p-2 h-24" />
+              <input name="image_url" placeholder="Image URL (optional)" className="w-full border rounded p-2" />
+              <textarea
+                name="meta_json"
+                placeholder={`Meta JSON (optional)\nExample:\n{\n  "dc": 12,\n  "loot": ["Olives"]\n}`}
+                className="w-full border rounded p-2 h-28 font-mono text-[12px]"
+              />
+            </form>
+          </div>
+        </details>
+
+        {/* SCENES */}
         <div className="space-y-2">
           {scenes.map((s, si) => {
-            const sceneLive = s.scene.id === presentedId || s.children.some((c) => c.id === presentedId);
-            const sceneDone = completedSceneIds.includes(s.scene.id);
-
-            const presentableChildren = (s.children ?? []).filter((c) => isPresentable(c));
-            const firstChild = presentableChildren[0];
-
-            const liveChildIdx = presentedId ? presentableChildren.findIndex((c) => c.id === presentedId) : -1;
-
-            const nextInScene = liveChildIdx === -1 ? firstChild : presentableChildren[liveChildIdx + 1];
-            const canNextInScene = Boolean(nextInScene);
-
-            const nextScene = scenes[si + 1];
-            const nextSceneFirst = nextScene?.children?.find((c) => isPresentable(c)) ?? null;
-            const canNextScene = Boolean(nextSceneFirst);
+            const totalScenes = scenes.length;
 
             return (
-              <details key={s.scene.id} className={`border rounded-lg p-2 ${sceneLive ? "bg-gray-50" : ""}`}>
+              <details key={s.scene.id} className="border rounded-lg p-2">
                 <summary className="cursor-pointer flex items-center justify-between gap-3">
                   <div className="text-sm">
                     <span className="text-gray-500 mr-2">
                       Scene {si + 1} of {totalScenes}
                     </span>
                     <span className="font-semibold">{s.scene.title ?? "Scene"}</span>
-                    {sceneLive ? <span className="ml-2 text-xs text-green-700">(LIVE)</span> : null}
-                    {sceneDone ? <span className="ml-2 text-xs text-blue-700">(DONE)</span> : null}
                   </div>
                   <div className="text-xs text-gray-500 font-mono">#{s.scene.sort_order}</div>
                 </summary>
 
                 <div className="mt-2 space-y-3">
-                  {/* Optional: Scene body */}
+                  {/* Scene body */}
                   {s.scene.body ? <div className="text-sm whitespace-pre-wrap">{s.scene.body}</div> : null}
 
-                  {/* SCENE ACTION BAR */}
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    {/* Completion */}
-                    <form
-                      action={async () => {
-                        "use server";
-                        const next = sceneDone
-                          ? completedSceneIds.filter((id) => id !== s.scene.id)
-                          : [...completedSceneIds, s.scene.id];
-                        await updateState(session.id, { completed_scene_ids: next });
-                        redirect(`/storyteller/sessions/${session.id}`);
-                      }}
-                    >
-                      <button className={`px-3 py-2 rounded text-sm ${sceneDone ? "border" : "bg-black text-white"}`}>
-                        {sceneDone ? "Mark Scene Incomplete" : "Mark Scene Complete"}
-                      </button>
-                    </form>
+                  {/* Scene header edit */}
+                  <details className="border rounded-lg p-2">
+                    <summary className="cursor-pointer text-sm font-semibold">Edit scene header</summary>
 
-                    {/* Navigation */}
-                    <div className="flex flex-wrap gap-2">
-                      {/* Present Scene = first presentable child */}
+                    <div className="mt-2 space-y-2">
                       <form
-                        action={async () => {
+                        className="space-y-2"
+                        action={async (fd) => {
                           "use server";
-                          if (firstChild) {
-                            await presentBlockToPlayersAction(session.id, firstChild.id);
-                          }
-                          redirect(`/storyteller/sessions/${session.id}`);
+                          await updateEpisodeBlockAction(s.scene.id, episode.id, fd);
+                          redirect(`/admin/episodes/${episode.id}`);
                         }}
                       >
-                        <button className="px-3 py-2 rounded border text-sm" disabled={!firstChild}>
-                          Present Scene
-                        </button>
+                        <div className="grid grid-cols-3 gap-2">
+                          <input name="block_type" className="border rounded p-2" defaultValue={s.scene.block_type} />
+                          <input name="audience" className="border rounded p-2" defaultValue={s.scene.audience} />
+                          <input name="mode" className="border rounded p-2" defaultValue={s.scene.mode} />
+                        </div>
+
+                        <input
+                          name="title"
+                          className="w-full border rounded p-2"
+                          defaultValue={s.scene.title ?? ""}
+                          placeholder="Scene title"
+                        />
+
+                        <textarea
+                          name="body"
+                          className="w-full border rounded p-2 h-24"
+                          defaultValue={s.scene.body ?? ""}
+                          placeholder="Scene description (optional)"
+                        />
+
+                        <input
+                          name="image_url"
+                          className="w-full border rounded p-2"
+                          defaultValue={s.scene.image_url ?? ""}
+                          placeholder="Scene image URL (optional)"
+                        />
+
+                        <textarea
+                          name="meta_json"
+                          className="w-full border rounded p-2 h-28 font-mono text-[12px]"
+                          defaultValue={s.scene.meta ? safeJsonStringify(s.scene.meta) : ""}
+                          placeholder="Meta JSON (optional)"
+                        />
+
+                        <button className="px-3 py-2 rounded border">Save Scene</button>
                       </form>
 
-                      {/* Next in Scene */}
                       <form
                         action={async () => {
                           "use server";
-                          if (nextInScene) {
-                            await presentBlockToPlayersAction(session.id, nextInScene.id);
-                          }
-                          redirect(`/storyteller/sessions/${session.id}`);
+                          await deleteEpisodeBlockAction(s.scene.id, episode.id);
+                          redirect(`/admin/episodes/${episode.id}`);
                         }}
                       >
-                        <button className="px-3 py-2 rounded bg-black text-white text-sm" disabled={!canNextInScene}>
-                          Next in Scene ▶
-                        </button>
-                      </form>
-
-                      {/* Next Scene */}
-                      <form
-                        action={async () => {
-                          "use server";
-                          if (nextSceneFirst) {
-                            await presentBlockToPlayersAction(session.id, nextSceneFirst.id);
-                          }
-                          redirect(`/storyteller/sessions/${session.id}`);
-                        }}
-                      >
-                        <button className="px-3 py-2 rounded border text-sm" disabled={!canNextScene}>
-                          Next Scene ⇢
-                        </button>
-                      </form>
-
-                      {/* Keep your old button (optional): Present Scene Title */}
-                      <form
-                        action={async () => {
-                          "use server";
-                          if (isPresentable(s.scene)) {
-                            await presentBlockToPlayersAction(session.id, s.scene.id);
-                          }
-                          redirect(`/storyteller/sessions/${session.id}`);
-                        }}
-                      >
-                        <button className="px-3 py-2 rounded border text-sm" disabled={!isPresentable(s.scene)}>
-                          Present Scene Title
-                        </button>
+                        <button className="px-3 py-2 rounded border text-red-600">Delete Scene</button>
                       </form>
                     </div>
-                  </div>
+                  </details>
 
-                  {/* Nested blocks within the scene */}
+                  {/* TREE: Add options under this scene */}
+                  <details className="border rounded-lg p-2 bg-gray-50">
+                    <summary className="cursor-pointer text-sm font-semibold">Add to this scene (tree)</summary>
+
+                    <div className="mt-2 space-y-2">
+                      {/* Helper: compact add form */}
+                      {[
+                        {
+                          label: "Objective",
+                          hint: "players can see",
+                          block_type: "objective",
+                          audience: "players",
+                          mode: "display",
+                          titleDefault: "Objective",
+                          bodyPh: "What must players accomplish?",
+                        },
+                        {
+                          label: "Map",
+                          hint: "players can see",
+                          block_type: "map",
+                          audience: "players",
+                          mode: "display",
+                          titleDefault: "Map",
+                          bodyPh: "Short map note (optional)",
+                          wantsImage: true,
+                        },
+                        {
+                          label: "Narrative",
+                          hint: "storyteller only (read to players)",
+                          block_type: "narrative",
+                          audience: "storyteller",
+                          mode: "read",
+                          titleDefault: "Narrative",
+                          bodyPh: "Write what the storyteller reads aloud.",
+                        },
+                        {
+                          label: "Note",
+                          hint: "storyteller awareness",
+                          block_type: "note",
+                          audience: "storyteller",
+                          mode: "display",
+                          titleDefault: "Note",
+                          bodyPh: "Behind-the-screen reminders, triggers, timing…",
+                        },
+                        {
+                          label: "Hex Crawl",
+                          hint: "placeholder",
+                          block_type: "hex_crawl",
+                          audience: "storyteller",
+                          mode: "prompt",
+                          titleDefault: "Hex Crawl",
+                          bodyPh: "Hex title / description / travel prompts…",
+                          metaPh: `{\n  "hex_id": "A3",\n  "terrain": "forest",\n  "travel_dc": 12\n}`,
+                        },
+                        {
+                          label: "Encounter",
+                          hint: "placeholder (battle)",
+                          block_type: "encounter",
+                          audience: "both",
+                          mode: "encounter",
+                          titleDefault: "Encounter",
+                          bodyPh: "Encounter setup / win conditions / battlefield notes…",
+                          metaPh: `{\n  "difficulty": "medium",\n  "waves": 1\n}`,
+                        },
+                        {
+                          label: "Loot",
+                          hint: "placeholder (after encounter)",
+                          block_type: "loot",
+                          audience: "both",
+                          mode: "display",
+                          titleDefault: "Loot (after encounter)",
+                          bodyPh: "What can be won? (placeholder)",
+                        },
+                        {
+                          label: "Monsters",
+                          hint: "placeholder (for encounter)",
+                          block_type: "monster",
+                          audience: "storyteller",
+                          mode: "display",
+                          titleDefault: "Monsters (placeholder)",
+                          bodyPh: "List monsters / counts / notes (placeholder)",
+                        },
+                        {
+                          label: "NPC",
+                          hint: "placeholder “popup when important”",
+                          block_type: "npc",
+                          audience: "both",
+                          mode: "prompt",
+                          titleDefault: "NPC",
+                          bodyPh: "NPC dialogue / role / what matters…",
+                          metaPh: `{\n  "popup": true,\n  "trigger": "when players ask about X"\n}`,
+                        },
+                      ].map((cfg) => (
+                        <details key={cfg.label} className="border rounded bg-white">
+                          <summary className="cursor-pointer px-3 py-2 text-sm font-semibold">
+                            {cfg.label}{" "}
+                            <span className="text-xs font-normal text-gray-500">• {cfg.hint}</span>
+                          </summary>
+
+                          <div className="p-3 border-t space-y-2">
+                            <form
+                              className="space-y-2"
+                              action={async (fd) => {
+                                "use server";
+                                await addEpisodeBlockAction(episode.id, fd);
+                                redirect(`/admin/episodes/${episode.id}`);
+                              }}
+                            >
+                              <input type="hidden" name="block_type" value={cfg.block_type} />
+                              <input type="hidden" name="audience" value={cfg.audience} />
+                              <input type="hidden" name="mode" value={cfg.mode} />
+
+                              <input
+                                name="title"
+                                className="w-full border rounded p-2"
+                                defaultValue={cfg.titleDefault}
+                                placeholder="Title"
+                              />
+
+                              <textarea
+                                name="body"
+                                className="w-full border rounded p-2 h-24"
+                                placeholder={cfg.bodyPh}
+                              />
+
+                              {cfg.wantsImage ? (
+                                <input
+                                  name="image_url"
+                                  className="w-full border rounded p-2"
+                                  placeholder="Image URL (required for now)"
+                                />
+                              ) : (
+                                <input name="image_url" className="w-full border rounded p-2" placeholder="Image URL (optional)" />
+                              )}
+
+                              <textarea
+                                name="meta_json"
+                                className="w-full border rounded p-2 h-24 font-mono text-[12px]"
+                                placeholder={cfg.metaPh ? `Meta JSON (optional)\n${cfg.metaPh}` : "Meta JSON (optional)"}
+                              />
+
+                              <button className="px-3 py-2 rounded bg-black text-white">Add {cfg.label}</button>
+                            </form>
+                          </div>
+                        </details>
+                      ))}
+                    </div>
+                  </details>
+
+                  {/* CHILD BLOCKS */}
                   <div className="space-y-2">
                     {s.children.length ? (
                       s.children.map((b) => {
-                        const live = b.id === presentedId;
-                        const presentable = isPresentable(b);
-                        const encounter = isEncounter(b);
+                        const idx = nonSceneIndexById.get(b.id) ?? 0;
 
                         return (
-                          <details key={b.id} className={`border rounded-lg p-2 ${live ? "bg-gray-50" : ""}`}>
+                          <details key={b.id} className="border rounded-lg p-2">
                             <summary className="cursor-pointer flex items-center justify-between gap-3">
                               <div className="text-sm">
+                                <span className="text-gray-500 mr-2">
+                                  Block {idx || "?"} of {nonSceneTotal}
+                                </span>
                                 <span className="font-semibold">{b.block_type}</span>
                                 {b.title ? ` — ${b.title}` : ""}
-                                {!presentable ? <span className="ml-2 text-xs text-gray-500">(ST)</span> : null}
-                                {live ? <span className="ml-2 text-xs text-green-700">(LIVE)</span> : null}
+                                <span className="ml-2 text-xs text-gray-500">
+                                  ({b.audience} • {b.mode})
+                                </span>
                               </div>
                               <div className="text-xs text-gray-500 font-mono">#{b.sort_order}</div>
                             </summary>
 
-                            <div className="mt-2 space-y-2">
+                            <div className="mt-2 space-y-3">
                               {b.body ? <div className="whitespace-pre-wrap text-sm">{b.body}</div> : null}
 
                               {b.image_url ? (
@@ -393,51 +597,91 @@ export default async function DmScreenPage({
                                 </div>
                               ) : null}
 
-                              {/* Encounter meta preview INSIDE the encounter block */}
-                              {encounter ? (
-                                <div className="border rounded-lg p-3 bg-gray-50 space-y-2">
-                                  <div className="text-xs uppercase text-gray-500">Encounter</div>
-                                  {b.meta?.notes ? (
-                                    <div className="text-sm whitespace-pre-wrap">
-                                      <b>Notes:</b> {b.meta.notes}
-                                    </div>
-                                  ) : null}
-                                  {Array.isArray(b.meta?.monsters) && b.meta.monsters.length ? (
-                                    <div className="space-y-2">
-                                      {b.meta.monsters.map((m: any, mi: number) => (
-                                        <div key={m.id || mi} className="border rounded p-2 bg-white">
-                                          <div className="font-semibold">{m.name || `Monster ${mi + 1}`}</div>
-                                          <div className="text-xs text-gray-600">
-                                            AC {m.ac ?? "—"} • HP {m.hp ?? "—"} • ATK {m.attack ?? "—"} • DMG{" "}
-                                            {m.damage ?? "—"}
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  ) : (
-                                    <div className="text-sm text-gray-600">No monsters defined in meta.</div>
-                                  )}
-                                </div>
-                              ) : null}
-
-                              {presentable ? (
+                              {/* Controls row */}
+                              <div className="flex flex-wrap gap-2">
                                 <form
                                   action={async () => {
                                     "use server";
-                                    await presentBlockToPlayersAction(session.id, b.id);
-                                    redirect(`/storyteller/sessions/${session.id}`);
+                                    await moveEpisodeBlockAction(b.id, episode.id, "up");
+                                    redirect(`/admin/episodes/${episode.id}`);
                                   }}
                                 >
-                                  <button className="px-3 py-2 rounded bg-black text-white">Present to Players</button>
+                                  <button className="px-3 py-2 rounded border text-sm">↑ Move Up</button>
                                 </form>
-                              ) : null}
+
+                                <form
+                                  action={async () => {
+                                    "use server";
+                                    await moveEpisodeBlockAction(b.id, episode.id, "down");
+                                    redirect(`/admin/episodes/${episode.id}`);
+                                  }}
+                                >
+                                  <button className="px-3 py-2 rounded border text-sm">↓ Move Down</button>
+                                </form>
+
+                                <form
+                                  action={async () => {
+                                    "use server";
+                                    await deleteEpisodeBlockAction(b.id, episode.id);
+                                    redirect(`/admin/episodes/${episode.id}`);
+                                  }}
+                                >
+                                  <button className="px-3 py-2 rounded border text-sm text-red-600">Delete</button>
+                                </form>
+                              </div>
+
+                              {/* Edit form */}
+                              <form
+                                className="space-y-2"
+                                action={async (fd) => {
+                                  "use server";
+                                  await updateEpisodeBlockAction(b.id, episode.id, fd);
+                                  redirect(`/admin/episodes/${episode.id}`);
+                                }}
+                              >
+                                <div className="grid grid-cols-3 gap-2">
+                                  <input name="block_type" className="border rounded p-2" defaultValue={b.block_type} />
+                                  <input name="audience" className="border rounded p-2" defaultValue={b.audience} />
+                                  <input name="mode" className="border rounded p-2" defaultValue={b.mode} />
+                                </div>
+
+                                <input
+                                  name="title"
+                                  className="w-full border rounded p-2"
+                                  defaultValue={b.title ?? ""}
+                                  placeholder="Title"
+                                />
+
+                                <textarea
+                                  name="body"
+                                  className="w-full border rounded p-2 h-28"
+                                  defaultValue={b.body ?? ""}
+                                  placeholder="Body"
+                                />
+
+                                <input
+                                  name="image_url"
+                                  className="w-full border rounded p-2"
+                                  defaultValue={b.image_url ?? ""}
+                                  placeholder="Image URL"
+                                />
+
+                                <textarea
+                                  name="meta_json"
+                                  className="w-full border rounded p-2 h-28 font-mono text-[12px]"
+                                  defaultValue={b.meta ? safeJsonStringify(b.meta) : ""}
+                                  placeholder="Meta JSON (optional)"
+                                />
+
+                                <button className="px-3 py-2 rounded bg-black text-white">Save Block</button>
+                              </form>
                             </div>
                           </details>
                         );
                       })
                     ) : (
                       <div className="text-sm text-gray-600">
-                        No blocks inside this scene yet. Add blocks after the scene in the episode editor.
+                        No blocks inside this scene yet. Use “Add to this scene (tree)” above.
                       </div>
                     )}
                   </div>
@@ -446,107 +690,12 @@ export default async function DmScreenPage({
             );
           })}
         </div>
-      </div>
 
-      {/* EPISODE PROGRESS */}
-      <div className="grid grid-cols-12 gap-3">
-        <div className="col-span-6 border rounded-xl p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-xs uppercase text-gray-500">Episode Progress</div>
-              <div className="font-bold">
-                {totalScenes === 0 ? "No scenes" : `Scene ${Math.max(1, currentSceneHuman || 1)} / ${totalScenes}`}
-              </div>
-              <div className="text-xs text-gray-600 mt-1">Completion is driven by “Mark Scene Complete”.</div>
-            </div>
-            <div className="text-2xl font-bold">{episodePct}%</div>
+        {!scenes.length ? (
+          <div className="text-sm text-gray-500 italic">
+            No scenes yet. Add a <b>scene</b> first using “Quick Add (global)”.
           </div>
-
-          <div className="mt-3 h-2 rounded bg-gray-200 overflow-hidden">
-            <div className="h-2 bg-black" style={{ width: `${episodePct}%` }} />
-          </div>
-        </div>
-
-        {/* Rolls box stays for now */}
-        <div className="col-span-6 border rounded-xl p-4">
-          <div className="text-xs uppercase text-gray-500">Roll Requests (physical dice)</div>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {["d20", "d12", "d10", "d8", "d6", "d4"].map((die) => (
-              <form
-                key={die}
-                action={async () => {
-                  "use server";
-                  await updateState(session.id, {
-                    roll_open: true,
-                    roll_die: die,
-                    roll_prompt: `Roll your ${die.toUpperCase()} now`,
-                    roll_target: "all",
-                  });
-                  redirect(`/storyteller/sessions/${session.id}`);
-                }}
-              >
-                <button className="px-3 py-2 rounded bg-black text-white text-sm">Roll {die}</button>
-              </form>
-            ))}
-
-            <form
-              action={async () => {
-                "use server";
-                await updateState(session.id, { roll_open: false, roll_die: null, roll_prompt: null });
-                redirect(`/storyteller/sessions/${session.id}`);
-              }}
-            >
-              <button className="px-3 py-2 rounded border text-sm">Close Roll</button>
-            </form>
-          </div>
-
-          <div className="mt-3 text-xs text-gray-600">Result entry grid comes next.</div>
-        </div>
-      </div>
-
-      {/* MAIN BOARD (leave for now) */}
-      <div className="grid grid-cols-12 gap-3">
-        <div className="col-span-3 border rounded-xl p-4">
-          <div className="text-xs uppercase text-gray-500">Map / City</div>
-          <div className="mt-2 h-64 rounded bg-gray-100 flex items-center justify-center text-gray-500">
-            Map image placeholder
-          </div>
-        </div>
-
-        <div className="col-span-6 border rounded-xl p-4">
-          <div className="text-xs uppercase text-gray-500">Story Text</div>
-
-          <form
-            action={async (fd) => {
-              "use server";
-              await updateStoryText(session.id, fd);
-              redirect(`/storyteller/sessions/${session.id}`);
-            }}
-            className="mt-2 space-y-2"
-          >
-            <textarea
-              name="story_text"
-              defaultValue={session.story_text || ""}
-              className="w-full h-64 border rounded p-3 font-serif"
-              placeholder="Write the scene/story here..."
-            />
-            <button className="px-4 py-2 rounded bg-black text-white">Save Story</button>
-          </form>
-        </div>
-
-        <div className="col-span-3 border rounded-xl p-4">
-          <div className="text-xs uppercase text-gray-500">NPC Portrait</div>
-          <div className="mt-2 h-64 rounded bg-gray-100 flex items-center justify-center text-gray-500">
-            NPC image placeholder
-          </div>
-        </div>
-      </div>
-
-      <div className="border rounded-xl p-4">
-        <div className="text-xs uppercase text-gray-500">Loot / Olives</div>
-        <div className="mt-2 text-gray-600 text-sm">
-          Framework panel now. Later: olive bank, drops, assignment, time-travel inventory.
-        </div>
+        ) : null}
       </div>
     </div>
   );
