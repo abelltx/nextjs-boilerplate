@@ -1,150 +1,110 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { createClient } from "@/utils/supabase/client";
+import { useEffect, useState } from "react";
+import { createBrowserClient } from "@supabase/ssr";
 
-type PresentedState = {
-  presented_block_id?: string | null;
-  presented_title?: string | null;
-  presented_body?: string | null;
-  presented_image_url?: string | null;
-  presented_updated_at?: string | null;
-  [key: string]: any;
+function supabaseBrowser() {
+  return createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+}
+
+type SessionState = {
+  session_id: string;
+  presented_block_id: string | null;
+};
+
+type Block = {
+  id: string;
+  block_type: string;
+  title: string | null;
+  body: string | null;
+  image_url: string | null;
 };
 
 export default function PresentedBlockRealtime({
   sessionId,
   initialState,
-  presentableIds,
 }: {
   sessionId: string;
-  initialState: PresentedState;
-  presentableIds?: string[];
+  initialState: any;
 }) {
-  const [state, setState] = useState<PresentedState>(initialState);
-  const stateRef = useRef(state);
-  stateRef.current = state;
+  const [presentedId, setPresentedId] = useState<string | null>(initialState?.presented_block_id ?? null);
+  const [block, setBlock] = useState<Block | null>(null);
 
+  // Fetch block when presentedId changes
   useEffect(() => {
-    const supabase = createClient();
+    const supabase = supabaseBrowser();
 
-    // MUST log a user id
-    supabase.auth.getSession().then(({ data }) => {
-      console.log("[PresentedBlockRealtime] auth user:", data.session?.user?.id);
-    });
+    let cancelled = false;
+
+    async function load() {
+      if (!presentedId) {
+        setBlock(null);
+        return;
+      }
+      const { data, error } = await supabase
+        .from("episode_blocks")
+        .select("id,block_type,title,body,image_url")
+        .eq("id", presentedId)
+        .single();
+
+      if (!cancelled) {
+        if (error) {
+          console.error("Failed to load presented block:", error.message);
+          setBlock(null);
+        } else {
+          setBlock(data as any);
+        }
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [presentedId]);
+
+  // Subscribe to state changes (THIS is where filter mistakes kill everything)
+  useEffect(() => {
+    const supabase = supabaseBrowser();
 
     const channel = supabase
-      .channel(`presented-block-${sessionId}`)
+      .channel(`presented:${sessionId}`)
       .on(
         "postgres_changes",
         {
-          event: "*",
+          event: "UPDATE",
           schema: "public",
           table: "session_state",
-          filter: `session_id=eq.${sessionId}`,
+          filter: `session_id=eq.${sessionId}`, // ✅ must be session_id
         },
         (payload) => {
-          console.log("[PresentedBlockRealtime] payload:", payload.new);
-          setState(payload.new as PresentedState);
+          const next = (payload.new as SessionState)?.presented_block_id ?? null;
+          setPresentedId(next);
         }
       )
-      .subscribe((status) => {
-        console.log("[PresentedBlockRealtime] channel status:", status);
-      });
+      .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
   }, [sessionId]);
 
-  const progress = useMemo(() => {
-    if (!presentableIds?.length) return null;
-    const idx = state.presented_block_id
-      ? presentableIds.findIndex((id) => id === state.presented_block_id)
-      : -1;
-    const human = idx >= 0 ? idx + 1 : 0;
-    return { human, total: presentableIds.length };
-  }, [presentableIds, state.presented_block_id]);
-
-  const hasPresented =
-    !!state.presented_title ||
-    !!state.presented_body ||
-    !!state.presented_image_url;
-
-  if (!hasPresented) {
-    return progress ? (
-      <div
-        style={{
-          border: "1px solid #ddd",
-          borderRadius: 12,
-          padding: 12,
-          marginBottom: 12,
-          background: "#fafafa",
-        }}
-      >
-        <div style={{ fontSize: 11, letterSpacing: 1, opacity: 0.6 }}>
-          EPISODE PROGRESS
-        </div>
-        <div style={{ marginTop: 6, fontSize: 14 }}>
-          Block <b>{progress.human}</b> / <b>{progress.total}</b>
-        </div>
-      </div>
-    ) : null;
-  }
+  if (!presentedId) return <div style={{ opacity: 0.7 }}>(Nothing presented yet.)</div>;
 
   return (
-    <div
-      style={{
-        border: "1px solid #ccc",
-        borderRadius: 10,
-        padding: 14,
-        marginBottom: 16,
-        background: "#fafafa",
-      }}
-    >
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-        <div style={{ fontSize: 11, letterSpacing: 1, opacity: 0.6 }}>
-          PRESENTED BY STORYTELLER
-        </div>
-        {progress && (
-          <div style={{ fontSize: 12, opacity: 0.75 }}>
-            Block <b>{progress.human}</b> / <b>{progress.total}</b>
-          </div>
-        )}
+    <div style={{ border: "1px solid #eee", borderRadius: 12, padding: 12, marginBottom: 12 }}>
+      <div style={{ fontSize: 12, opacity: 0.7, textTransform: "uppercase" }}>Live</div>
+      <div style={{ fontSize: 20, fontWeight: 800, marginTop: 6 }}>
+        {block?.title || block?.block_type || "Presented"}
       </div>
-
-      {state.presented_title && (
-        <div
-          style={{
-            fontSize: 20,
-            fontWeight: 700,
-            marginTop: 8,
-            marginBottom: 8,
-          }}
-        >
-          {state.presented_title}
-        </div>
-      )}
-
-      {state.presented_body && (
-        <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
-          {state.presented_body}
-        </div>
-      )}
-
-      {state.presented_image_url && (
+      {block?.body ? <div style={{ whiteSpace: "pre-wrap", marginTop: 8 }}>{block.body}</div> : null}
+      {block?.image_url ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={state.presented_image_url}
-          alt="Storyteller visual"
-          style={{
-            marginTop: 12,
-            maxWidth: "100%",
-            borderRadius: 10,
-            border: "1px solid #ddd",
-          }}
-        />
-      )}
+        <img src={block.image_url} alt="Presented" style={{ width: "100%", borderRadius: 12, marginTop: 10 }} />
+      ) : null}
     </div>
   );
 }

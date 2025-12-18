@@ -5,6 +5,11 @@ import PlayerSessionRealtime from "@/components/PlayerSessionRealtime";
 import StoryRealtime from "@/components/StoryRealtime";
 import PresentedBlockRealtime from "@/components/PresentedBlockRealtime";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const fetchCache = "force-no-store";
+
+
 function isUuid(value: unknown): value is string {
   if (typeof value !== "string") return false;
   const v = value.trim();

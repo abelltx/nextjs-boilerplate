@@ -1,31 +1,29 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { createBrowserClient } from "@supabase/ssr";
+import { useEffect, useState } from "react";
+import { createBrowserClient } from "@supabase/ssr"; // or your preferred browser client creator
 
-type Props = {
+function supabaseBrowser() {
+  return createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+}
+
+export default function StoryRealtime({
+  sessionId,
+  initialStoryText,
+}: {
   sessionId: string;
   initialStoryText: string;
-};
-
-export default function StoryRealtime({ sessionId, initialStoryText }: Props) {
-  const [storyText, setStoryText] = useState(initialStoryText);
-
-  const supabase = useMemo(() => {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-    const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
-    return createBrowserClient(url, anon);
-  }, []);
+}) {
+  const [text, setText] = useState(initialStoryText);
 
   useEffect(() => {
-    setStoryText(initialStoryText);
-  }, [initialStoryText]);
-
-  useEffect(() => {
-    if (!sessionId) return;
+    const supabase = supabaseBrowser();
 
     const channel = supabase
-      .channel(`sessions-story-${sessionId}`)
+      .channel(`story:${sessionId}`)
       .on(
         "postgres_changes",
         {
@@ -35,8 +33,8 @@ export default function StoryRealtime({ sessionId, initialStoryText }: Props) {
           filter: `id=eq.${sessionId}`,
         },
         (payload) => {
-          const next = (payload.new as any)?.story_text;
-          if (typeof next === "string") setStoryText(next);
+          const next = (payload.new as any)?.story_text ?? "";
+          setText(next);
         }
       )
       .subscribe();
@@ -44,19 +42,11 @@ export default function StoryRealtime({ sessionId, initialStoryText }: Props) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [supabase, sessionId]);
+  }, [sessionId]);
 
   return (
-    <div
-      style={{
-        whiteSpace: "pre-wrap",
-        lineHeight: 1.5,
-        padding: 12,
-        borderRadius: 10,
-        border: "1px solid #ccc",
-      }}
-    >
-      {storyText || "Storyteller hasn’t posted story text yet."}
+    <div style={{ whiteSpace: "pre-wrap", fontFamily: "serif", fontSize: 16, lineHeight: 1.5 }}>
+      {text || <span style={{ opacity: 0.6 }}>(No story text yet.)</span>}
     </div>
   );
 }
