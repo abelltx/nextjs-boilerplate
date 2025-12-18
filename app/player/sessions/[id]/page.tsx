@@ -48,21 +48,6 @@ export default async function PlayerSessionPage({
 
   if (stErr) throw new Error(`Failed to load session state: ${stErr.message}`);
 
-  // Build episode progress index (presentable blocks only)
-  let presentableIds: string[] = [];
-  if (session.episode_id) {
-    const { data: blocks } = await supabase
-      .from("episode_blocks")
-      .select("id,sort_order,audience")
-      .eq("episode_id", session.episode_id)
-      .order("sort_order", { ascending: true });
-
-    presentableIds =
-      (blocks ?? [])
-        .filter((b: any) => b.audience !== "storyteller")
-        .map((b: any) => b.id) ?? [];
-  }
-
   return (
     <main style={{ maxWidth: 920, margin: "40px auto", padding: 16, display: "grid", gap: 16 }}>
       <header style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 16 }}>
@@ -75,24 +60,15 @@ export default async function PlayerSessionPage({
 
         {/* Timer + roll prompt update in realtime */}
         <div style={{ minWidth: 260 }}>
-          <PlayerSessionRealtime
-            sessionId={sessionId}
-            initialState={state}
-            presentableIds={presentableIds}
-          />
-
+          <PlayerSessionRealtime sessionId={sessionId} initialState={state} />
         </div>
       </header>
 
       <section style={{ border: "1px solid #ddd", borderRadius: 12, padding: 16 }}>
         <h2 style={{ marginTop: 0 }}>Story</h2>
 
-        {/* Presented by Storyteller (LIVE) + Episode Progress */}
-        <PresentedBlockRealtime
-          sessionId={sessionId}
-          initialState={state}
-          presentableIds={presentableIds}
-        />
+        {/* Presented by Storyteller (LIVE) */}
+        <PresentedBlockRealtime sessionId={sessionId} initialState={state} />
 
         {/* Announcement board (always-on) */}
         <StoryRealtime sessionId={sessionId} initialStoryText={session.story_text || ""} />
