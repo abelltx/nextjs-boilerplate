@@ -54,15 +54,36 @@ export async function getDmSession(sessionId: string) {
     } as any);
 
   // --- JOINS (players connected to the session) ---
-  const { data: joins, error: joinsErr } = await supabase
-    .from("session_joins")
+  let joins: any[] = [];
+
+{
+  const res = await supabase
+    .from("session_players")
     .select("*")
     .eq("session_id", sessionId)
     .order("created_at", { ascending: true });
 
-  if (joinsErr) {
-    console.error("getDmSession: joins error", joinsErr.message);
+  if (res.error) {
+    console.error("getDmSession: joins error", res.error.message);
+
+    // Fallback in case created_at does not exist
+    const res2 = await supabase
+      .from("session_players")
+      .select("*")
+      .eq("session_id", sessionId);
+
+    if (res2.error) {
+      console.error("getDmSession: joins fallback error", res2.error.message);
+      joins = [];
+    } else {
+      joins = res2.data ?? [];
+    }
+  } else {
+    joins = res.data ?? [];
   }
+}
+
+
 
   return {
     session,
