@@ -154,12 +154,61 @@ export default async function DmScreenPage({
 
           {/* Players + Roll Mode settings */}
           <div className="mt-4 grid grid-cols-6 gap-2">
-            <DmRollResultsRealtime
-  sessionId={sessionId}
-  joins={joins}
-  initialState={state as any}
-/>
+            {Array.from({ length: 6 }).map((_, i) => {
+              const pRow = (joins ?? [])[i];
+              const playerId = pRow?.player_id ?? null;
 
+              const currentMode = playerId ? rollModes[playerId] ?? "dm" : "dm";
+
+              return (
+                <div key={i} className="border rounded-lg p-2 text-center space-y-2">
+                  <div>
+                    <div className="text-xs text-gray-500">Player {i + 1}</div>
+                    <div className="text-[11px] font-mono break-all">
+                      {playerId ? playerId.slice(0, 8) : "—"}
+                    </div>
+                  </div>
+
+                  <div className="text-left">
+                    <div className="text-[10px] uppercase text-gray-500">Roll Input</div>
+
+                    <form
+                      className="space-y-1"
+                      action={async (fd) => {
+                        "use server";
+                        if (!playerId) return;
+
+                        const nextMode = String(fd.get("mode") ?? "dm");
+                        const prev = (((state as any).roll_modes ?? {}) as Record<string, string>) || {};
+                        const next = { ...prev, [playerId]: nextMode };
+
+                        await updateState(session.id, { roll_modes: next });
+                        redirect(`/storyteller/sessions/${session.id}`);
+                      }}
+                    >
+                      <select
+                        name="mode"
+                        defaultValue={currentMode}
+                        className="w-full border rounded p-1 text-xs"
+                        disabled={!playerId}
+                      >
+                        <option value="dm">1) DM enters roll</option>
+                        <option value="player">2) Player enters roll</option>
+                        <option value="digital">3) Digital dice</option>
+                      </select>
+
+                      <button
+                        type="submit"
+                        className="w-full px-2 py-1 rounded bg-black text-white text-xs"
+                        disabled={!playerId}
+                      >
+                        Save
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
