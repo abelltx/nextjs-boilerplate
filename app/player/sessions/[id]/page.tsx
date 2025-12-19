@@ -8,6 +8,7 @@ import { supabaseServer } from "@/lib/supabase/server";
 import PlayerSessionRealtime from "@/components/PlayerSessionRealtime";
 import StoryRealtime from "@/components/StoryRealtime";
 import PresentedBlockRealtime from "@/components/PresentedBlockRealtime";
+import PlayerRollEntryRealtime from "@/components/PlayerRollEntryRealtime";
 
 function isUuid(value: unknown): value is string {
   if (typeof value !== "string") return false;
@@ -97,6 +98,7 @@ export default async function PlayerSessionPage({
         {/* Timer + roll prompt update in realtime */}
         <div style={{ minWidth: 260 }}>
   <PlayerSessionRealtime sessionId={sessionId} initialState={state} />
+  <PlayerRollEntryRealtime sessionId={sessionId} playerId={user.id} initialState={state} />
 
   {/* Compact Mode 2: Player enters roll (inside the existing dice box) */}
   {(() => {
