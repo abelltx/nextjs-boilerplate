@@ -96,8 +96,115 @@ export default async function PlayerSessionPage({
 
         {/* Timer + roll prompt update in realtime */}
         <div style={{ minWidth: 260 }}>
-          <PlayerSessionRealtime sessionId={sessionId} initialState={state} />
+  <PlayerSessionRealtime sessionId={sessionId} initialState={state} />
+
+  {/* Compact Mode 2: Player enters roll (inside the existing dice box) */}
+  {(() => {
+    const playerId = user.id;
+
+    // joined check (optional but recommended: remove if you don't want it)
+    // NOTE: If you don't have join enforcement yet, set isJoined = true;
+    const isJoined = true;
+
+    const rollOpen = Boolean((state as any).roll_open);
+    const rollDie = String((state as any).roll_die ?? "");
+    const rollPrompt = String((state as any).roll_prompt ?? "");
+    const rollTarget = String((state as any).roll_target ?? "all");
+
+    const rollModes = (((state as any).roll_modes ?? {}) as Record<string, string>) || {};
+    const myMode = rollModes[playerId] ?? "dm";
+
+    const rollResults = (((state as any).roll_results ?? {}) as Record<string, any>) || {};
+    const myExisting = rollResults[playerId] ?? null;
+
+    const shouldShow =
+      isJoined &&
+      rollOpen &&
+      myMode === "player" &&
+      (rollTarget === "all" || rollTarget === playerId);
+
+    if (!shouldShow) return null;
+
+    return (
+      <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #eee" }}>
+        <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 6 }}>
+          {rollPrompt ? rollPrompt : `Enter your ${rollDie ? rollDie.toUpperCase() : "roll"}`}
         </div>
+
+        <form
+          action={async (fd) => {
+            "use server";
+            const val = Number(fd.get("roll_value"));
+            if (!Number.isFinite(val)) return;
+
+            const supabase = await supabaseServer();
+
+            // Load latest roll_results to merge safely
+            const { data: st, error: e1 } = await supabase
+              .from("session_state")
+              .select("roll_results")
+              .eq("session_id", sessionId)
+              .single();
+
+            if (e1) throw new Error(e1.message);
+
+            const prev = ((st as any)?.roll_results ?? {}) as Record<string, any>;
+            const next = {
+              ...prev,
+              [playerId]: { value: val, source: "player", submitted_at: new Date().toISOString() },
+            };
+
+            const { error: e2 } = await supabase
+              .from("session_state")
+              .update({ roll_results: next })
+              .eq("session_id", sessionId);
+
+            if (e2) throw new Error(e2.message);
+
+            redirect(`/player/sessions/${sessionId}`);
+          }}
+          style={{ display: "flex", gap: 8, alignItems: "center" }}
+        >
+          <input
+            name="roll_value"
+            type="number"
+            required
+            placeholder={myExisting?.value ? String(myExisting.value) : "Roll"}
+            style={{
+              flex: 1,
+              padding: "8px 10px",
+              borderRadius: 10,
+              border: "1px solid #ccc",
+              fontSize: 14,
+            }}
+          />
+          <button
+            type="submit"
+            style={{
+              padding: "8px 10px",
+              borderRadius: 10,
+              border: "1px solid #111",
+              background: "#111",
+              color: "#fff",
+              fontWeight: 700,
+              fontSize: 13,
+              whiteSpace: "nowrap",
+            }}
+          >
+            Submit
+          </button>
+        </form>
+
+        {myExisting ? (
+          <div style={{ marginTop: 6, fontSize: 11, opacity: 0.7 }}>
+            Submitted: <span style={{ fontFamily: "monospace" }}>{String(myExisting.value ?? "—")}</span>
+          </div>
+        ) : null}
+      </div>
+    );
+  })()}
+</div>
+
       </header>
 
       {/* MODE 2: Player enters roll */}
