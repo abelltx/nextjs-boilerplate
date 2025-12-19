@@ -6,6 +6,20 @@ import { submitPlayerRollAction } from "@/app/player/sessions/[id]/rollActions";
 
 type AnyState = Record<string, any>;
 
+function asObject(v: any): Record<string, any> {
+  if (!v) return {};
+  if (typeof v === "object") return v;
+  if (typeof v === "string") {
+    try {
+      const parsed = JSON.parse(v);
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
 export default function PlayerRollEntryRealtime({
   sessionId,
   playerId,
@@ -18,9 +32,28 @@ export default function PlayerRollEntryRealtime({
   const supabase = useMemo(() => supabaseBrowser(), []);
   const [state, setState] = useState<AnyState>(initialState ?? {});
 
+  // 1) Fetch freshest row once on mount (prevents stale initial render)
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const { data, error } = await supabase
+        .from("session_state")
+        .select("*")
+        .eq("session_id", sessionId)
+        .single();
+
+      if (!alive) return;
+      if (!error && data) setState(data as any);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [supabase, sessionId]);
+
+  // 2) Subscribe live
   useEffect(() => {
     const channel = supabase
-      .channel(`session_state:${sessionId}`)
+      .channel(`session_state:${sessionId}:rolls`)
       .on(
         "postgres_changes",
         {
@@ -45,10 +78,11 @@ export default function PlayerRollEntryRealtime({
   const rollPrompt = String(state.roll_prompt ?? "");
   const rollTarget = String(state.roll_target ?? "all");
 
-  const rollModes = (state.roll_modes ?? {}) as Record<string, string>;
+  // ✅ normalize jsonb coming from realtime
+  const rollModes = asObject(state.roll_modes) as Record<string, string>;
   const myMode = rollModes[playerId] ?? "dm";
 
-  const rollResults = (state.roll_results ?? {}) as Record<string, any>;
+  const rollResults = asObject(state.roll_results) as Record<string, any>;
   const mine = rollResults[playerId] ?? null;
 
   const shouldShow =
@@ -56,7 +90,6 @@ export default function PlayerRollEntryRealtime({
 
   if (!shouldShow) return null;
 
-  // Server Action binder
   const action = submitPlayerRollAction.bind(null, sessionId, playerId);
 
   return (

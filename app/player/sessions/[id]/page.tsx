@@ -99,9 +99,7 @@ export default async function PlayerSessionPage({
         <div style={{ minWidth: 260 }}>
   <PlayerSessionRealtime sessionId={sessionId} initialState={state} />
   <PlayerRollEntryRealtime sessionId={sessionId} playerId={user.id} initialState={state} />
-
-  
-</div>
+        </div>
 
       </header>
 
