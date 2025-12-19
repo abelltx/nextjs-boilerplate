@@ -9,6 +9,8 @@ import { createClient } from "@/utils/supabase/server";
 import { EpisodePicker } from "@/components/EpisodePicker";
 import { presentBlockToPlayersAction, clearPresentedAction } from "@/app/actions/present";
 import DmRollResultsRealtime from "@/components/DmRollResultsRealtime";
+import DmPlayerRollLineRealtime from "@/components/DmPlayerRollLineRealtime";
+
 
 
 function isUuid(value: unknown): value is string {
@@ -167,6 +169,9 @@ export default async function DmScreenPage({
                     <div className="text-[11px] font-mono break-all">
                       {playerId ? playerId.slice(0, 8) : "—"}
                     </div>
+                    {/* ✅ LIVE roll result line */}
+    <DmPlayerRollLineRealtime sessionId={sessionId} playerId={playerId} initialState={state as any} />
+  
                   </div>
 
                   <div className="text-left">
