@@ -151,16 +151,55 @@ export default async function DmScreenPage({
           </div>
 
           <div className="mt-4 grid grid-cols-6 gap-2">
-            {Array.from({ length: 6 }).map((_, i) => {
-              const p = joins[i];
-              return (
-                <div key={i} className="border rounded-lg p-2 text-center">
-                  <div className="text-xs text-gray-500">Player {i + 1}</div>
-                  <div className="text-[11px] font-mono break-all">{p ? p.player_id.slice(0, 8) : "—"}</div>
-                </div>
-              );
-            })}
-          </div>
+  {Array.from({ length: 6 }).map((_, i) => {
+    const p = joins[i];
+    const playerId = p?.player_id ?? null;
+
+    const rollModes = ((state as any).roll_modes ?? {}) as Record<string, string>;
+    const currentMode = playerId ? rollModes[playerId] ?? "dm" : "dm";
+
+    return (
+      <div key={i} className="border rounded-lg p-2 text-center space-y-2">
+        <div>
+          <div className="text-xs text-gray-500">Player {i + 1}</div>
+          <div className="text-[11px] font-mono break-all">{playerId ? playerId.slice(0, 8) : "—"}</div>
+        </div>
+
+        {/* Roll Mode Setting (DM controlled) */}
+        <div className="text-left">
+          <div className="text-[10px] uppercase text-gray-500">Roll Input</div>
+
+          <form
+            action={async (fd) => {
+              "use server";
+              if (!playerId) return;
+
+              const nextMode = String(fd.get("mode") ?? "dm");
+              const prev = (((state as any).roll_modes ?? {}) as Record<string, string>) || {};
+              const next = { ...prev, [playerId]: nextMode };
+
+              await updateState(session.id, { roll_modes: next });
+              redirect(`/storyteller/sessions/${session.id}`);
+            }}
+          >
+            <select
+              name="mode"
+              defaultValue={currentMode}
+              className="w-full border rounded p-1 text-xs"
+              disabled={!playerId}
+              onChange={(e) => (e.currentTarget.form as HTMLFormElement)?.requestSubmit()}
+            >
+              <option value="dm">1) DM enters roll</option>
+              <option value="player">2) Player enters roll</option>
+              <option value="digital">3) Digital dice</option>
+            </select>
+          </form>
+        </div>
+      </div>
+    );
+  })}
+</div>
+
         </div>
 
         {/* Right side */}
@@ -471,7 +510,72 @@ export default async function DmScreenPage({
             </form>
           </div>
 
-          <div className="mt-3 text-xs text-gray-600">Result entry grid comes next.</div>
+          {(state as any).roll_open ? (
+  <div className="mt-3 space-y-2">
+    <div className="text-xs uppercase text-gray-500">Enter Results (DM mode only)</div>
+
+    <div className="grid grid-cols-3 gap-2">
+      {joins.slice(0, 6).map((j: any, idx: number) => {
+        const playerId = j?.player_id;
+        if (!playerId) return null;
+
+        const rollModes = ((state as any).roll_modes ?? {}) as Record<string, string>;
+        const mode = rollModes[playerId] ?? "dm";
+        if (mode !== "dm") return null; // only show DM inputs for players set to DM-enter
+
+        return (
+          <form
+            key={playerId}
+            className="border rounded-lg p-2 space-y-2"
+            action={async (fd) => {
+              "use server";
+              const val = Number(fd.get("roll_value"));
+              if (!Number.isFinite(val)) return;
+
+              const prev = (((state as any).roll_results ?? {}) as Record<string, any>) || {};
+              const next = {
+                ...prev,
+                [playerId]: {
+                  value: val,
+                  source: "dm",
+                  submitted_at: new Date().toISOString(),
+                },
+              };
+
+              await updateState(session.id, { roll_results: next });
+              redirect(`/storyteller/sessions/${session.id}`);
+            }}
+          >
+            <div className="text-xs text-gray-500">Player {idx + 1}</div>
+            <div className="text-[11px] font-mono text-gray-700">
+              {playerId.slice(0, 8)}
+            </div>
+
+            <input
+              name="roll_value"
+              type="number"
+              className="w-full border rounded p-1 text-sm"
+              placeholder="Enter roll"
+            />
+
+            <button className="w-full px-2 py-1 rounded bg-black text-white text-sm">
+              Submit
+            </button>
+          </form>
+        );
+      })}
+    </div>
+
+    <div className="text-xs text-gray-500">
+      Players set to “Player enters roll” or “Digital dice” submit from their device.
+    </div>
+  </div>
+) : (
+  <div className="mt-3 text-xs text-gray-600">
+    Open a roll to collect results.
+  </div>
+)}
+
         </div>
       </div>
 
