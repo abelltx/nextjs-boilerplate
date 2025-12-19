@@ -9,7 +9,6 @@ export async function submitPlayerRollAction(sessionId: string, playerId: string
 
   const supabase = await supabaseServer();
 
-  // Merge safely with latest row
   const { data: st, error: e1 } = await supabase
     .from("session_state")
     .select("roll_results")
@@ -21,7 +20,11 @@ export async function submitPlayerRollAction(sessionId: string, playerId: string
   const prev = ((st as any)?.roll_results ?? {}) as Record<string, any>;
   const next = {
     ...prev,
-    [playerId]: { value: val, source: "player", submitted_at: new Date().toISOString() },
+    [playerId]: {
+      value: val,
+      source: "player",
+      submitted_at: new Date().toISOString(),
+    },
   };
 
   const { error: e2 } = await supabase
@@ -31,6 +34,5 @@ export async function submitPlayerRollAction(sessionId: string, playerId: string
 
   if (e2) throw new Error(e2.message);
 
-  // Redirect is fine, but realtime will update even without it.
   redirect(`/player/sessions/${sessionId}`);
 }

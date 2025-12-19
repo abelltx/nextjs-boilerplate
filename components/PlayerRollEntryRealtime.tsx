@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { createClient } from "@/utils/supabase/client";
+import { supabaseBrowser } from "@/lib/supabase/browser";
 import { submitPlayerRollAction } from "@/app/player/sessions/[id]/rollActions";
 
 type AnyState = Record<string, any>;
@@ -15,7 +15,7 @@ export default function PlayerRollEntryRealtime({
   playerId: string;
   initialState: AnyState;
 }) {
-  const supabase = useMemo(() => createClient(), []);
+  const supabase = useMemo(() => supabaseBrowser(), []);
   const [state, setState] = useState<AnyState>(initialState ?? {});
 
   useEffect(() => {
@@ -51,9 +51,12 @@ export default function PlayerRollEntryRealtime({
   const rollResults = (state.roll_results ?? {}) as Record<string, any>;
   const mine = rollResults[playerId] ?? null;
 
-  const shouldShow = rollOpen && myMode === "player" && (rollTarget === "all" || rollTarget === playerId);
+  const shouldShow =
+    rollOpen && myMode === "player" && (rollTarget === "all" || rollTarget === playerId);
+
   if (!shouldShow) return null;
 
+  // Server Action binder
   const action = submitPlayerRollAction.bind(null, sessionId, playerId);
 
   return (
@@ -95,7 +98,8 @@ export default function PlayerRollEntryRealtime({
 
       {mine ? (
         <div style={{ marginTop: 6, fontSize: 11, opacity: 0.7 }}>
-          Submitted: <span style={{ fontFamily: "monospace" }}>{String(mine.value ?? "—")}</span>
+          Submitted:{" "}
+          <span style={{ fontFamily: "monospace" }}>{String(mine.value ?? "—")}</span>
         </div>
       ) : null}
     </div>
