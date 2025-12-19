@@ -32,7 +32,7 @@ export default function PlayerRollEntryRealtime({
   const supabase = useMemo(() => supabaseBrowser(), []);
   const [state, setState] = useState<AnyState>(initialState ?? {});
 
-  // 1) Fetch freshest row once on mount (prevents stale initial render)
+  // fresh fetch once
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -41,7 +41,6 @@ export default function PlayerRollEntryRealtime({
         .select("*")
         .eq("session_id", sessionId)
         .single();
-
       if (!alive) return;
       if (!error && data) setState(data as any);
     })();
@@ -50,7 +49,7 @@ export default function PlayerRollEntryRealtime({
     };
   }, [supabase, sessionId]);
 
-  // 2) Subscribe live
+  // realtime subscribe
   useEffect(() => {
     const channel = supabase
       .channel(`session_state:${sessionId}:rolls`)
@@ -78,17 +77,26 @@ export default function PlayerRollEntryRealtime({
   const rollPrompt = String(state.roll_prompt ?? "");
   const rollTarget = String(state.roll_target ?? "all");
 
-  // ✅ normalize jsonb coming from realtime
   const rollModes = asObject(state.roll_modes) as Record<string, string>;
   const myMode = rollModes[playerId] ?? "dm";
 
   const rollResults = asObject(state.roll_results) as Record<string, any>;
   const mine = rollResults[playerId] ?? null;
 
-  const shouldShow =
-    rollOpen && myMode === "player" && (rollTarget === "all" || rollTarget === playerId);
+  const targetedToMe = rollTarget === "all" || rollTarget === playerId;
+  const shouldShow = rollOpen && myMode === "player" && targetedToMe;
 
-  if (!shouldShow) return null;
+  // If NO roll open, keep it invisible/compact
+  if (!rollOpen) return null;
+
+  // If roll open but input hidden, show a 1-line reason (compact)
+  if (!shouldShow) {
+    return (
+      <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #eee", fontSize: 11, opacity: 0.75 }}>
+        Roll open • mode: <b>{myMode}</b> • target: <b>{rollTarget}</b>
+      </div>
+    );
+  }
 
   const action = submitPlayerRollAction.bind(null, sessionId, playerId);
 
@@ -131,8 +139,7 @@ export default function PlayerRollEntryRealtime({
 
       {mine ? (
         <div style={{ marginTop: 6, fontSize: 11, opacity: 0.7 }}>
-          Submitted:{" "}
-          <span style={{ fontFamily: "monospace" }}>{String(mine.value ?? "—")}</span>
+          Submitted: <span style={{ fontFamily: "monospace" }}>{String(mine.value ?? "—")}</span>
         </div>
       ) : null}
     </div>
