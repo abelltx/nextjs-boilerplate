@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { createClient } from "@/utils/supabase/client"; // <-- if your path differs, adjust here
+import { createClient } from "@/utils/supabase/client";
 import { submitPlayerRollAction } from "@/app/player/sessions/[id]/rollActions";
 
 type AnyState = Record<string, any>;
@@ -19,7 +19,6 @@ export default function PlayerRollEntryRealtime({
   const [state, setState] = useState<AnyState>(initialState ?? {});
 
   useEffect(() => {
-    // Subscribe to session_state row updates for this session
     const channel = supabase
       .channel(`session_state:${sessionId}`)
       .on(
@@ -31,7 +30,6 @@ export default function PlayerRollEntryRealtime({
           filter: `session_id=eq.${sessionId}`,
         },
         (payload) => {
-          // payload.new contains the updated row
           if (payload?.new) setState(payload.new as AnyState);
         }
       )
@@ -53,11 +51,7 @@ export default function PlayerRollEntryRealtime({
   const rollResults = (state.roll_results ?? {}) as Record<string, any>;
   const mine = rollResults[playerId] ?? null;
 
-  const shouldShow =
-    rollOpen &&
-    myMode === "player" &&
-    (rollTarget === "all" || rollTarget === playerId);
-
+  const shouldShow = rollOpen && myMode === "player" && (rollTarget === "all" || rollTarget === playerId);
   if (!shouldShow) return null;
 
   const action = submitPlayerRollAction.bind(null, sessionId, playerId);
@@ -70,4 +64,40 @@ export default function PlayerRollEntryRealtime({
 
       <form action={action} style={{ display: "flex", gap: 8, alignItems: "center" }}>
         <input
-          name=
+          name="roll_value"
+          type="number"
+          required
+          placeholder={mine?.value ? String(mine.value) : "Roll"}
+          style={{
+            flex: 1,
+            padding: "8px 10px",
+            borderRadius: 10,
+            border: "1px solid #ccc",
+            fontSize: 14,
+          }}
+        />
+        <button
+          type="submit"
+          style={{
+            padding: "8px 10px",
+            borderRadius: 10,
+            border: "1px solid #111",
+            background: "#111",
+            color: "#fff",
+            fontWeight: 700,
+            fontSize: 13,
+            whiteSpace: "nowrap",
+          }}
+        >
+          Submit
+        </button>
+      </form>
+
+      {mine ? (
+        <div style={{ marginTop: 6, fontSize: 11, opacity: 0.7 }}>
+          Submitted: <span style={{ fontFamily: "monospace" }}>{String(mine.value ?? "—")}</span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
