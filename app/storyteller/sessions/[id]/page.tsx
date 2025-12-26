@@ -10,6 +10,9 @@ import { EpisodePicker } from "@/components/EpisodePicker";
 import { presentBlockToPlayersAction, clearPresentedAction } from "@/app/actions/present";
 import DmRollResultsRealtime from "@/components/DmRollResultsRealtime";
 import DmPlayerRollLineRealtime from "@/components/DmPlayerRollLineRealtime";
+import { randomUUID } from "crypto";
+import crypto from "crypto";
+
 
 
 
@@ -520,7 +523,12 @@ export default async function DmScreenPage({
                     roll_die: die,
                     roll_prompt: `Roll your ${die.toUpperCase()} now`,
                     roll_target: "all",
+
+                    // NEW — one-roll-per-round enforcement
+                    roll_round_id: crypto.randomUUID(),
+                    roll_results: {},
                   });
+
                   redirect(`/storyteller/sessions/${session.id}`);
                 }}
               >
