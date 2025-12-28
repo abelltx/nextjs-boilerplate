@@ -61,7 +61,7 @@ export async function getDmSession(sessionId: string) {
     .from("session_players")
     .select("*")
     .eq("session_id", sessionId)
-    .order("created_at", { ascending: true });
+    .order("joined_at", { ascending: true })
 
   if (res.error) {
     console.error("getDmSession: joins error", res.error.message);
