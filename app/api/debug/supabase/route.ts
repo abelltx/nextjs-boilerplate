@@ -1,16 +1,25 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@/utils/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? null;
+function isUuid(v: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
+}
 
-  // Project ref is the subdomain portion: https://<ref>.supabase.co
-  const projectRef =
-    url && url.includes("https://") ? url.replace("https://", "").split(".")[0] : null;
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get("id") ?? "";
+
+  if (!isUuid(id)) return NextResponse.json({ ok: false, error: "bad id" }, { status: 400 });
+
+  const supabase = await createClient();
+  const res = await supabase.from("npcs").select("id,name").eq("id", id).maybeSingle();
 
   return NextResponse.json({
-    supabaseUrl: url,
-    projectRef,
+    ok: !res.error,
+    error: res.error?.message ?? null,
+    found: !!res.data,
+    data: res.data ?? null,
   });
 }
