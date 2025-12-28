@@ -4,9 +4,17 @@ import { getNpcById } from "@/lib/designer/npcs";
 import { updateNpcAction, archiveNpcAction } from "@/app/actions/npcs";
 import NpcImageUploader from "@/components/designer/npcs/NpcImageUploader";
 import StatBlockEditor from "@/components/designer/npcs/StatBlockEditor";
+import DeleteNpcButton from "@/components/designer/npcs/DeleteNpcButton";
+import { deleteNpcAction } from "@/app/actions/npcs";
+
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+async function del() {
+  "use server";
+  await deleteNpcAction(npcId);
+}
 
 function isUuid(v: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
@@ -81,11 +89,7 @@ export default async function EditNpcByQueryPage({
           <Link href="/admin/designer/npcs" className="px-3 py-2 rounded-lg border hover:bg-muted/40">
             Back
           </Link>
-          <form action={archive}>
-            <button className="px-3 py-2 rounded-lg border hover:bg-muted/40" type="submit">
-              Archive
-            </button>
-          </form>
+         <DeleteNpcButton npcName={npc.name} onDelete={del} />
         </div>
       </div>
 
