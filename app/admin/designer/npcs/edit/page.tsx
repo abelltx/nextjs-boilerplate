@@ -11,11 +11,6 @@ import { deleteNpcAction } from "@/app/actions/npcs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-async function del() {
-  "use server";
-  await deleteNpcAction(npcId);
-}
-
 function isUuid(v: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
     v.trim()
@@ -65,7 +60,13 @@ export default async function EditNpcByQueryPage({
     );
   }
 
-  const npcId = npc.id;
+const npcId = npc.id;
+
+
+    async function del() {
+  "use server";
+  await deleteNpcAction(npcId);
+    }
 
   async function update(formData: FormData) {
     "use server";
