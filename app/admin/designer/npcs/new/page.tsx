@@ -5,7 +5,8 @@ export default function NewNpcPage() {
   async function action(formData: FormData) {
     "use server";
     const id = await createNpcAction(formData);
-    redirect(`/admin/designer/npcs/${id}`);
+    redirect(`/admin/designer/npcs/edit?id=${id}`);
+
   }
 
   return (
