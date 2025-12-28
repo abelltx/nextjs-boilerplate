@@ -97,7 +97,7 @@ export default async function DmScreenPage({
   const { data: episodes, error: epErr } = await supabase
     .from("episodes")
     .select("id,title,episode_code,tags")
-    .order("created_at", { ascending: false });
+    .order("joined_at", { ascending: true })
 
   if (epErr) console.error("Failed to load episodes list:", epErr.message);
 
