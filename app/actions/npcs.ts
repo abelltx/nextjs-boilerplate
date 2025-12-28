@@ -4,7 +4,20 @@ import { createClient } from "@/utils/supabase/server";
 
 function safeJsonParse(input: string | null) {
   if (!input) return {};
-  try { return JSON.parse(input); } catch { return {}; }
+  try {
+    return JSON.parse(input);
+  } catch {
+    return {};
+  }
+}
+
+function errMsg(err: unknown, fallback = "Unknown error") {
+  if (!err) return fallback;
+  if (typeof err === "string") return err;
+  if (typeof err === "object" && "message" in err && typeof (err as any).message === "string") {
+    return (err as any).message;
+  }
+  return fallback;
 }
 
 export async function createNpcAction(formData: FormData): Promise<string> {
@@ -15,18 +28,16 @@ export async function createNpcAction(formData: FormData): Promise<string> {
   const default_role = String(formData.get("default_role") ?? "neutral");
   const description = String(formData.get("description") ?? "");
 
-  const { data, error } = await supabase
+  const res = await supabase
     .from("npcs")
     .insert([{ name, npc_type, default_role, description }])
     .select("id")
     .single();
-    if (error) throw new Error(error.message);
-    if (!data?.id) throw new Error("Create NPC failed: no id returned.");
-    return data.id as string;
 
+  if (res.error) throw new Error(errMsg(res.error));
+  if (!res.data?.id) throw new Error("Create NPC failed: no id returned.");
 
-  if (error) throw new Error(error.message);
-  return data.id as string;
+  return res.data.id as string;
 }
 
 export async function updateNpcAction(npcId: string, formData: FormData) {
@@ -39,28 +50,32 @@ export async function updateNpcAction(npcId: string, formData: FormData) {
   const image_alt = String(formData.get("image_alt") ?? "") || null;
   const notes_storyteller = String(formData.get("notes_storyteller") ?? "") || null;
 
+  // Stat block is posted via hidden input "stat_block_json"
   const stat_block_json = String(formData.get("stat_block_json") ?? "");
   const stat_block = safeJsonParse(stat_block_json);
 
-  const { error } = await supabase
+  const res = await supabase
     .from("npcs")
     .update({ name, npc_type, default_role, description, image_alt, notes_storyteller, stat_block })
     .eq("id", npcId);
 
-  if (error) throw new Error(error.message);
+  if (res.error) throw new Error(errMsg(res.error));
 }
 
 export async function archiveNpcAction(npcId: string) {
   const supabase = await createClient();
-  const { error } = await supabase.from("npcs").update({ is_archived: true }).eq("id", npcId);
-  if (error) throw new Error(error.message);
+  const res = await supabase.from("npcs").update({ is_archived: true }).eq("id", npcId);
+  if (res.error) throw new Error(errMsg(res.error));
 }
 
+/**
+ * Image metadata helpers. Actual Storage upload happens client-side.
+ */
 export async function npcSetImageMetaAction(npcId: string, imageAlt: string | null) {
   const supabase = await createClient();
   const image_base_path = `${npcId}/`;
 
-  const { error } = await supabase
+  const res = await supabase
     .from("npcs")
     .update({
       image_base_path,
@@ -69,13 +84,13 @@ export async function npcSetImageMetaAction(npcId: string, imageAlt: string | nu
     })
     .eq("id", npcId);
 
-  if (error) throw new Error(error.message);
+  if (res.error) throw new Error(errMsg(res.error));
 }
 
 export async function npcClearImageMetaAction(npcId: string) {
   const supabase = await createClient();
 
-  const { error } = await supabase
+  const res = await supabase
     .from("npcs")
     .update({
       image_base_path: null,
@@ -84,5 +99,5 @@ export async function npcClearImageMetaAction(npcId: string) {
     })
     .eq("id", npcId);
 
-  if (error) throw new Error(error.message);
+  if (res.error) throw new Error(errMsg(res.error));
 }
