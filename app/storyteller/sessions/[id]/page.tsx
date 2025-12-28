@@ -217,8 +217,15 @@ export default async function DmScreenPage({
                 </div>
               );
             })}
-          </div>
-        </div>
+          </div>   {/* end grid-cols-6 */}
+        </div>     {/* end session box */}
+
+        {/* ✅ LIVE roll results (DM realtime feed) */}
+        <DmRollResultsRealtime
+          sessionId={sessionId}
+          joins={joins as any}
+          initialState={state as any}
+        />
 
         {/* Right side */}
         <div className="col-span-5 space-y-3">

@@ -32,7 +32,10 @@ export default function PlayerRollEntryRealtime({
   const supabase = useMemo(() => supabaseBrowser(), []);
   const [state, setState] = useState<AnyState>(initialState ?? {});
 
-  // Fresh fetch once
+  const [pendingDigital, setPendingDigital] = useState(false);
+  const [pendingManual, setPendingManual] = useState(false);
+
+  // Fresh fetch once (helps after long-open tab)
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -73,8 +76,6 @@ export default function PlayerRollEntryRealtime({
   }, [supabase, sessionId]);
 
   const rollOpen = Boolean(state.roll_open);
-  if (!rollOpen) return null;
-
   const rollDie = String(state.roll_die ?? "");
   const rollPrompt = String(state.roll_prompt ?? "");
   const rollTarget = String(state.roll_target ?? "all");
@@ -88,13 +89,28 @@ export default function PlayerRollEntryRealtime({
 
   const targetedToMe = rollTarget === "all" || rollTarget === playerId;
 
-  // Only show UI for mode=player or mode=digital
-  const shouldShow =
-    targetedToMe && (myMode === "player" || myMode === "digital");
-
+  // Only show UI for mode=player or mode=digital, and only if roll is open and targeted
+  const shouldShow = rollOpen && targetedToMe && (myMode === "player" || myMode === "digital");
   if (!shouldShow) return null;
 
-  const alreadyThisRound = mine?.round_id && mine.round_id === roundId;
+  const alreadyThisRound = Boolean(mine?.round_id && mine.round_id === roundId);
+
+  // Clear pending flags once we have an answer (or roll closes/mode changes)
+  useEffect(() => {
+    if (!rollOpen) {
+      setPendingDigital(false);
+      setPendingManual(false);
+      return;
+    }
+    if (alreadyThisRound) {
+      setPendingDigital(false);
+      setPendingManual(false);
+      return;
+    }
+    // If DM switched your mode away while you were pending, clear it
+    if (myMode !== "digital") setPendingDigital(false);
+    if (myMode !== "player") setPendingManual(false);
+  }, [rollOpen, alreadyThisRound, myMode]);
 
   const manualAction = submitPlayerRollAction.bind(null, sessionId, playerId);
   const digitalAction = submitDigitalRollAction.bind(null, sessionId, playerId);
@@ -105,8 +121,9 @@ export default function PlayerRollEntryRealtime({
         {rollPrompt ? rollPrompt : `Roll ${rollDie ? rollDie.toUpperCase() : ""}`}
       </div>
 
+      {/* If already submitted this round, show result and lock */}
       {alreadyThisRound ? (
-        <div style={{ fontSize: 12, opacity: 0.85 }}>
+        <div style={{ fontSize: 12, opacity: 0.9 }}>
           Submitted:{" "}
           <span style={{ fontFamily: "monospace", fontWeight: 800 }}>
             {String(mine?.value ?? "—")}
@@ -114,32 +131,45 @@ export default function PlayerRollEntryRealtime({
           <span style={{ opacity: 0.7 }}>({String(mine?.source ?? "—")})</span>
         </div>
       ) : myMode === "digital" ? (
-        <form action={digitalAction}>
+        /* DIGITAL (Option 3) */
+        <form
+          action={digitalAction}
+          onSubmit={() => {
+            setPendingDigital(true);
+          }}
+        >
           <button
             type="submit"
+            disabled={pendingDigital}
             style={{
               width: "100%",
               padding: "10px 10px",
               borderRadius: 10,
               border: "1px solid #111",
-              background: "#111",
+              background: pendingDigital ? "#666" : "#111",
               color: "#fff",
               fontWeight: 800,
               fontSize: 13,
+              cursor: pendingDigital ? "default" : "pointer",
             }}
           >
-            Roll {rollDie ? rollDie.toUpperCase() : ""}
+            {pendingDigital ? "Rolling…" : `Roll ${rollDie ? rollDie.toUpperCase() : ""}`}
           </button>
-          <div style={{ marginTop: 6, fontSize: 11, opacity: 0.7 }}>
-            Digital dice is one-roll-only per request.
-          </div>
         </form>
       ) : (
-        <form action={manualAction} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        /* MANUAL (Option 2) */
+        <form
+          action={manualAction}
+          onSubmit={() => {
+            setPendingManual(true);
+          }}
+          style={{ display: "flex", gap: 8, alignItems: "center" }}
+        >
           <input
             name="roll_value"
             type="number"
             required
+            disabled={pendingManual}
             placeholder="Enter roll"
             style={{
               flex: 1,
@@ -147,25 +177,36 @@ export default function PlayerRollEntryRealtime({
               borderRadius: 10,
               border: "1px solid #ccc",
               fontSize: 14,
+              background: pendingManual ? "#f5f5f5" : "#fff",
             }}
           />
+
           <button
             type="submit"
+            disabled={pendingManual}
             style={{
               padding: "8px 10px",
               borderRadius: 10,
               border: "1px solid #111",
-              background: "#111",
+              background: pendingManual ? "#666" : "#111",
               color: "#fff",
               fontWeight: 700,
               fontSize: 13,
               whiteSpace: "nowrap",
+              cursor: pendingManual ? "default" : "pointer",
             }}
           >
-            Submit
+            {pendingManual ? "Saving…" : "Submit"}
           </button>
         </form>
       )}
+
+      {/* tiny hint while waiting */}
+      {!alreadyThisRound && (pendingManual || pendingDigital) ? (
+        <div style={{ marginTop: 6, fontSize: 11, opacity: 0.65 }}>
+          Waiting for confirmation…
+        </div>
+      ) : null}
     </div>
   );
 }
