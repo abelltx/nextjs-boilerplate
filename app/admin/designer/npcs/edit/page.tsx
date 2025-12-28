@@ -26,8 +26,21 @@ export default async function EditNpcByQueryPage({
 
   if (!id || id === "undefined" || !isUuid(id)) notFound();
 
-  const npc = await getNpcById(id);
-  if (!npc) notFound();
+const npc = await getNpcById(id);
+
+if (!npc) {
+  return (
+    <div className="p-6">
+      <h1 className="text-xl font-semibold">NPC not found (or access denied)</h1>
+      <pre className="mt-4 text-sm opacity-80">id={id}</pre>
+      <p className="mt-2 text-sm opacity-80">
+        If this happens right after creating an NPC, it’s almost always auth/RLS/session not being passed to Supabase on the server.
+      </p>
+      <Link className="underline" href="/admin/designer/npcs">Back</Link>
+    </div>
+  );
+}
+
 
   const npcId = npc.id;
 
