@@ -1,23 +1,45 @@
-﻿import { getNpcById } from "@/lib/designer/npcs";
+﻿import Link from "next/link";
+import { getNpcById } from "@/lib/designer/npcs";
 import { updateNpcAction, archiveNpcAction } from "@/app/actions/npcs";
 import NpcImageUploader from "@/components/designer/npcs/NpcImageUploader";
 import StatBlockEditor from "@/components/designer/npcs/StatBlockEditor";
-import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-function isUuid(v: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
+function isUuidLoose(v: string) {
+  // Accept any canonical UUID (v1–v8, etc). We just need "looks like a uuid".
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 }
 
-function ErrorPanel({ title, message }: { title: string; message: string }) {
+function normalizeId(raw: unknown): string | null {
+  if (typeof raw === "string") return raw.trim();
+  if (Array.isArray(raw) && typeof raw[0] === "string") return raw[0].trim();
+  return null;
+}
+
+function ErrorPanel({
+  title,
+  message,
+  details,
+}: {
+  title: string;
+  message: string;
+  details?: any;
+}) {
   return (
     <div className="p-6 max-w-3xl space-y-4">
       <div className="space-y-1">
         <h1 className="text-2xl font-bold">{title}</h1>
         <p className="text-sm text-muted-foreground">{message}</p>
       </div>
+
+      {details ? (
+        <pre className="text-xs border rounded-lg p-3 overflow-auto bg-muted/30">
+          {JSON.stringify(details, null, 2)}
+        </pre>
+      ) : null}
+
       <Link className="underline text-sm" href="/admin/designer/npcs">
         ← Back to NPCs
       </Link>
@@ -25,11 +47,18 @@ function ErrorPanel({ title, message }: { title: string; message: string }) {
   );
 }
 
-export default async function EditNpcPage({ params }: { params: { id: string } }) {
-  const id = params?.id;
+export default async function EditNpcPage({ params }: { params: any }) {
+  const id = normalizeId(params?.id);
 
-  if (!id || id === "undefined" || !isUuid(id)) {
-    return <ErrorPanel title="Invalid NPC id" message="This NPC link is invalid." />;
+  // Show what params actually are if this fails again
+  if (!id || id === "undefined" || !isUuidLoose(id)) {
+    return (
+      <ErrorPanel
+        title="Invalid NPC id"
+        message="This NPC link is invalid."
+        details={{ params, normalizedId: id }}
+      />
+    );
   }
 
   let npc: any = null;
