@@ -11,7 +11,6 @@ import { presentBlockToPlayersAction, clearPresentedAction } from "@/app/actions
 import DmRollResultsRealtime from "@/components/DmRollResultsRealtime";
 import DmPlayerRollLineRealtime from "@/components/DmPlayerRollLineRealtime";
 import { randomUUID } from "crypto";
-import crypto from "crypto";
 
 
 
@@ -134,7 +133,7 @@ export default async function DmScreenPage({
   const episodePct = totalScenes > 0 ? Math.round((completedCount / totalScenes) * 100) : 0;
 
   // roll mode map
-  const rollModes = ((state as any).roll_modes ?? {}) as Record<string, string>;
+  const rollModes = (((state as any).roll_modes ?? {}) as Record<string, string>) || {};
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-4">
@@ -534,7 +533,7 @@ export default async function DmScreenPage({
                     roll_target: "all",
 
                     // NEW — one-roll-per-round enforcement
-                    roll_round_id: crypto.randomUUID(),
+                    roll_round_id: randomUUID(),
                     roll_results: {},
                   });
 
