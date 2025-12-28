@@ -22,9 +22,6 @@ export default async function NpcsListPage() {
           New NPC
         </Link>
       </div>
-<div className="p-2 mb-4 rounded bg-yellow-200 text-black font-bold">
-  DEPLOY CHECK: NPC NEW PAGE UPDATED ✅
-</div>
 
       <div className="border rounded-xl overflow-hidden">
         <table className="w-full text-sm">
