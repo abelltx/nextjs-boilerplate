@@ -1,24 +1,28 @@
-﻿export const dynamic = "force-dynamic";
-export const revalidate = 0;
-
-import { notFound } from "next/navigation";
+﻿import { notFound } from "next/navigation";
 import { getNpcById } from "@/lib/designer/npcs";
 import { updateNpcAction, archiveNpcAction } from "@/app/actions/npcs";
 import NpcImageUploader from "@/components/designer/npcs/NpcImageUploader";
 import StatBlockEditor from "@/components/designer/npcs/StatBlockEditor";
 
+// Prevent build-time static rendering attempts
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function EditNpcPage({ params }: { params: { id: string } }) {
   const npc = await getNpcById(params.id);
   if (!npc) return notFound();
 
+  // ✅ capture non-null id for server actions
+  const npcId = npc.id;
+
   async function update(formData: FormData) {
     "use server";
-    await updateNpcAction(npc.id, formData);
+    await updateNpcAction(npcId, formData);
   }
 
   async function archive() {
     "use server";
-    await archiveNpcAction(npc.id);
+    await archiveNpcAction(npcId);
   }
 
   return (
@@ -36,11 +40,13 @@ export default async function EditNpcPage({ params }: { params: { id: string } }
         </form>
       </div>
 
+      {/* IMAGE */}
       <div className="border rounded-xl p-4">
         <h2 className="font-semibold mb-3">Image</h2>
         <NpcImageUploader npc={npc} />
       </div>
 
+      {/* CORE FIELDS */}
       <form action={update} className="border rounded-xl p-4 space-y-4">
         <h2 className="font-semibold">Basics</h2>
 
@@ -79,7 +85,12 @@ export default async function EditNpcPage({ params }: { params: { id: string } }
 
         <div className="space-y-1">
           <label className="text-sm font-medium">Description</label>
-          <textarea name="description" defaultValue={npc.description ?? ""} className="w-full border rounded-lg p-2" rows={4} />
+          <textarea
+            name="description"
+            defaultValue={npc.description ?? ""}
+            className="w-full border rounded-lg p-2"
+            rows={4}
+          />
         </div>
 
         <div className="space-y-2">
@@ -89,7 +100,12 @@ export default async function EditNpcPage({ params }: { params: { id: string } }
 
         <div className="space-y-1">
           <label className="text-sm font-medium">Storyteller Notes</label>
-          <textarea name="notes_storyteller" defaultValue={npc.notes_storyteller ?? ""} className="w-full border rounded-lg p-2" rows={4} />
+          <textarea
+            name="notes_storyteller"
+            defaultValue={npc.notes_storyteller ?? ""}
+            className="w-full border rounded-lg p-2"
+            rows={4}
+          />
         </div>
 
         <button className="px-4 py-2 rounded-lg bg-black text-white hover:opacity-90">
@@ -97,6 +113,7 @@ export default async function EditNpcPage({ params }: { params: { id: string } }
         </button>
       </form>
 
+      {/* Traits / Actions will come next */}
       <div className="border rounded-xl p-4 opacity-70">
         <h2 className="font-semibold">Traits & Actions</h2>
         <p className="text-sm text-muted-foreground">
