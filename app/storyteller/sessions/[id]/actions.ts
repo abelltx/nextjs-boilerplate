@@ -26,7 +26,6 @@ export async function getDmSession(sessionId: string) {
   }
 
   if (!session) {
-    // This usually means RLS blocked access or bad ID
     console.error("getDmSession: no session returned for", sessionId);
     redirect("/storyteller/sessions");
   }
@@ -54,41 +53,28 @@ export async function getDmSession(sessionId: string) {
     } as any);
 
   // --- JOINS (players connected to the session) ---
+  // Your table has: session_id, player_id, joined_at
+  // ✅ Use joined_at for ordering
   let joins: any[] = [];
-
-{
-  const res = await supabase
-    .from("session_players")
-    .select("*")
-    .eq("session_id", sessionId)
-    .order("joined_at", { ascending: true })
-
-  if (res.error) {
-    console.error("getDmSession: joins error", res.error.message);
-
-    // Fallback in case created_at does not exist
-    const res2 = await supabase
+  {
+    const res = await supabase
       .from("session_players")
-      .select("*")
-      .eq("session_id", sessionId);
+      .select("player_id, joined_at")
+      .eq("session_id", sessionId)
+      .order("joined_at", { ascending: true }); // ✅ FIX
 
-    if (res2.error) {
-      console.error("getDmSession: joins fallback error", res2.error.message);
+    if (res.error) {
+      console.error("getDmSession: joins error", res.error.message);
       joins = [];
     } else {
-      joins = res2.data ?? [];
+      joins = res.data ?? [];
     }
-  } else {
-    joins = res.data ?? [];
   }
-}
-
-
 
   return {
     session,
     state: safeState,
-    joins: joins ?? [],
+    joins,
   };
 }
 
@@ -99,11 +85,7 @@ export async function updateStoryText(sessionId: string, fd: FormData) {
   const supabase = await createClient();
   const storyText = String(fd.get("story_text") ?? "");
 
-  const { error } = await supabase
-    .from("sessions")
-    .update({ story_text: storyText })
-    .eq("id", sessionId);
-
+  const { error } = await supabase.from("sessions").update({ story_text: storyText }).eq("id", sessionId);
   if (error) throw new Error(error.message);
 }
 
@@ -113,10 +95,6 @@ export async function updateStoryText(sessionId: string, fd: FormData) {
 export async function updateState(sessionId: string, patch: Record<string, any>) {
   const supabase = await createClient();
 
-  const { error } = await supabase
-    .from("session_state")
-    .update(patch)
-    .eq("session_id", sessionId);
-
+  const { error } = await supabase.from("session_state").update(patch).eq("session_id", sessionId);
   if (error) throw new Error(error.message);
 }
