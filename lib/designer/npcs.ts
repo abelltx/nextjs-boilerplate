@@ -1,4 +1,8 @@
-﻿import { createClient } from "@/utils/supabase/server";
+﻿function isUuid(v: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
+}
+
+import { createClient } from "@/utils/supabase/server";
 
 export type NpcRow = {
   id: string;
@@ -47,6 +51,8 @@ export async function listNpcs() {
 }
 
 export async function getNpcById(id: string): Promise<(NpcRow & { thumbUrl: string | null; mediumUrl: string | null; portraitUrl: string | null }) | null> {
+  if (!id || id === "undefined" || !isUuid(id)) return null;
+
   const supabase = await createClient();
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const { data, error } = await supabase
@@ -66,3 +72,4 @@ export async function getNpcById(id: string): Promise<(NpcRow & { thumbUrl: stri
     portraitUrl: hasImg ? buildNpcImageUrl(supabaseUrl, id, "portrait.webp", data.image_updated_at) : null,
   };
 }
+
