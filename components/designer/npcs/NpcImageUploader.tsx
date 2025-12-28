@@ -1,29 +1,107 @@
 ﻿"use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import NpcCropModal from "./NpcCropModal";
+import { buildNpcRenditions } from "@/lib/designer/imageRenditions";
+import { createClient } from "@/utils/supabase/client";
 import { npcClearImageMetaAction, npcSetImageMetaAction } from "@/app/actions/npcs";
 
+const BUCKET = "npc-images";
+const FILES = ["portrait.webp", "medium.webp", "small.webp", "thumb.webp"] as const;
+
 export default function NpcImageUploader({ npc }: { npc: any }) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
+  const [pickedFile, setPickedFile] = useState<File | null>(null);
+  const [status, setStatus] = useState<string>("");
+
+  function openPicker() {
+    inputRef.current?.click();
+  }
+
+  async function uploadRenditions(npcId: string, renditions: Record<string, Blob>) {
+    const supabase = createClient();
+    const base = `${npcId}/`;
+
+    const uploads = [
+      supabase.storage.from(BUCKET).upload(base + "portrait.webp", renditions.portrait, {
+        upsert: true,
+        contentType: "image/webp",
+      }),
+      supabase.storage.from(BUCKET).upload(base + "medium.webp", renditions.medium, {
+        upsert: true,
+        contentType: "image/webp",
+      }),
+      supabase.storage.from(BUCKET).upload(base + "small.webp", renditions.small, {
+        upsert: true,
+        contentType: "image/webp",
+      }),
+      supabase.storage.from(BUCKET).upload(base + "thumb.webp", renditions.thumb, {
+        upsert: true,
+        contentType: "image/webp",
+      }),
+    ];
+
+    const results = await Promise.all(uploads);
+    const firstErr = results.find((r) => r.error)?.error;
+    if (firstErr) throw new Error(firstErr.message);
+  }
+
+  async function deleteRenditions(npcId: string) {
+    const supabase = createClient();
+    const base = `${npcId}/`;
+    const paths = FILES.map((f) => base + f);
+
+    const { error } = await supabase.storage.from(BUCKET).remove(paths);
+    // If files don’t exist yet, Supabase can still return ok; if it errors, show it.
+    if (error) throw new Error(error.message);
+  }
 
   async function onRemove() {
     setBusy(true);
+    setStatus("Removing image...");
     try {
-      // TODO: delete Storage folder files: npc-images/<id>/*
+      await deleteRenditions(npc.id);
       await npcClearImageMetaAction(npc.id);
       window.location.reload();
+    } catch (e: any) {
+      setStatus(e?.message ?? "Remove failed");
     } finally {
       setBusy(false);
     }
   }
 
-  async function onFakeSet() {
+  function onFilePicked(f: File | null) {
+    if (!f) return;
+    if (!f.type.startsWith("image/")) {
+      setStatus("Please choose an image file.");
+      return;
+    }
+    setStatus("");
+    setPickedFile(f);
+  }
+
+  async function onCropConfirm(pixels: { x: number; y: number; width: number; height: number }) {
+    if (!pickedFile) return;
+
     setBusy(true);
+    setStatus("Cropping + generating thumbnails...");
     try {
+      const renditions = await buildNpcRenditions(pickedFile, pixels);
+
+      setStatus("Uploading to Storage...");
+      await uploadRenditions(npc.id, renditions);
+
+      setStatus("Saving metadata...");
+      // Uses npcId/ as image_base_path, updates image_updated_at
       await npcSetImageMetaAction(npc.id, npc.image_alt ?? null);
+
       window.location.reload();
+    } catch (e: any) {
+      setStatus(e?.message ?? "Upload failed");
     } finally {
       setBusy(false);
+      setPickedFile(null);
     }
   }
 
@@ -46,28 +124,46 @@ export default function NpcImageUploader({ npc }: { npc: any }) {
 
       <div className="space-y-2">
         <div className="text-sm text-muted-foreground">
-          Upload + auto-crop + thumbnail generation will go here next.
+          Upload any image. You’ll crop it to the NPC portrait ratio, and the system will generate all thumbnails.
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             type="button"
             disabled={busy}
-            onClick={onFakeSet}
-            className="px-3 py-2 rounded-lg border hover:bg-muted/40"
+            onClick={openPicker}
+            className="px-3 py-2 rounded-lg bg-black text-white hover:opacity-90 disabled:opacity-50"
           >
-            Replace image (next)
+            {npc.image_base_path ? "Replace image" : "Upload image"}
           </button>
 
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || !npc.image_base_path}
             onClick={onRemove}
-            className="px-3 py-2 rounded-lg border hover:bg-muted/40"
+            className="px-3 py-2 rounded-lg border hover:bg-muted/40 disabled:opacity-50"
           >
             Remove image
           </button>
         </div>
+
+        {status && <div className="text-sm">{status}</div>}
+
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => onFilePicked(e.target.files?.[0] ?? null)}
+        />
+
+        {pickedFile && (
+          <NpcCropModal
+            file={pickedFile}
+            onCancel={() => setPickedFile(null)}
+            onConfirm={onCropConfirm}
+          />
+        )}
       </div>
     </div>
   );
