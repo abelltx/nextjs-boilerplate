@@ -61,7 +61,7 @@ export default async function NpcsListPage() {
                 <td className="p-3">{n.default_role}</td>
                 <td className="p-3">{new Date(n.updated_at).toLocaleString()}</td>
                 <td className="p-3 text-right">
-                  <Link className="underline" href={`/admin/designer/npcs/${n.id}`}>
+                  <Link className="underline" href={`/admin/designer/npcs/edit?id=${npc.id}`}>
                     Edit
                   </Link>
                 </td>
