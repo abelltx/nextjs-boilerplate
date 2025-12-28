@@ -12,7 +12,7 @@ export default function StatBlockEditor({ initial }: { initial: any }) {
   return (
     <div className="space-y-2">
       <p className="text-sm text-muted-foreground">
-        For now this is a JSON editor. Next weâ€™ll add a friendly form + JSON toggle.
+        For now this is a JSON editor. Next we'll add a friendly form + JSON toggle.
       </p>
 
       <textarea

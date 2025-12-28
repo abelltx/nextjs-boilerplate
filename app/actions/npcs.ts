@@ -52,7 +52,15 @@ export async function updateNpcAction(npcId: string, formData: FormData) {
 
   // Stat block is posted via hidden input "stat_block_json"
   const stat_block_json = String(formData.get("stat_block_json") ?? "");
-  const stat_block = safeJsonParse(stat_block_json);
+  let stat_block: any = {};
+if (stat_block_json?.trim()) {
+  try {
+    stat_block = JSON.parse(stat_block_json);
+  } catch {
+    throw new Error("Stat Block JSON is invalid. Fix it before saving.");
+  }
+}
+
 
   const res = await supabase
     .from("npcs")
