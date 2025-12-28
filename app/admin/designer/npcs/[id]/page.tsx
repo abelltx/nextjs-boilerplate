@@ -1,4 +1,7 @@
-﻿import { notFound } from "next/navigation";
+﻿export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+import { notFound } from "next/navigation";
 import { getNpcById } from "@/lib/designer/npcs";
 import { updateNpcAction, archiveNpcAction } from "@/app/actions/npcs";
 import NpcImageUploader from "@/components/designer/npcs/NpcImageUploader";
