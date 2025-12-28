@@ -4,30 +4,30 @@ import { getNpcById } from "@/lib/designer/npcs";
 import { updateNpcAction, archiveNpcAction } from "@/app/actions/npcs";
 import NpcImageUploader from "@/components/designer/npcs/NpcImageUploader";
 import StatBlockEditor from "@/components/designer/npcs/StatBlockEditor";
-import { isUuid } from "@/lib/utils/isUuid";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
+function isUuid(v: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    v.trim()
+  );
+}
+
 export default async function EditNpcByQueryPage({
   searchParams,
 }: {
   searchParams?: SearchParams;
 }) {
-  // Normalize `id` safely even if it's an array (e.g. ?id=a&id=b)
   const raw = searchParams?.id;
   const id = (Array.isArray(raw) ? raw[0] : raw ?? "").trim();
 
-  if (!id || id === "undefined" || !isUuid(id)) {
-    notFound();
-  }
+  if (!id || id === "undefined" || !isUuid(id)) notFound();
 
   const npc = await getNpcById(id);
-  if (!npc) {
-    notFound();
-  }
+  if (!npc) notFound();
 
   const npcId = npc.id;
 
