@@ -208,5 +208,6 @@ export default function PlayerRollEntryRealtime({
         </div>
       ) : null}
     </div>
+    
   );
 }
