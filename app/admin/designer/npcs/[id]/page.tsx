@@ -4,15 +4,22 @@ import { updateNpcAction, archiveNpcAction } from "@/app/actions/npcs";
 import NpcImageUploader from "@/components/designer/npcs/NpcImageUploader";
 import StatBlockEditor from "@/components/designer/npcs/StatBlockEditor";
 
-// Prevent build-time static rendering attempts
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+function isUuid(v: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
+}
+
 export default async function EditNpcPage({ params }: { params: { id: string } }) {
-  const npc = await getNpcById(params.id);
+  const id = params?.id;
+
+  // Hard guard: prevents "undefined" -> uuid error
+  if (!id || id === "undefined" || !isUuid(id)) return notFound();
+
+  const npc = await getNpcById(id);
   if (!npc) return notFound();
 
-  // ✅ capture non-null id for server actions
   const npcId = npc.id;
 
   async function update(formData: FormData) {

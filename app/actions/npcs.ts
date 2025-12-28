@@ -20,6 +20,10 @@ export async function createNpcAction(formData: FormData): Promise<string> {
     .insert([{ name, npc_type, default_role, description }])
     .select("id")
     .single();
+    if (error) throw new Error(error.message);
+    if (!data?.id) throw new Error("Create NPC failed: no id returned.");
+    return data.id as string;
+
 
   if (error) throw new Error(error.message);
   return data.id as string;
