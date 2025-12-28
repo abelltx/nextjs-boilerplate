@@ -1,8 +1,8 @@
-﻿import { notFound } from "next/navigation";
-import { getNpcById } from "@/lib/designer/npcs";
+﻿import { getNpcById } from "@/lib/designer/npcs";
 import { updateNpcAction, archiveNpcAction } from "@/app/actions/npcs";
 import NpcImageUploader from "@/components/designer/npcs/NpcImageUploader";
 import StatBlockEditor from "@/components/designer/npcs/StatBlockEditor";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -11,14 +11,37 @@ function isUuid(v: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
 }
 
+function ErrorPanel({ title, message }: { title: string; message: string }) {
+  return (
+    <div className="p-6 max-w-3xl space-y-4">
+      <div className="space-y-1">
+        <h1 className="text-2xl font-bold">{title}</h1>
+        <p className="text-sm text-muted-foreground">{message}</p>
+      </div>
+      <Link className="underline text-sm" href="/admin/designer/npcs">
+        ← Back to NPCs
+      </Link>
+    </div>
+  );
+}
+
 export default async function EditNpcPage({ params }: { params: { id: string } }) {
   const id = params?.id;
 
-  // Hard guard: prevents "undefined" -> uuid error
-  if (!id || id === "undefined" || !isUuid(id)) return notFound();
+  if (!id || id === "undefined" || !isUuid(id)) {
+    return <ErrorPanel title="Invalid NPC id" message="This NPC link is invalid." />;
+  }
 
-  const npc = await getNpcById(id);
-  if (!npc) return notFound();
+  let npc: any = null;
+  try {
+    npc = await getNpcById(id);
+  } catch (e: any) {
+    return <ErrorPanel title="Failed to load NPC" message={e?.message ?? "Unknown error"} />;
+  }
+
+  if (!npc) {
+    return <ErrorPanel title="NPC not found" message="This NPC does not exist (or is not accessible)." />;
+  }
 
   const npcId = npc.id;
 
@@ -40,20 +63,23 @@ export default async function EditNpcPage({ params }: { params: { id: string } }
           <p className="text-sm text-muted-foreground">Edit NPC details, image, and stats.</p>
         </div>
 
-        <form action={archive}>
-          <button className="px-3 py-2 rounded-lg border hover:bg-muted/40" type="submit">
-            Archive
-          </button>
-        </form>
+        <div className="flex items-center gap-2">
+          <Link href="/admin/designer/npcs" className="px-3 py-2 rounded-lg border hover:bg-muted/40">
+            Back
+          </Link>
+          <form action={archive}>
+            <button className="px-3 py-2 rounded-lg border hover:bg-muted/40" type="submit">
+              Archive
+            </button>
+          </form>
+        </div>
       </div>
 
-      {/* IMAGE */}
       <div className="border rounded-xl p-4">
         <h2 className="font-semibold mb-3">Image</h2>
         <NpcImageUploader npc={npc} />
       </div>
 
-      {/* CORE FIELDS */}
       <form action={update} className="border rounded-xl p-4 space-y-4">
         <h2 className="font-semibold">Basics</h2>
 
@@ -120,12 +146,9 @@ export default async function EditNpcPage({ params }: { params: { id: string } }
         </button>
       </form>
 
-      {/* Traits / Actions will come next */}
       <div className="border rounded-xl p-4 opacity-70">
         <h2 className="font-semibold">Traits & Actions</h2>
-        <p className="text-sm text-muted-foreground">
-          Next step: multi-select traits, direct actions, and live preview of effective actions.
-        </p>
+        <p className="text-sm text-muted-foreground">Next step: multi-select traits and actions.</p>
       </div>
     </div>
   );
