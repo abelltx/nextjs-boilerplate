@@ -69,23 +69,35 @@ export async function updateNpcAction(npcId: string, formData: FormData) {
   const notes_storyteller = (String(formData.get("notes_storyteller") ?? "").trim() || null) as string | null;
 
   // Stat block is posted via hidden input "stat_block_json"
-  const stat_block = parseStatBlockJson(formData);
+  // SAFETY: parse and store AS-IS (do not coerce or strip fields).
+  const raw = formData.get("stat_block_json");
+  let stat_block: any | undefined = undefined;
 
-  const { error } = await supabase
-    .from("npcs")
-    .update({
-      name,
-      npc_type,
-      default_role,
-      description,
-      image_alt,
-      notes_storyteller,
-      stat_block,
-    })
-    .eq("id", id);
+  if (typeof raw === "string" && raw.trim()) {
+    try {
+      stat_block = JSON.parse(raw);
+    } catch {
+      throw new Error("Stat block JSON is invalid.");
+    }
+  }
+
+  // Build update patch. Only set stat_block if provided so we never wipe it.
+  const patch: Record<string, any> = {
+    name,
+    npc_type,
+    default_role,
+    description,
+    image_alt,
+    notes_storyteller,
+  };
+
+  if (stat_block !== undefined) patch.stat_block = stat_block;
+
+  const { error } = await supabase.from("npcs").update(patch).eq("id", id);
 
   if (error) throw new Error(errMsg(error));
 }
+
 
 export async function archiveNpcAction(npcId: string) {
   const supabase = await createClient();

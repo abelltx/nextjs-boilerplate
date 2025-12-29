@@ -2,34 +2,87 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-type Abilities = {
-  str: number;
-  dex: number;
-  con: number;
-  int: number;
-  wis: number;
-  cha: number;
+/** =========================
+ *  Types (Option 2B)
+ *  ========================= */
+
+type AbilityKey = "str" | "dex" | "con" | "int" | "wis" | "cha";
+
+type Abilities = Record<AbilityKey, number>;
+
+type NpcTrait = {
+  id: string;
+  name: string;
+  text: string;
+};
+
+type NpcActionType = "melee" | "ranged" | "other";
+
+type NpcAction = {
+  id: string;
+  name: string;
+  type: NpcActionType;
+
+  usesAttackRoll?: boolean; // default true for melee/ranged
+  attackBonusOverride?: number | null;
+
+  damage?: {
+    dice: string; // e.g. "1d8"
+    bonus?: number; // flat add
+    type?: string; // e.g. "slashing"
+  };
+
+  save?: {
+    ability: AbilityKey;
+    dcOverride?: number | null;
+    onFail?: string;
+    onSuccess?: string;
+  };
+
+  reachSquares?: number; // melee reach in squares (1=5ft)
+  rangeSquares?: { normal: number; long?: number }; // ranged in squares
+
+  text?: string;
 };
 
 type StatBlock = {
+  version: 1;
+
   hp: number;
   ac: number;
-  speed: number;
+  speed: number; // squares (5ft squares)
+
   abilities: Abilities;
+
   melee_attack_bonus: number;
   ranged_attack_bonus: number;
   save_dc: number;
+
+  traits: NpcTrait[];
+  actions: NpcAction[];
 };
 
 const DEFAULTS: StatBlock = {
+  version: 1,
   hp: 10,
   ac: 10,
-  speed: 30,
+  speed: 6, // 30 ft
   abilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
   melee_attack_bonus: 2,
   ranged_attack_bonus: 2,
   save_dc: 10,
+  traits: [],
+  actions: [],
 };
+
+/** =========================
+ *  Helpers
+ *  ========================= */
+
+function uid() {
+  // stable enough for UI IDs
+  return Math.random().toString(36).slice(2, 10);
+}
 
 function toInt(v: unknown, fallback: number) {
   const n = typeof v === "number" ? v : Number(String(v ?? "").trim());
@@ -38,6 +91,23 @@ function toInt(v: unknown, fallback: number) {
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
+}
+
+function looksLikeFeetSpeed(raw: number) {
+  // Older stat blocks likely stored feet (30, 25, 35, 40, etc.)
+  // Squares are typically 0–24-ish.
+  if (!Number.isFinite(raw)) return false;
+  if (raw >= 25 && raw <= 120 && raw % 5 === 0) return true;
+  return false;
+}
+
+function coerceSpeedToSquares(input: any): number {
+  // preferred: speed already in squares
+  // legacy: speed in feet (e.g. 30) -> squares = 6
+  const raw = toInt(input?.speed ?? input?.speed_ft ?? input?.speedFeet, DEFAULTS.speed);
+
+  if (looksLikeFeetSpeed(raw)) return clamp(Math.floor(raw / 5), 0, 60);
+  return clamp(raw, 0, 60);
 }
 
 function coerceInitial(initial: any): StatBlock {
@@ -53,19 +123,100 @@ function coerceInitial(initial: any): StatBlock {
     cha: clamp(toInt(abilitiesRaw.cha, DEFAULTS.abilities.cha), 1, 30),
   };
 
+  const traitsRaw = Array.isArray(i.traits) ? i.traits : [];
+  const traits: NpcTrait[] = traitsRaw
+    .filter(Boolean)
+    .map((t: any) => ({
+      id: String(t?.id ?? uid()),
+      name: String(t?.name ?? "").trim(),
+      text: String(t?.text ?? "").trim(),
+    }))
+    .filter((t: NpcTrait) => t.name.length > 0 || t.text.length > 0);
+
+  const actionsRaw = Array.isArray(i.actions) ? i.actions : [];
+  const actions: NpcAction[] = actionsRaw
+    .filter(Boolean)
+    .map((a: any) => {
+      const type = (String(a?.type ?? "other") as NpcActionType);
+      const usesAttackRoll =
+        typeof a?.usesAttackRoll === "boolean"
+          ? a.usesAttackRoll
+          : type === "melee" || type === "ranged";
+
+      const damage = a?.damage
+        ? {
+            dice: String(a.damage?.dice ?? "").trim(),
+            bonus: a.damage?.bonus != null ? toInt(a.damage?.bonus, 0) : undefined,
+            type: a.damage?.type != null ? String(a.damage?.type).trim() : undefined,
+          }
+        : undefined;
+
+      const save = a?.save
+        ? {
+            ability: (String(a.save?.ability ?? "dex") as AbilityKey),
+            dcOverride: a.save?.dcOverride != null ? toInt(a.save.dcOverride, 0) : null,
+            onFail: a.save?.onFail != null ? String(a.save.onFail) : "",
+            onSuccess: a.save?.onSuccess != null ? String(a.save.onSuccess) : "",
+          }
+        : undefined;
+
+      const rangeSquares = a?.rangeSquares
+        ? {
+            normal: clamp(toInt(a.rangeSquares?.normal, 0), 0, 999),
+            long: a.rangeSquares?.long != null ? clamp(toInt(a.rangeSquares.long, 0), 0, 999) : undefined,
+          }
+        : undefined;
+
+      return {
+        id: String(a?.id ?? uid()),
+        name: String(a?.name ?? "").trim(),
+        type: type === "melee" || type === "ranged" || type === "other" ? type : "other",
+        usesAttackRoll,
+        attackBonusOverride:
+          a?.attackBonusOverride == null || a?.attackBonusOverride === ""
+            ? null
+            : clamp(toInt(a.attackBonusOverride, 0), -20, 40),
+        damage: damage?.dice ? damage : undefined,
+        save,
+        reachSquares: a?.reachSquares != null ? clamp(toInt(a.reachSquares, 1), 0, 60) : undefined,
+        rangeSquares,
+        text: a?.text != null ? String(a.text) : "",
+      };
+    })
+    .filter((a: NpcAction) => a.name.length > 0);
+
   return {
+    version: 1,
     hp: clamp(toInt(i.hp, DEFAULTS.hp), 1, 9999),
     ac: clamp(toInt(i.ac, DEFAULTS.ac), 1, 50),
-    speed: clamp(toInt(i.speed, DEFAULTS.speed), 0, 120),
+    speed: coerceSpeedToSquares(i),
     abilities,
     melee_attack_bonus: clamp(toInt(i.melee_attack_bonus, DEFAULTS.melee_attack_bonus), -5, 25),
     ranged_attack_bonus: clamp(toInt(i.ranged_attack_bonus, DEFAULTS.ranged_attack_bonus), -5, 25),
     save_dc: clamp(toInt(i.save_dc, DEFAULTS.save_dc), 1, 30),
+    traits,
+    actions,
   };
 }
 
-function squaresFromSpeed(speed: number) {
-  return Math.floor(speed / 5);
+function signed(n: number) {
+  return n >= 0 ? `+${n}` : `${n}`;
+}
+
+function getAttackBonus(sb: StatBlock, a: NpcAction): number | null {
+  if (a.usesAttackRoll === false) return null;
+  if (typeof a.attackBonusOverride === "number") return a.attackBonusOverride;
+
+  if (a.type === "melee") return sb.melee_attack_bonus;
+  if (a.type === "ranged") return sb.ranged_attack_bonus;
+
+  return null;
+}
+
+function getSaveDc(sb: StatBlock, a: NpcAction): number | null {
+  if (!a.save) return null;
+  if (typeof a.save.dcOverride === "number" && a.save.dcOverride > 0) return a.save.dcOverride;
+  return sb.save_dc;
 }
 
 function NumField({
@@ -100,146 +251,671 @@ function NumField({
   );
 }
 
-export default function StatBlockEditor({ initial }: { initial: any }) {
-  const [stat, setStat] = useState<StatBlock>(() => coerceInitial(initial));
+function TextField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  help,
+}: {
+  label: string;
+  value: string;
+  onChange: (next: string) => void;
+  placeholder?: string;
+  help?: string;
+}) {
+  return (
+    <div className="space-y-1">
+      <label className="text-sm font-medium">{label}</label>
+      <input
+        type="text"
+        className="w-full border rounded-lg p-2"
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      {help ? <p className="text-xs text-muted-foreground">{help}</p> : null}
+    </div>
+  );
+}
 
-  // If "initial" changes (rare on this page), keep state in sync.
+function TextAreaField({
+  label,
+  value,
+  onChange,
+  rows = 3,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (next: string) => void;
+  rows?: number;
+  placeholder?: string;
+}) {
+  return (
+    <div className="space-y-1">
+      <label className="text-sm font-medium">{label}</label>
+      <textarea
+        className="w-full border rounded-lg p-2"
+        rows={rows}
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </div>
+  );
+}
+
+/** =========================
+ *  Main Editor (Tabs)
+ *  ========================= */
+
+export default function StatBlockEditor({ initial }: { initial: any }) {
+  const [tab, setTab] = useState<"friendly" | "json">("friendly");
+  const [stat, setStat] = useState<StatBlock>(() => coerceInitial(initial));
+  const [jsonDraft, setJsonDraft] = useState("");
+
+  // Keep state in sync on mount
   useEffect(() => {
-    setStat(coerceInitial(initial));
+    const next = coerceInitial(initial);
+    setStat(next);
+    setJsonDraft(JSON.stringify(next, null, 2));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const jsonText = useMemo(() => JSON.stringify(stat), [stat]);
-  const speedSquares = useMemo(() => squaresFromSpeed(stat.speed), [stat.speed]);
+  const speedFeet = useMemo(() => stat.speed * 5, [stat.speed]);
+
+  // Whenever stat changes, keep jsonDraft updated IF user is on friendly tab
+  useEffect(() => {
+    if (tab === "friendly") setJsonDraft(JSON.stringify(stat, null, 2));
+  }, [stat, tab]);
+
+  function applyJson() {
+    try {
+      const parsed = JSON.parse(jsonDraft);
+      const next = coerceInitial(parsed);
+      setStat(next);
+    } catch (e) {
+      alert("Invalid JSON. Fix formatting and try again.");
+    }
+  }
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">
-        Tactical movement uses 5 ft squares. Speed {stat.speed} ft = {speedSquares} squares.
-      </p>
-
-      <div className="grid gap-3 md:grid-cols-3">
-        <NumField
-          label="HP"
-          value={stat.hp}
-          min={1}
-          max={9999}
-          onChange={(hp) => setStat((s) => ({ ...s, hp: clamp(hp, 1, 9999) }))}
-        />
-        <NumField
-          label="AC"
-          value={stat.ac}
-          min={1}
-          max={50}
-          onChange={(ac) => setStat((s) => ({ ...s, ac: clamp(ac, 1, 50) }))}
-        />
-        <NumField
-          label="Speed (ft)"
-          value={stat.speed}
-          min={0}
-          max={120}
-          help="5 ft per square (e.g., 30 ft = 6 squares)."
-          onChange={(speed) => setStat((s) => ({ ...s, speed: clamp(speed, 0, 120) }))}
-        />
-      </div>
-
-      <div className="border rounded-xl p-3 space-y-3">
-        <h3 className="font-semibold">Abilities</h3>
-        <div className="grid gap-3 grid-cols-2 md:grid-cols-3">
-          <NumField
-            label="STR"
-            value={stat.abilities.str}
-            min={1}
-            max={30}
-            onChange={(v) =>
-              setStat((s) => ({ ...s, abilities: { ...s.abilities, str: clamp(v, 1, 30) } }))
-            }
-          />
-          <NumField
-            label="DEX"
-            value={stat.abilities.dex}
-            min={1}
-            max={30}
-            onChange={(v) =>
-              setStat((s) => ({ ...s, abilities: { ...s.abilities, dex: clamp(v, 1, 30) } }))
-            }
-          />
-          <NumField
-            label="CON"
-            value={stat.abilities.con}
-            min={1}
-            max={30}
-            onChange={(v) =>
-              setStat((s) => ({ ...s, abilities: { ...s.abilities, con: clamp(v, 1, 30) } }))
-            }
-          />
-          <NumField
-            label="INT"
-            value={stat.abilities.int}
-            min={1}
-            max={30}
-            onChange={(v) =>
-              setStat((s) => ({ ...s, abilities: { ...s.abilities, int: clamp(v, 1, 30) } }))
-            }
-          />
-          <NumField
-            label="WIS"
-            value={stat.abilities.wis}
-            min={1}
-            max={30}
-            onChange={(v) =>
-              setStat((s) => ({ ...s, abilities: { ...s.abilities, wis: clamp(v, 1, 30) } }))
-            }
-          />
-          <NumField
-            label="CHA"
-            value={stat.abilities.cha}
-            min={1}
-            max={30}
-            onChange={(v) =>
-              setStat((s) => ({ ...s, abilities: { ...s.abilities, cha: clamp(v, 1, 30) } }))
-            }
-          />
+      {/* Tabs */}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setTab("friendly")}
+          className={[
+            "px-3 py-2 rounded-lg border text-sm",
+            tab === "friendly" ? "bg-muted/60" : "hover:bg-muted/40",
+          ].join(" ")}
+        >
+          Friendly Editor
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("json")}
+          className={[
+            "px-3 py-2 rounded-lg border text-sm",
+            tab === "json" ? "bg-muted/60" : "hover:bg-muted/40",
+          ].join(" ")}
+        >
+          Advanced JSON
+        </button>
+        <div className="ml-auto text-xs text-muted-foreground">
+          Speed: <span className="font-medium">{stat.speed}</span> squares ({speedFeet} ft)
         </div>
       </div>
 
-      <div className="border rounded-xl p-3 space-y-3">
-        <h3 className="font-semibold">Attacks & Saves</h3>
-        <div className="grid gap-3 md:grid-cols-3">
-          <NumField
-            label="Melee Attack Bonus"
-            value={stat.melee_attack_bonus}
-            min={-5}
-            max={25}
-            onChange={(v) =>
-              setStat((s) => ({ ...s, melee_attack_bonus: clamp(v, -5, 25) }))
-            }
-          />
-          <NumField
-            label="Ranged Attack Bonus"
-            value={stat.ranged_attack_bonus}
-            min={-5}
-            max={25}
-            onChange={(v) =>
-              setStat((s) => ({ ...s, ranged_attack_bonus: clamp(v, -5, 25) }))
-            }
-          />
-          <NumField
-            label="Save DC"
-            value={stat.save_dc}
-            min={1}
-            max={30}
-            onChange={(v) => setStat((s) => ({ ...s, save_dc: clamp(v, 1, 30) }))}
-          />
+      {tab === "friendly" ? (
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Tactical movement uses <b>5 ft squares</b>. Speed is stored as squares.
+          </p>
+
+          {/* Core */}
+          <div className="grid gap-3 md:grid-cols-3">
+            <NumField
+              label="HP"
+              value={stat.hp}
+              min={1}
+              max={9999}
+              onChange={(hp) => setStat((s) => ({ ...s, hp: clamp(hp, 1, 9999) }))}
+            />
+            <NumField
+              label="AC"
+              value={stat.ac}
+              min={1}
+              max={50}
+              onChange={(ac) => setStat((s) => ({ ...s, ac: clamp(ac, 1, 50) }))}
+            />
+            <NumField
+              label="Speed (squares)"
+              value={stat.speed}
+              min={0}
+              max={60}
+              help="1 square = 5 ft (e.g., 6 squares = 30 ft)."
+              onChange={(sq) => setStat((s) => ({ ...s, speed: clamp(sq, 0, 60) }))}
+            />
+          </div>
+
+          {/* Abilities */}
+          <div className="border rounded-xl p-3 space-y-3">
+            <h3 className="font-semibold">Abilities</h3>
+            <div className="grid gap-3 grid-cols-2 md:grid-cols-3">
+              <NumField label="STR" value={stat.abilities.str} min={1} max={30}
+                onChange={(v) => setStat((s) => ({ ...s, abilities: { ...s.abilities, str: clamp(v, 1, 30) } }))} />
+              <NumField label="DEX" value={stat.abilities.dex} min={1} max={30}
+                onChange={(v) => setStat((s) => ({ ...s, abilities: { ...s.abilities, dex: clamp(v, 1, 30) } }))} />
+              <NumField label="CON" value={stat.abilities.con} min={1} max={30}
+                onChange={(v) => setStat((s) => ({ ...s, abilities: { ...s.abilities, con: clamp(v, 1, 30) } }))} />
+              <NumField label="INT" value={stat.abilities.int} min={1} max={30}
+                onChange={(v) => setStat((s) => ({ ...s, abilities: { ...s.abilities, int: clamp(v, 1, 30) } }))} />
+              <NumField label="WIS" value={stat.abilities.wis} min={1} max={30}
+                onChange={(v) => setStat((s) => ({ ...s, abilities: { ...s.abilities, wis: clamp(v, 1, 30) } }))} />
+              <NumField label="CHA" value={stat.abilities.cha} min={1} max={30}
+                onChange={(v) => setStat((s) => ({ ...s, abilities: { ...s.abilities, cha: clamp(v, 1, 30) } }))} />
+            </div>
+          </div>
+
+          {/* Attacks & Saves */}
+          <div className="border rounded-xl p-3 space-y-3">
+            <h3 className="font-semibold">Attacks & Saves</h3>
+            <div className="grid gap-3 md:grid-cols-3">
+              <NumField
+                label="Melee Attack Bonus"
+                value={stat.melee_attack_bonus}
+                min={-5}
+                max={25}
+                onChange={(v) => setStat((s) => ({ ...s, melee_attack_bonus: clamp(v, -5, 25) }))}
+              />
+              <NumField
+                label="Ranged Attack Bonus"
+                value={stat.ranged_attack_bonus}
+                min={-5}
+                max={25}
+                onChange={(v) => setStat((s) => ({ ...s, ranged_attack_bonus: clamp(v, -5, 25) }))}
+              />
+              <NumField
+                label="Save DC"
+                value={stat.save_dc}
+                min={1}
+                max={30}
+                onChange={(v) => setStat((s) => ({ ...s, save_dc: clamp(v, 1, 30) }))}
+              />
+            </div>
+          </div>
+
+          {/* Traits */}
+          <div className="border rounded-xl p-3 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold">Traits</h3>
+              <button
+                type="button"
+                className="px-3 py-2 rounded-lg border text-sm hover:bg-muted/40"
+                onClick={() =>
+                  setStat((s) => ({
+                    ...s,
+                    traits: [...s.traits, { id: uid(), name: "New Trait", text: "" }],
+                  }))
+                }
+              >
+                + Add Trait
+              </button>
+            </div>
+
+            {stat.traits.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No traits yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {stat.traits.map((t, idx) => (
+                  <div key={t.id} className="border rounded-lg p-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="text-xs opacity-60">#{idx + 1}</div>
+                      <TextField
+                        label="Trait Name"
+                        value={t.name}
+                        onChange={(name) =>
+                          setStat((s) => ({
+                            ...s,
+                            traits: s.traits.map((x) => (x.id === t.id ? { ...x, name } : x)),
+                          }))
+                        }
+                      />
+                      <button
+                        type="button"
+                        className="ml-auto px-3 py-2 rounded-lg border text-sm hover:bg-muted/40"
+                        onClick={() =>
+                          setStat((s) => ({ ...s, traits: s.traits.filter((x) => x.id !== t.id) }))
+                        }
+                      >
+                        Delete
+                      </button>
+                    </div>
+
+                    <TextAreaField
+                      label="Trait Text"
+                      value={t.text}
+                      rows={3}
+                      onChange={(text) =>
+                        setStat((s) => ({
+                          ...s,
+                          traits: s.traits.map((x) => (x.id === t.id ? { ...x, text } : x)),
+                        }))
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div className="border rounded-xl p-3 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold">Actions</h3>
+              <button
+                type="button"
+                className="px-3 py-2 rounded-lg border text-sm hover:bg-muted/40"
+                onClick={() =>
+                  setStat((s) => ({
+                    ...s,
+                    actions: [
+                      ...s.actions,
+                      {
+                        id: uid(),
+                        name: "New Action",
+                        type: "melee",
+                        usesAttackRoll: true,
+                        damage: { dice: "1d6", bonus: 0, type: "bludgeoning" },
+                        reachSquares: 1,
+                        text: "",
+                      },
+                    ],
+                  }))
+                }
+              >
+                + Add Action
+              </button>
+            </div>
+
+            {stat.actions.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No actions yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {stat.actions.map((a, idx) => {
+                  const atk = getAttackBonus(stat, a);
+                  const dc = getSaveDc(stat, a);
+                  const usesAttackRoll =
+                    typeof a.usesAttackRoll === "boolean"
+                      ? a.usesAttackRoll
+                      : a.type === "melee" || a.type === "ranged";
+
+                  return (
+                    <div key={a.id} className="border rounded-lg p-3 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <div className="text-xs opacity-60">#{idx + 1}</div>
+                        <div className="flex-1">
+                          <TextField
+                            label="Action Name"
+                            value={a.name}
+                            onChange={(name) =>
+                              setStat((s) => ({
+                                ...s,
+                                actions: s.actions.map((x) => (x.id === a.id ? { ...x, name } : x)),
+                              }))
+                            }
+                          />
+                        </div>
+
+                        <button
+                          type="button"
+                          className="px-3 py-2 rounded-lg border text-sm hover:bg-muted/40"
+                          onClick={() =>
+                            setStat((s) => ({ ...s, actions: s.actions.filter((x) => x.id !== a.id) }))
+                          }
+                        >
+                          Delete
+                        </button>
+                      </div>
+
+                      <div className="grid gap-3 md:grid-cols-3">
+                        <div className="space-y-1">
+                          <label className="text-sm font-medium">Type</label>
+                          <select
+                            className="w-full border rounded-lg p-2"
+                            value={a.type}
+                            onChange={(e) => {
+                              const type = e.target.value as NpcActionType;
+                              setStat((s) => ({
+                                ...s,
+                                actions: s.actions.map((x) =>
+                                  x.id === a.id
+                                    ? {
+                                        ...x,
+                                        type,
+                                        usesAttackRoll:
+                                          type === "melee" || type === "ranged" ? true : false,
+                                      }
+                                    : x
+                                ),
+                              }));
+                            }}
+                          >
+                            <option value="melee">melee</option>
+                            <option value="ranged">ranged</option>
+                            <option value="other">other</option>
+                          </select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-sm font-medium">Uses Attack Roll</label>
+                          <select
+                            className="w-full border rounded-lg p-2"
+                            value={usesAttackRoll ? "yes" : "no"}
+                            onChange={(e) => {
+                              const next = e.target.value === "yes";
+                              setStat((s) => ({
+                                ...s,
+                                actions: s.actions.map((x) =>
+                                  x.id === a.id ? { ...x, usesAttackRoll: next } : x
+                                ),
+                              }));
+                            }}
+                          >
+                            <option value="yes">yes</option>
+                            <option value="no">no</option>
+                          </select>
+                          <p className="text-xs text-muted-foreground">
+                            Default: melee/ranged = yes, other = no.
+                          </p>
+                        </div>
+
+                        <NumField
+                          label="Attack Bonus Override (optional)"
+                          value={a.attackBonusOverride ?? 0}
+                          min={-20}
+                          max={40}
+                          help={
+                            atk == null
+                              ? "No attack roll."
+                              : a.attackBonusOverride == null
+                              ? `Currently ${signed(atk)} (from ${a.type === "melee" ? "melee" : "ranged"} bonus). Set a number to override.`
+                              : `Overriding to ${signed(atk)} (clear override by setting blank in JSON tab).`
+                          }
+                          onChange={(v) =>
+                            setStat((s) => ({
+                              ...s,
+                              actions: s.actions.map((x) =>
+                                x.id === a.id ? { ...x, attackBonusOverride: clamp(v, -20, 40) } : x
+                              ),
+                            }))
+                          }
+                        />
+                      </div>
+
+                      <div className="grid gap-3 md:grid-cols-3">
+                        <TextField
+                          label="Damage Dice"
+                          value={a.damage?.dice ?? ""}
+                          placeholder='e.g. "1d8"'
+                          onChange={(dice) =>
+                            setStat((s) => ({
+                              ...s,
+                              actions: s.actions.map((x) =>
+                                x.id === a.id
+                                  ? { ...x, damage: { ...(x.damage ?? {}), dice } }
+                                  : x
+                              ),
+                            }))
+                          }
+                        />
+                        <NumField
+                          label="Damage Bonus"
+                          value={a.damage?.bonus ?? 0}
+                          min={-20}
+                          max={40}
+                          onChange={(bonus) =>
+                            setStat((s) => ({
+                              ...s,
+                              actions: s.actions.map((x) =>
+                                x.id === a.id
+                                  ? { ...x, damage: { ...(x.damage ?? { dice: "" }), bonus } }
+                                  : x
+                              ),
+                            }))
+                          }
+                        />
+                        <TextField
+                          label="Damage Type"
+                          value={a.damage?.type ?? ""}
+                          placeholder="slashing, fire, etc."
+                          onChange={(type) =>
+                            setStat((s) => ({
+                              ...s,
+                              actions: s.actions.map((x) =>
+                                x.id === a.id
+                                  ? { ...x, damage: { ...(x.damage ?? { dice: "" }), type } }
+                                  : x
+                              ),
+                            }))
+                          }
+                        />
+                      </div>
+
+                      <div className="grid gap-3 md:grid-cols-3">
+                        <NumField
+                          label="Reach (squares)"
+                          value={a.reachSquares ?? 1}
+                          min={0}
+                          max={60}
+                          help="Melee reach in squares (1 = 5 ft)."
+                          onChange={(reachSquares) =>
+                            setStat((s) => ({
+                              ...s,
+                              actions: s.actions.map((x) => (x.id === a.id ? { ...x, reachSquares } : x)),
+                            }))
+                          }
+                        />
+                        <NumField
+                          label="Range Normal (squares)"
+                          value={a.rangeSquares?.normal ?? 0}
+                          min={0}
+                          max={999}
+                          help="Ranged normal range in squares (0 = none)."
+                          onChange={(normal) =>
+                            setStat((s) => ({
+                              ...s,
+                              actions: s.actions.map((x) =>
+                                x.id === a.id
+                                  ? { ...x, rangeSquares: { ...(x.rangeSquares ?? {}), normal } }
+                                  : x
+                              ),
+                            }))
+                          }
+                        />
+                        <NumField
+                          label="Range Long (squares)"
+                          value={a.rangeSquares?.long ?? 0}
+                          min={0}
+                          max={999}
+                          help="Optional long range (0 = none)."
+                          onChange={(long) =>
+                            setStat((s) => ({
+                              ...s,
+                              actions: s.actions.map((x) =>
+                                x.id === a.id
+                                  ? { ...x, rangeSquares: { ...(x.rangeSquares ?? {}), long } }
+                                  : x
+                              ),
+                            }))
+                          }
+                        />
+                      </div>
+
+                      <div className="border rounded-lg p-3 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="font-medium text-sm">Save (optional)</div>
+                          <button
+                            type="button"
+                            className="px-3 py-2 rounded-lg border text-sm hover:bg-muted/40"
+                            onClick={() =>
+                              setStat((s) => ({
+                                ...s,
+                                actions: s.actions.map((x) =>
+                                  x.id === a.id
+                                    ? x.save
+                                      ? { ...x, save: undefined }
+                                      : { ...x, save: { ability: "dex", dcOverride: null, onFail: "", onSuccess: "" } }
+                                    : x
+                                ),
+                              }))
+                            }
+                          >
+                            {a.save ? "Remove Save" : "Add Save"}
+                          </button>
+                        </div>
+
+                        {a.save ? (
+                          <div className="space-y-3">
+                            <div className="grid gap-3 md:grid-cols-3">
+                              <div className="space-y-1">
+                                <label className="text-sm font-medium">Save Ability</label>
+                                <select
+                                  className="w-full border rounded-lg p-2"
+                                  value={a.save.ability}
+                                  onChange={(e) => {
+                                    const ability = e.target.value as AbilityKey;
+                                    setStat((s) => ({
+                                      ...s,
+                                      actions: s.actions.map((x) =>
+                                        x.id === a.id ? { ...x, save: { ...(x.save as any), ability } } : x
+                                      ),
+                                    }));
+                                  }}
+                                >
+                                  <option value="str">str</option>
+                                  <option value="dex">dex</option>
+                                  <option value="con">con</option>
+                                  <option value="int">int</option>
+                                  <option value="wis">wis</option>
+                                  <option value="cha">cha</option>
+                                </select>
+                              </div>
+
+                              <NumField
+                                label="DC Override (optional)"
+                                value={a.save.dcOverride ?? 0}
+                                min={0}
+                                max={40}
+                                help={
+                                  a.save.dcOverride == null || a.save.dcOverride === 0
+                                    ? `Using StatBlock Save DC (${dc ?? stat.save_dc}). Set a number to override.`
+                                    : `Overriding to DC ${dc}`
+                                }
+                                onChange={(v) =>
+                                  setStat((s) => ({
+                                    ...s,
+                                    actions: s.actions.map((x) =>
+                                      x.id === a.id ? { ...x, save: { ...(x.save as any), dcOverride: v } } : x
+                                    ),
+                                  }))
+                                }
+                              />
+                            </div>
+
+                            <TextAreaField
+                              label="On Fail"
+                              value={a.save.onFail ?? ""}
+                              rows={2}
+                              onChange={(onFail) =>
+                                setStat((s) => ({
+                                  ...s,
+                                  actions: s.actions.map((x) =>
+                                    x.id === a.id ? { ...x, save: { ...(x.save as any), onFail } } : x
+                                  ),
+                                }))
+                              }
+                            />
+                            <TextAreaField
+                              label="On Success"
+                              value={a.save.onSuccess ?? ""}
+                              rows={2}
+                              onChange={(onSuccess) =>
+                                setStat((s) => ({
+                                  ...s,
+                                  actions: s.actions.map((x) =>
+                                    x.id === a.id ? { ...x, save: { ...(x.save as any), onSuccess } } : x
+                                  ),
+                                }))
+                              }
+                            />
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">No save configured.</p>
+                        )}
+                      </div>
+
+                      <TextAreaField
+                        label="Rules Text / Notes"
+                        value={a.text ?? ""}
+                        rows={3}
+                        onChange={(text) =>
+                          setStat((s) => ({
+                            ...s,
+                            actions: s.actions.map((x) => (x.id === a.id ? { ...x, text } : x)),
+                          }))
+                        }
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Advanced mode. Edit carefully — click <b>Apply JSON</b> to re-parse into the friendly editor.
+          </p>
+
+          <textarea
+            className="w-full border rounded-lg p-3 font-mono text-xs"
+            rows={18}
+            value={jsonDraft}
+            onChange={(e) => setJsonDraft(e.target.value)}
+          />
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="px-3 py-2 rounded-lg border text-sm hover:bg-muted/40"
+              onClick={applyJson}
+            >
+              Apply JSON
+            </button>
+
+            <button
+              type="button"
+              className="px-3 py-2 rounded-lg border text-sm hover:bg-muted/40"
+              onClick={() => setJsonDraft(JSON.stringify(stat, null, 2))}
+            >
+              Reset from current
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* This is what your server action reads */}
       <input type="hidden" name="stat_block_json" value={jsonText} />
 
-      {/* Optional: tiny debug view you can remove later */}
+      {/* Optional debug */}
       <details className="opacity-70">
-        <summary className="cursor-pointer text-sm">Stat block JSON</summary>
+        <summary className="cursor-pointer text-sm">Current StatBlock (saved)</summary>
         <pre className="mt-2 text-xs border rounded-lg p-2 overflow-auto">{jsonText}</pre>
       </details>
     </div>
