@@ -35,7 +35,10 @@ export async function listNpcs() {
 
   const res = await supabase
     .from("npcs")
-    .select("id,name,npc_type,default_role,image_base_path,image_alt,image_updated_at,is_archived,updated_at")
+    // ✅ IMPORTANT: include stat_block so the cards can render real stats
+    .select(
+      "id,name,npc_type,default_role,description,stat_block,image_base_path,image_alt,image_updated_at,is_archived,updated_at"
+    )
     .eq("is_archived", false)
     .order("updated_at", { ascending: false });
 
@@ -44,6 +47,7 @@ export async function listNpcs() {
   return (res.data ?? []).map((n: any) => {
     const hasImg = !!n.image_base_path && !!supabaseUrl;
     const npcId = n.id as string;
+
     return {
       ...n,
       thumbUrl: hasImg ? buildNpcImageUrl(supabaseUrl, npcId, "thumb.webp", n.image_updated_at) : null,
@@ -53,23 +57,21 @@ export async function listNpcs() {
 
 export async function getNpcById(
   id: string
-): Promise<(NpcRow & { thumbUrl: string | null; mediumUrl: string | null; portraitUrl: string | null }) | null> {
-  // Only treat truly invalid ids as missing
+): Promise<
+  (NpcRow & {
+    thumbUrl: string | null;
+    mediumUrl: string | null;
+    portraitUrl: string | null;
+  }) | null
+> {
   if (!id || id === "undefined" || !isUuid(id)) return null;
 
   const supabase = await createClient();
-
-  const res = await supabase
-    .from("npcs")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
+  const res = await supabase.from("npcs").select("*").eq("id", id).maybeSingle();
 
   if (res.error) {
-    // This should surface instead of silently 404-ing
     throw new Error(`getNpcById error: ${res.error.message}`);
   }
-
   if (!res.data) return null;
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
