@@ -6,6 +6,7 @@ import NpcImageUploader from "@/components/designer/npcs/NpcImageUploader";
 import StatBlockEditor from "@/components/designer/npcs/StatBlockEditor";
 import DeleteNpcButton from "@/components/designer/npcs/DeleteNpcButton";
 import { deleteNpcAction } from "@/app/actions/npcs";
+import SaveBar from "@/components/ui/SaveBar";
 
 
 export const dynamic = "force-dynamic";
@@ -164,7 +165,7 @@ const npcId = npc.id;
           />
         </div>
 
-        <button className="px-4 py-2 rounded-lg bg-black text-white hover:opacity-90">Save Changes</button>
+        <SaveBar />
       </form>
 
       <div className="border rounded-xl p-4 opacity-70">
