@@ -727,15 +727,22 @@ export default function StatBlockEditor({ initial }: { initial: any }) {
                           max={999}
                           help="Ranged normal range in squares (0 = none)."
                           onChange={(normal) =>
-                            setStat((s) => ({
-                              ...s,
-                              actions: s.actions.map((x) =>
-                                x.id === a.id
-                                  ? { ...x, rangeSquares: { ...(x.rangeSquares ?? {}), normal } }
-                                  : x
-                              ),
-                            }))
-                          }
+                          setStat((s) => ({
+                            ...s,
+                            actions: s.actions.map((x) => {
+                              if (x.id !== a.id) return x;
+                              const prev = x.rangeSquares ?? { normal: 0 };
+                              return {
+                                ...x,
+                                rangeSquares: {
+                                  normal,
+                                  long: prev.long,
+                                },
+                              };
+                            }),
+                          }))
+                        }
+
                         />
                         <NumField
                           label="Range Long (squares)"
@@ -744,15 +751,22 @@ export default function StatBlockEditor({ initial }: { initial: any }) {
                           max={999}
                           help="Optional long range (0 = none)."
                           onChange={(long) =>
-                            setStat((s) => ({
-                              ...s,
-                              actions: s.actions.map((x) =>
-                                x.id === a.id
-                                  ? { ...x, rangeSquares: { ...(x.rangeSquares ?? {}), long } }
-                                  : x
-                              ),
-                            }))
-                          }
+                          setStat((s) => ({
+                            ...s,
+                            actions: s.actions.map((x) => {
+                              if (x.id !== a.id) return x;
+                              const prev = x.rangeSquares ?? { normal: 0 };
+                              return {
+                                ...x,
+                                rangeSquares: {
+                                  normal: prev.normal ?? 0,
+                                  long,
+                                },
+                              };
+                            }),
+                          }))
+                        }
+
                         />
                       </div>
 
