@@ -1,31 +1,42 @@
 ﻿import Link from "next/link";
+import { listNpcs } from "@/lib/designer/npcs";
+import NpcCard from "@/components/designer/npcs/NpcCard";
 
-export default function DesignerHomePage() {
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+export default async function NpcsPage() {
+  const npcs = await listNpcs();
+
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Game Designer</h1>
-        <p className="text-sm text-muted-foreground">
-          Manage NPCs, Special Traits, and Actions.
-        </p>
-      </div>
+    <div className="p-6 space-y-4 max-w-6xl">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">NPCs</h1>
+          <p className="text-sm text-muted-foreground">
+            Your NPC library. Click a card to edit stats, image, and notes.
+          </p>
+        </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Link href="/admin/designer/npcs" className="border rounded-xl p-4 hover:bg-muted/40">
-          <div className="font-semibold">NPCs</div>
-          <div className="text-sm text-muted-foreground">Create and manage NPC cards</div>
+        <Link
+          href="/admin/designer/npcs/new"
+          className="px-4 py-2 rounded-lg bg-black text-white hover:opacity-90"
+        >
+          New NPC
         </Link>
-
-        <div className="border rounded-xl p-4 opacity-60">
-          <div className="font-semibold">Special Traits</div>
-          <div className="text-sm text-muted-foreground">Coming next</div>
-        </div>
-
-        <div className="border rounded-xl p-4 opacity-60">
-          <div className="font-semibold">Actions</div>
-          <div className="text-sm text-muted-foreground">Coming next</div>
-        </div>
       </div>
+
+      {npcs.length === 0 ? (
+        <div className="border rounded-xl p-6 text-sm text-muted-foreground">
+          No NPCs yet. Create your first one.
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {npcs.map((npc: any) => (
+            <NpcCard key={npc.id} npc={npc} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
