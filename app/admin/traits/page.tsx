@@ -2,7 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/utils/supabase/server";
 
 type TraitRow = {
-  id: string;
+  id: string | null;
   name: string;
   type: string;
   summary: string | null;
@@ -124,8 +124,9 @@ export default async function TraitsPage({
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {rows.map((t) => {
-  const valid = isUuid(t.id);
+        {rows.map((t, idx) => {
+  const idStr = typeof t.id === "string" ? t.id : "";
+  const valid = isUuid(idStr);
 
   const card = (
     <div className="group flex h-full flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md">
@@ -146,7 +147,7 @@ export default async function TraitsPage({
               : "text-red-600"
           }`}
         >
-          {valid ? "Open →" : "Invalid ID"}
+          {valid ? "Edit →" : "Invalid ID"}
         </span>
       </div>
 
@@ -156,15 +157,22 @@ export default async function TraitsPage({
     </div>
   );
 
-  // 🔐 GUARD: only link when valid
-  return valid ? (
-    <Link key={t.id} href={`/admin/traits/edit?id=${t.id}`} className="block">
+  if (!valid) {
+    return (
+      <div key={`invalid-${t.name}-${t.updated_at}-${idx}`} className="block">
+        {card}
+      </div>
+    );
+  }
+
+  return (
+    <Link
+      key={idStr}
+      href={`/admin/traits/edit?id=${encodeURIComponent(idStr)}`}
+      className="block"
+    >
       {card}
     </Link>
-  ) : (
-    <div key={`invalid-${t.name}`} className="block">
-      {card}
-    </div>
   );
 })}
 
