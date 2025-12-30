@@ -7,6 +7,9 @@ import StatBlockEditor from "@/components/designer/npcs/StatBlockEditor";
 import DeleteNpcButton from "@/components/designer/npcs/DeleteNpcButton";
 import { deleteNpcAction } from "@/app/actions/npcs";
 import SaveBar from "@/components/ui/SaveBar";
+import { listTraits, getNpcTraitIds, getNpcPassives } from "@/lib/designer/traits";
+import { listActions, getNpcActionIds, getNpcEffectiveActions } from "@/lib/designer/actions";
+import NpcTraitActionPicker from "@/components/designer/npcs/NpcTraitActionPicker";
 
 
 export const dynamic = "force-dynamic";
@@ -62,6 +65,34 @@ export default async function EditNpcByQueryPage({
   }
 
 const npcId = npc.id;
+
+// Safe defaults so the page still renders if something fails
+let allTraits: any[] = [];
+let allActions: any[] = [];
+let selectedTraitIds: string[] = [];
+let selectedActionIds: string[] = [];
+let passives: any[] = [];
+let effectiveActions: any[] = [];
+
+try {
+  [
+    allTraits,
+    allActions,
+    selectedTraitIds,
+    selectedActionIds,
+    passives,
+    effectiveActions,
+  ] = await Promise.all([
+    listTraits({ includeArchived: false }),
+    listActions({ includeArchived: false }),
+    getNpcTraitIds(npcId),
+    getNpcActionIds(npcId),
+    getNpcPassives(npcId),
+    getNpcEffectiveActions(npcId),
+  ]);
+} catch (err) {
+  console.error("Failed to load traits/actions for NPC", err);
+}
 
 
     async function del() {
@@ -168,10 +199,115 @@ const npcId = npc.id;
         <SaveBar />
       </form>
 
-      <div className="border rounded-xl p-4 opacity-70">
-        <h2 className="font-semibold">Traits & Actions</h2>
-        <p className="text-sm text-muted-foreground">Next step: multi-select traits and actions.</p>
-      </div>
+<div className="border rounded-xl p-4 space-y-6">
+  <div>
+    <h2 className="font-semibold">Traits & Actions</h2>
+    <p className="text-sm text-muted-foreground">
+      Choose from the library. “Effective” results come from your views.
+    </p>
+  </div>
+  
+{(!allTraits.length && !allActions.length) ? (
+  <div className="text-sm text-muted-foreground">
+    Traits/actions library not loaded (check RLS policies or view permissions).
+  </div>
+) : null}
+
+  <NpcTraitActionPicker
+    npcId={npcId}
+    allTraits={allTraits}
+    allActions={allActions}
+    selectedTraitIds={selectedTraitIds}
+    selectedActionIds={selectedActionIds}
+  />
+
+  <div className="grid gap-4 md:grid-cols-2">
+    {/* Effective Passives */}
+    <div className="border rounded-lg p-3">
+      <div className="font-medium mb-2">Effective Passives</div>
+
+      {passives.length ? (
+        <div className="space-y-2">
+          {passives.map((p: any) => (
+            <div key={p.trait_id} className="border rounded-lg p-2">
+              <div className="font-medium text-sm">{p.trait_name}</div>
+
+              {Array.isArray(p.passives) ? (
+                p.passives.length ? (
+                  <ul className="mt-1 text-xs text-muted-foreground list-disc pl-5 space-y-1">
+                    {p.passives.map((item: any, idx: number) => (
+                      <li key={idx}>
+                        {typeof item === "string" ? item : JSON.stringify(item)}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="mt-1 text-xs text-muted-foreground">No passives</div>
+                )
+              ) : p.passives && typeof p.passives === "object" ? (
+                <details className="mt-2 opacity-70">
+                  <summary className="cursor-pointer text-xs">Details</summary>
+                  <pre className="mt-2 text-[11px] border rounded-lg p-2 overflow-auto">
+{JSON.stringify(p.passives, null, 2)}
+                  </pre>
+                </details>
+              ) : (
+                <div className="mt-1 text-xs text-muted-foreground">No passives</div>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-sm text-muted-foreground">None</div>
+      )}
+    </div>
+
+    {/* Effective Actions */}
+    <div className="border rounded-lg p-3">
+      <div className="font-medium mb-2">Effective Actions</div>
+
+      {effectiveActions.length ? (
+        <div className="space-y-2">
+          {effectiveActions.map((a: any) => (
+            <div key={a.action_id} className="border rounded-lg p-2">
+              <div className="flex items-start justify-between gap-2">
+                <div className="font-medium text-sm">{a.name}</div>
+                <div className="text-xs text-muted-foreground">
+                  {String(a.activation ?? "").replaceAll("_", " ")}
+                </div>
+              </div>
+
+              {a.description ? (
+                <div className="text-xs text-muted-foreground mt-1">{a.description}</div>
+              ) : null}
+
+              {Array.isArray(a.tags) && a.tags.length ? (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {a.tags.slice(0, 6).map((t: string) => (
+                    <span key={t} className="text-[10px] px-2 py-0.5 rounded-full border opacity-80">
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+
+              <details className="mt-2 opacity-70">
+                <summary className="cursor-pointer text-xs">Details</summary>
+                <pre className="mt-2 text-[11px] border rounded-lg p-2 overflow-auto">
+{JSON.stringify({ requirements: a.requirements, effect: a.effect }, null, 2)}
+                </pre>
+              </details>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-sm text-muted-foreground">None</div>
+      )}
+    </div>
+  </div>
+</div>
+
+
     </div>
   );
 }
