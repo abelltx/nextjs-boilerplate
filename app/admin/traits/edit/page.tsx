@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
+import { headers } from "next/headers";
 import { createClient } from "@/utils/supabase/server";
 
 function isUuid(value: unknown): value is string {
@@ -11,21 +11,53 @@ function isUuid(value: unknown): value is string {
   );
 }
 
-export default async function EditTraitPage({
-  searchParams,
-}: {
-  searchParams?: { id?: string };
-}) {
-  const id = searchParams?.id;
+function getQueryParamFromUrl(
+  fullUrl: string | null,
+  param: string
+): string | null {
+  if (!fullUrl) return null;
 
-  // 🔐 HARD GUARD — no id or bad id
+  try {
+    const url = fullUrl.startsWith("http")
+      ? new URL(fullUrl)
+      : new URL(fullUrl, "https://play.neweyes.org");
+
+    return url.searchParams.get(param);
+  } catch {
+    return null;
+  }
+}
+
+export default async function EditTraitPage() {
+  // ✅ CALL ONCE
+  const h = await headers();
+
+  const rawUrl =
+    h.get("x-url") ||
+    h.get("x-forwarded-uri") ||
+    h.get("referer");
+
+  const id = getQueryParamFromUrl(rawUrl, "id");
+
   if (!isUuid(id)) {
     return (
       <div className="mx-auto max-w-3xl p-6">
         <h1 className="text-2xl font-bold text-slate-900">Trait not found</h1>
-        <p className="mt-2 text-slate-700">
-          Missing or invalid trait id.
-        </p>
+        <p className="mt-2 text-slate-700">Missing or invalid trait id.</p>
+
+        <pre className="mt-4 overflow-auto rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700">
+{JSON.stringify(
+  {
+    debug: {
+      id,
+      rawUrl,
+    },
+  },
+  null,
+  2
+)}
+        </pre>
+
         <Link
           href="/admin/traits"
           className="mt-4 inline-block text-sm font-semibold text-slate-700 underline"
@@ -51,6 +83,9 @@ export default async function EditTraitPage({
         <p className="mt-2 text-slate-700">
           This trait does not exist or you don’t have access.
         </p>
+        <pre className="mt-4 overflow-auto rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700">
+{JSON.stringify({ id, error: error?.message ?? null }, null, 2)}
+        </pre>
         <Link
           href="/admin/traits"
           className="mt-4 inline-block text-sm font-semibold text-slate-700 underline"
@@ -61,27 +96,11 @@ export default async function EditTraitPage({
     );
   }
 
-  // ✅ SUCCESS PATH
   return (
     <div className="mx-auto max-w-3xl p-6">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">
-            Edit Trait
-          </h1>
-          <p className="text-slate-600">
-            Modify a global trait used across NPCs and episodes.
-          </p>
-        </div>
-        <Link
-          href="/admin/traits"
-          className="text-sm font-semibold text-slate-700 hover:text-slate-900"
-        >
-          ← Back
-        </Link>
-      </div>
+      <h1 className="text-2xl font-bold text-slate-900">Edit Trait</h1>
+      <p className="mb-4 text-sm text-slate-600">Trait ID: {id}</p>
 
-      {/* 🔧 FORM SCAFFOLD */}
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="grid gap-4">
           <div>
@@ -113,10 +132,6 @@ export default async function EditTraitPage({
               rows={4}
               className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
             />
-          </div>
-
-          <div className="pt-4 text-sm text-slate-500">
-            Save actions will be wired next.
           </div>
         </div>
       </div>
