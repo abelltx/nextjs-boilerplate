@@ -1,6 +1,8 @@
 import Link from "next/link";
-import { headers } from "next/headers";
 import { createClient } from "@/utils/supabase/server";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 function isUuid(value: unknown): value is string {
   return (
@@ -11,33 +13,12 @@ function isUuid(value: unknown): value is string {
   );
 }
 
-function getQueryParamFromUrl(
-  fullUrl: string | null,
-  param: string
-): string | null {
-  if (!fullUrl) return null;
-
-  try {
-    const url = fullUrl.startsWith("http")
-      ? new URL(fullUrl)
-      : new URL(fullUrl, "https://play.neweyes.org");
-
-    return url.searchParams.get(param);
-  } catch {
-    return null;
-  }
-}
-
-export default async function EditTraitPage() {
-  // ✅ CALL ONCE
-  const h = await headers();
-
-  const rawUrl =
-    h.get("x-url") ||
-    h.get("x-forwarded-uri") ||
-    h.get("referer");
-
-  const id = getQueryParamFromUrl(rawUrl, "id");
+export default async function EditTraitPage({
+  searchParams,
+}: {
+  searchParams?: { id?: string };
+}) {
+  const id = searchParams?.id ?? null;
 
   if (!isUuid(id)) {
     return (
@@ -46,16 +27,7 @@ export default async function EditTraitPage() {
         <p className="mt-2 text-slate-700">Missing or invalid trait id.</p>
 
         <pre className="mt-4 overflow-auto rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700">
-{JSON.stringify(
-  {
-    debug: {
-      id,
-      rawUrl,
-    },
-  },
-  null,
-  2
-)}
+{JSON.stringify({ debug: { id, searchParams } }, null, 2)}
         </pre>
 
         <Link
@@ -80,9 +52,6 @@ export default async function EditTraitPage() {
     return (
       <div className="mx-auto max-w-3xl p-6">
         <h1 className="text-2xl font-bold text-slate-900">Trait not found</h1>
-        <p className="mt-2 text-slate-700">
-          This trait does not exist or you don’t have access.
-        </p>
         <pre className="mt-4 overflow-auto rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700">
 {JSON.stringify({ id, error: error?.message ?? null }, null, 2)}
         </pre>
@@ -98,8 +67,18 @@ export default async function EditTraitPage() {
 
   return (
     <div className="mx-auto max-w-3xl p-6">
-      <h1 className="text-2xl font-bold text-slate-900">Edit Trait</h1>
-      <p className="mb-4 text-sm text-slate-600">Trait ID: {id}</p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Edit Trait</h1>
+          <p className="text-slate-600 text-sm">Trait ID: {id}</p>
+        </div>
+        <Link
+          href="/admin/traits"
+          className="text-sm font-semibold text-slate-700 hover:text-slate-900"
+        >
+          ← Back
+        </Link>
+      </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="grid gap-4">
@@ -109,16 +88,6 @@ export default async function EditTraitPage() {
             </label>
             <input
               defaultValue={trait.name ?? ""}
-              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-slate-700">
-              Type
-            </label>
-            <input
-              defaultValue={trait.type ?? ""}
               className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
             />
           </div>
