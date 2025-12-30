@@ -1,6 +1,9 @@
 ﻿import Link from "next/link";
 import { listNpcs } from "@/lib/designer/npcs";
-import NpcCard from "@/components/designer/npcs/NpcCard";
+import NpcFlipCard from "@/components/designer/npcs/NpcFlipCard";
+
+
+
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -32,9 +35,10 @@ export default async function NpcsPage() {
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {npcs.map((npc: any) => (
-            <NpcCard key={npc.id} npc={npc} />
-          ))}
+        {npcs.map((npc: any) => (
+        <NpcFlipCard key={npc.id} npc={npc} />
+        ))}
+
         </div>
       )}
     </div>
