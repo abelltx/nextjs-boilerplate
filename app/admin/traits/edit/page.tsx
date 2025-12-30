@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { createClient } from "@/utils/supabase/server";
+import { updateTraitAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -14,10 +15,16 @@ function isUuid(value: unknown): value is string {
   );
 }
 
-export default async function EditTraitPage() {
-  // ✅ Next 16: cookies() can be async in your setup
+export default async function EditTraitPage({
+  searchParams,
+}: {
+  searchParams?: { err?: string };
+}) {
   const c = await cookies();
   const id = c.get("trait_edit_id")?.value ?? "";
+
+  // one-shot entry: don't keep reopening the same trait forever
+  c.delete("trait_edit_id");
 
   if (!isUuid(id)) {
     return (
@@ -26,11 +33,9 @@ export default async function EditTraitPage() {
         <p className="mt-2 text-slate-700">
           Missing or invalid trait id (cookie not set).
         </p>
-
         <pre className="mt-4 overflow-auto rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700">
 {JSON.stringify({ debug: { trait_edit_id: id || null } }, null, 2)}
         </pre>
-
         <Link
           href="/admin/traits"
           className="mt-4 inline-block text-sm font-semibold text-slate-700 underline"
@@ -42,7 +47,6 @@ export default async function EditTraitPage() {
   }
 
   const supabase = await createClient();
-
   const { data: trait, error } = await supabase
     .from("traits")
     .select("id,name,type,summary,tags,is_active,updated_at")
@@ -56,11 +60,9 @@ export default async function EditTraitPage() {
         <p className="mt-2 text-slate-700">
           This trait does not exist or you don’t have access.
         </p>
-
         <pre className="mt-4 overflow-auto rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700">
 {JSON.stringify({ id, error: error?.message ?? null }, null, 2)}
         </pre>
-
         <Link
           href="/admin/traits"
           className="mt-4 inline-block text-sm font-semibold text-slate-700 underline"
@@ -71,9 +73,12 @@ export default async function EditTraitPage() {
     );
   }
 
+  const err = (searchParams?.err ?? "").trim();
+  const tagsCsv = Array.isArray(trait.tags) ? trait.tags.join(", ") : "";
+
   return (
     <div className="mx-auto max-w-3xl p-6">
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Edit Trait</h1>
           <p className="text-sm text-slate-600">Trait ID: {trait.id}</p>
@@ -86,31 +91,48 @@ export default async function EditTraitPage() {
         </Link>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      {err ? (
+        <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+          <b>Save failed:</b> {err}
+          <div className="mt-1 text-xs text-red-700">
+            If this mentions permissions/RLS, your update policy is blocking writes.
+          </div>
+        </div>
+      ) : null}
+
+      <form
+        action={updateTraitAction}
+        className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+      >
+        <input type="hidden" name="id" value={trait.id} />
+
         <div className="grid gap-4">
           <div>
             <label className="block text-sm font-semibold text-slate-700">
               Name
             </label>
             <input
+              name="name"
               defaultValue={trait.name ?? ""}
               className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-              readOnly
             />
-            <p className="mt-1 text-xs text-slate-500">
-              (Wiring save/update next — this page is currently read-only.)
-            </p>
           </div>
 
           <div>
             <label className="block text-sm font-semibold text-slate-700">
               Type
             </label>
-            <input
-              defaultValue={trait.type ?? ""}
-              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-              readOnly
-            />
+            <select
+              name="type"
+              defaultValue={trait.type ?? "nature"}
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+            >
+              <option value="nature">Nature</option>
+              <option value="training">Training</option>
+              <option value="affliction">Affliction</option>
+              <option value="calling">Calling</option>
+              <option value="office">Office</option>
+            </select>
           </div>
 
           <div>
@@ -118,18 +140,49 @@ export default async function EditTraitPage() {
               Summary
             </label>
             <textarea
+              name="summary"
               defaultValue={trait.summary ?? ""}
               rows={4}
               className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-              readOnly
             />
           </div>
 
-          <div className="text-xs text-slate-500">
-            Updated: {trait.updated_at ?? "—"}
+          <div>
+            <label className="block text-sm font-semibold text-slate-700">
+              Tags (comma-separated)
+            </label>
+            <input
+              name="tags"
+              defaultValue={tagsCsv}
+              placeholder="e.g. stealth, desert, priest"
+              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+            />
+          </div>
+
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              name="is_active"
+              defaultChecked={!!trait.is_active}
+              className="h-4 w-4"
+            />
+            Active
+          </label>
+
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <div className="text-xs text-slate-500">
+              Updated: {trait.updated_at ?? "—"}
+            </div>
+
+            <button
+              type="submit"
+              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800"
+            >
+              Save Changes
+            </button>
           </div>
         </div>
-      </div>
+      </form>
     </div>
   );
 }
