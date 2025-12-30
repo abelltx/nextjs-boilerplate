@@ -23,9 +23,6 @@ export default async function EditTraitPage({
   const c = await cookies();
   const id = c.get("trait_edit_id")?.value ?? "";
 
-  // one-shot entry: don't keep reopening the same trait forever
-  c.delete("trait_edit_id");
-
   if (!isUuid(id)) {
     return (
       <div className="mx-auto max-w-3xl p-6">
