@@ -175,9 +175,9 @@ export default async function GMHubPage() {
     {
       title: "Actions Designer",
       description: "Manage the global action library (melee/ranged/other).",
-      href: undefined, // set when built, e.g. "/admin/actions"
+      href: "/admin/actions", // set when built, e.g. "/admin/actions"
       count: counts.actions,
-      status: "coming",
+      status: "live",
       tone: "green",
     },
     {
