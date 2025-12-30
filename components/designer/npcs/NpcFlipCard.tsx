@@ -1,16 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
-/** ---------- helpers (from your NpcCard) ---------- */
 function n(v: any, fallback = 0) {
   const x = typeof v === "number" ? v : Number(v);
   return Number.isFinite(x) ? x : fallback;
 }
+
 function signed(num: number) {
   return num >= 0 ? `+${num}` : String(num);
 }
+
 function abilitiesRow(abilities: any) {
   const a = abilities ?? {};
   return [
@@ -23,23 +24,53 @@ function abilitiesRow(abilities: any) {
   ] as const;
 }
 
+/** Accepts: array | object-map | JSON string -> always returns array */
+function asArray(v: any): any[] {
+  if (!v) return [];
+  if (Array.isArray(v)) return v;
+
+  if (typeof v === "string") {
+    try {
+      const parsed = JSON.parse(v);
+      if (Array.isArray(parsed)) return parsed;
+      if (parsed && typeof parsed === "object") return Object.values(parsed);
+      return [];
+    } catch {
+      return [];
+    }
+  }
+
+  if (typeof v === "object") return Object.values(v);
+  return [];
+}
+
+/** Accepts: object scores OR array-ish -> object with str/dex/... */
+function normalizeAbilityScores(abilities: any) {
+  if (!abilities) return {};
+  if (Array.isArray(abilities)) {
+    const out: any = {};
+    for (const item of abilities) {
+      const k = item?.key ?? item?.ability ?? item?.name;
+      const val = item?.value ?? item?.score ?? item?.val;
+      if (k) out[String(k).toLowerCase()] = val;
+    }
+    return out;
+  }
+  return abilities;
+}
+
 export default function NpcFlipCard({ npc }: { npc: any }) {
   const [flipped, setFlipped] = useState(false);
 
-  // Your actual data shape
   const sb = npc.stat_block ?? {};
-  // TEMP DEBUG — remove after you confirm keys
-if (typeof window !== "undefined") {
-  const id = npc?.id ?? "no-id";
-  console.log(`[NpcFlipCard] npc keys (${id}):`, Object.keys(npc ?? {}));
-  console.log(`[NpcFlipCard] stat_block keys (${id}):`, Object.keys(sb ?? {}));
-  console.log(`[NpcFlipCard] stat_block.traits (${id}):`, sb?.traits);
-  console.log(`[NpcFlipCard] stat_block.actions (${id}):`, sb?.actions);
-  console.log(`[NpcFlipCard] npc.npc_traits (${id}):`, (npc as any)?.npc_traits);
-  console.log(`[NpcFlipCard] npc.npc_actions (${id}):`, (npc as any)?.npc_actions);
-}
 
-  const abilities = abilitiesRow(sb.abilities);
+  const img = (npc.thumbUrl as string | null) ?? null;
+
+  const abilities = useMemo(
+    () => abilitiesRow(normalizeAbilityScores(sb.abilities)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sb?.abilities]
+  );
 
   const hp = n(sb.hp, 10);
   const ac = n(sb.ac, 10);
@@ -49,17 +80,9 @@ if (typeof window !== "undefined") {
   const rab = n(sb.ranged_attack_bonus, 0);
   const dc = n(sb.save_dc, 10);
 
-  const img = (npc.thumbUrl as string | null) ?? null;
-
-  // Traits/actions: support a couple possible shapes without crashing
-  const traits =
-    sb.traits ??
-    npc.traits ??
-    []; // expect [{id,name,text}] or [{name,text}]
-  const actions =
-    sb.actions ??
-    npc.actions ??
-    []; // expect array; we’ll render defensively
+  // ✅ Always arrays
+  const traits: any[] = useMemo(() => asArray(sb.traits), [sb?.traits]);
+  const actions: any[] = useMemo(() => asArray(sb.actions), [sb?.actions]);
 
   function onFlip() {
     setFlipped((s) => !s);
@@ -111,7 +134,7 @@ if (typeof window !== "undefined") {
                       </div>
                     </div>
 
-                    {/* Edit link MUST NOT flip the card */}
+                    {/* Edit link MUST NOT flip */}
                     <Link
                       href={`/admin/designer/npcs/edit?id=${npc.id}`}
                       className="shrink-0 px-3 py-2 rounded-lg border hover:bg-muted/40 text-sm"
@@ -191,13 +214,18 @@ if (typeof window !== "undefined") {
             <div className="h-[calc(340px-49px)] overflow-auto p-3 space-y-4">
               {/* Traits */}
               <section>
-                <h4 className="text-xs font-semibold uppercase text-muted-foreground">Traits</h4>
-                {traits?.length ? (
+                <h4 className="text-xs font-semibold uppercase text-muted-foreground">
+                  Traits
+                </h4>
+
+                {traits.length ? (
                   <ul className="mt-2 space-y-2">
                     {traits.map((t: any, idx: number) => (
                       <li key={t.id ?? `${t.name ?? "trait"}-${idx}`} className="text-sm">
                         <span className="font-medium">{t.name ?? "Trait"}.</span>{" "}
-                        <span className="text-muted-foreground italic">{t.text ?? t.description ?? ""}</span>
+                        <span className="text-muted-foreground italic">
+                          {t.text ?? t.description ?? ""}
+                        </span>
                       </li>
                     ))}
                   </ul>
@@ -208,27 +236,35 @@ if (typeof window !== "undefined") {
 
               {/* Actions */}
               <section>
-                <h4 className="text-xs font-semibold uppercase text-muted-foreground">Actions</h4>
-                {actions?.length ? (
+                <h4 className="text-xs font-semibold uppercase text-muted-foreground">
+                  Actions
+                </h4>
+
+                {actions.length ? (
                   <ul className="mt-2 space-y-3">
                     {actions.map((a: any, idx: number) => {
                       const name = a.name ?? "Action";
-                      const usesAttack = a.usesAttackRoll !== false && (a.damage?.dice || a.damage_dice);
-                      const atk = n(a.attackBonusOverride ?? a.attack_bonus ?? sb.melee_attack_bonus ?? 0, 0);
 
-                      const dice = a.damage?.dice ?? a.damage_dice;
-                      const bonus = a.damage?.bonus ?? a.damage_bonus;
-                      const dtype = a.damage?.type ?? a.damage_type;
+                      const dice = a.damage?.dice ?? a.damage_dice ?? a.dice;
+                      const bonus = a.damage?.bonus ?? a.damage_bonus ?? a.bonus;
+                      const dtype = a.damage?.type ?? a.damage_type ?? a.type;
+
+                      const atk = n(
+                        a.attackBonusOverride ?? a.attack_bonus ?? sb.melee_attack_bonus ?? 0,
+                        0
+                      );
+
+                      const usesAttack = a.usesAttackRoll !== false && !!dice;
 
                       const save = a.save ?? null;
-                      const saveAbility = save?.ability ?? a.save_ability;
+                      const saveAbility = save?.ability ?? a.save_ability ?? null;
                       const saveDc = n(save?.dcOverride ?? a.save_dc ?? dc, dc);
 
                       return (
                         <li key={a.id ?? `${name}-${idx}`} className="rounded-xl border p-2">
                           <div className="text-sm font-medium">{name}</div>
 
-                          {usesAttack && dice ? (
+                          {usesAttack ? (
                             <div className="mt-1 text-xs text-muted-foreground">
                               <span className="font-medium">+{atk}</span> to hit •{" "}
                               <span className="font-medium">{dice}</span>
@@ -239,7 +275,10 @@ if (typeof window !== "undefined") {
                           {saveAbility ? (
                             <div className="mt-1 text-xs text-muted-foreground">
                               DC <span className="font-medium">{saveDc}</span>{" "}
-                              <span className="font-medium">{String(saveAbility).toUpperCase()}</span> save
+                              <span className="font-medium">
+                                {String(saveAbility).toUpperCase()}
+                              </span>{" "}
+                              save
                             </div>
                           ) : null}
 
