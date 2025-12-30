@@ -26,13 +26,15 @@ export async function createActionAction(formData: FormData) {
   if (error) redirect(`/admin/actions/new?err=${encodeURIComponent(error.message)}`);
   if (!data?.id) redirect(`/admin/actions/new?err=insert_failed`);
 
-  // Optional: immediately jump to edit by setting cookie (allowed here, this is a server action)
-  cookies().set(COOKIE_KEY, data.id, {
+  // Optional: jump straight to edit by setting cookie (server action OK)
+  // Next 16.0.10 types: cookies() is async -> await it before .set()
+  const cookieStore = await cookies();
+  cookieStore.set(COOKIE_KEY, data.id, {
     path: "/admin/actions/edit",
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
-    maxAge: 60 * 60 * 2,
+    maxAge: 60 * 60 * 2, // 2 hours
   });
 
   redirect("/admin/actions/edit");
