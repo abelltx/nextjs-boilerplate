@@ -133,3 +133,17 @@ export async function updateActionAction(formData: FormData) {
 
   redirect("/admin/actions?saved=1");
 }
+export async function deleteActionAction(formData: FormData) {
+  const supabase = await createClient();
+
+  const id = String(formData.get("id") ?? "").trim();
+  if (!isUuid(id)) redirect("/admin/actions?err=invalid_id");
+
+  const { error } = await supabase.from("actions").delete().eq("id", id);
+
+  if (error) {
+    redirect(`/admin/actions/edit?err=${encodeURIComponent(error.message)}`);
+  }
+
+  redirect("/admin/actions?deleted=1");
+}
