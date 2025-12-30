@@ -167,7 +167,7 @@ export default async function GMHubPage() {
     {
       title: "Traits Designer",
       description: "Manage the global trait library used by NPCs and players.",
-      href: undefined, // set when built, e.g. "/admin/traits"
+      href: "/admin/traits", // set when built, e.g. "/admin/traits"
       count: counts.traits,
       status: "coming",
       tone: "purple",

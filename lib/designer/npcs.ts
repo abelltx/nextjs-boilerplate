@@ -48,16 +48,24 @@ export async function listNpcs() {
 
   const rows = res.data ?? [];
 
-  // ✅ Pull effective traits/actions exactly like the edit page does
+  // Pull effective passives/actions exactly like the edit page does
   const enriched = await Promise.all(
     rows.map(async (n: any) => {
       const npcId = n.id as string;
       const hasImg = !!n.image_base_path && !!supabaseUrl;
 
-      const [passives, effectiveActions] = await Promise.all([
-        getNpcPassives(npcId),
-        getNpcEffectiveActions(npcId),
-      ]);
+      let passives: any[] = [];
+      let effectiveActions: any[] = [];
+
+      try {
+        [passives, effectiveActions] = await Promise.all([
+          getNpcPassives(npcId),
+          getNpcEffectiveActions(npcId),
+        ]);
+      } catch (e) {
+        // Don’t break the grid if views/rls fail for one npc
+        console.error("listNpcs: failed to load effective traits/actions for", npcId, e);
+      }
 
       return {
         ...n,
@@ -72,6 +80,7 @@ export async function listNpcs() {
 
   return enriched;
 }
+
 
 
 export async function getNpcById(
