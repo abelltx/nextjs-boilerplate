@@ -7,11 +7,9 @@ function n(v: any, fallback = 0) {
   const x = typeof v === "number" ? v : Number(v);
   return Number.isFinite(x) ? x : fallback;
 }
-
 function signed(num: number) {
   return num >= 0 ? `+${num}` : String(num);
 }
-
 function abilitiesRow(abilities: any) {
   const a = abilities ?? {};
   return [
@@ -24,53 +22,13 @@ function abilitiesRow(abilities: any) {
   ] as const;
 }
 
-/** Accepts: array | object-map | JSON string -> always returns array */
-function asArray(v: any): any[] {
-  if (!v) return [];
-  if (Array.isArray(v)) return v;
-
-  if (typeof v === "string") {
-    try {
-      const parsed = JSON.parse(v);
-      if (Array.isArray(parsed)) return parsed;
-      if (parsed && typeof parsed === "object") return Object.values(parsed);
-      return [];
-    } catch {
-      return [];
-    }
-  }
-
-  if (typeof v === "object") return Object.values(v);
-  return [];
-}
-
-/** Accepts: object scores OR array-ish -> object with str/dex/... */
-function normalizeAbilityScores(abilities: any) {
-  if (!abilities) return {};
-  if (Array.isArray(abilities)) {
-    const out: any = {};
-    for (const item of abilities) {
-      const k = item?.key ?? item?.ability ?? item?.name;
-      const val = item?.value ?? item?.score ?? item?.val;
-      if (k) out[String(k).toLowerCase()] = val;
-    }
-    return out;
-  }
-  return abilities;
-}
-
 export default function NpcFlipCard({ npc }: { npc: any }) {
   const [flipped, setFlipped] = useState(false);
 
   const sb = npc.stat_block ?? {};
-
   const img = (npc.thumbUrl as string | null) ?? null;
 
-  const abilities = useMemo(
-    () => abilitiesRow(normalizeAbilityScores(sb.abilities)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [sb?.abilities]
-  );
+  const abilities = useMemo(() => abilitiesRow(sb.abilities), [sb?.abilities]);
 
   const hp = n(sb.hp, 10);
   const ac = n(sb.ac, 10);
@@ -80,13 +38,9 @@ export default function NpcFlipCard({ npc }: { npc: any }) {
   const rab = n(sb.ranged_attack_bonus, 0);
   const dc = n(sb.save_dc, 10);
 
-  // ✅ Always arrays
-  const traits: any[] = useMemo(() => asArray(sb.traits), [sb?.traits]);
-  const actions: any[] = useMemo(() => asArray(sb.actions), [sb?.actions]);
-
-  function onFlip() {
-    setFlipped((s) => !s);
-  }
+  // ✅ these must be added by listNpcs() (same as edit page)
+  const passives: any[] = Array.isArray(npc.passives) ? npc.passives : [];
+  const effectiveActions: any[] = Array.isArray(npc.effectiveActions) ? npc.effectiveActions : [];
 
   return (
     <div className="group relative w-full">
@@ -100,9 +54,8 @@ export default function NpcFlipCard({ npc }: { npc: any }) {
           {/* ================= FRONT ================= */}
           <button
             type="button"
-            onClick={onFlip}
+            onClick={() => setFlipped((s) => !s)}
             className="absolute inset-0 w-full text-left rounded-2xl border bg-background shadow-sm [backface-visibility:hidden] overflow-hidden"
-            aria-label={`Flip card for ${npc.name}`}
           >
             <div className="p-4">
               <div className="flex gap-3">
@@ -123,7 +76,6 @@ export default function NpcFlipCard({ npc }: { npc: any }) {
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <h3 className="font-semibold truncate">{npc.name}</h3>
-
                       <div className="mt-1 flex flex-wrap gap-2 text-xs">
                         <span className="px-2 py-0.5 rounded-full border">
                           {npc.npc_type ?? "npc"}
@@ -134,7 +86,6 @@ export default function NpcFlipCard({ npc }: { npc: any }) {
                       </div>
                     </div>
 
-                    {/* Edit link MUST NOT flip */}
                     <Link
                       href={`/admin/designer/npcs/edit?id=${npc.id}`}
                       className="shrink-0 px-3 py-2 rounded-lg border hover:bg-muted/40 text-sm"
@@ -158,8 +109,7 @@ export default function NpcFlipCard({ npc }: { npc: any }) {
                     <div className="border rounded-lg p-2">
                       <div className="opacity-70">Speed</div>
                       <div className="font-semibold">
-                        {speed}{" "}
-                        <span className="opacity-60">({Math.floor(speed / 5)} sq)</span>
+                        {speed} <span className="opacity-60">({Math.floor(speed / 5)} sq)</span>
                       </div>
                     </div>
                   </div>
@@ -202,9 +152,8 @@ export default function NpcFlipCard({ npc }: { npc: any }) {
           {/* ================= BACK ================= */}
           <button
             type="button"
-            onClick={onFlip}
+            onClick={() => setFlipped((s) => !s)}
             className="absolute inset-0 w-full text-left rounded-2xl border bg-background shadow-sm [transform:rotateY(180deg)] [backface-visibility:hidden] overflow-hidden"
-            aria-label={`Flip back for ${npc.name}`}
           >
             <div className="flex items-center justify-between border-b p-3">
               <div className="font-semibold truncate pr-2">{npc.name}</div>
@@ -212,85 +161,50 @@ export default function NpcFlipCard({ npc }: { npc: any }) {
             </div>
 
             <div className="h-[calc(340px-49px)] overflow-auto p-3 space-y-4">
-              {/* Traits */}
-              <section>
-                <h4 className="text-xs font-semibold uppercase text-muted-foreground">
-                  Traits
-                </h4>
-
-                {traits.length ? (
-                  <ul className="mt-2 space-y-2">
-                    {traits.map((t: any, idx: number) => (
-                      <li key={t.id ?? `${t.name ?? "trait"}-${idx}`} className="text-sm">
-                        <span className="font-medium">{t.name ?? "Trait"}.</span>{" "}
-                        <span className="text-muted-foreground italic">
-                          {t.text ?? t.description ?? ""}
-                        </span>
-                      </li>
+              <section className="border rounded-lg p-3">
+                <div className="font-medium mb-2">Effective Passives</div>
+                {passives.length ? (
+                  <div className="space-y-2">
+                    {passives.map((p: any) => (
+                      <div key={p.trait_id ?? p.trait_name} className="border rounded-lg p-2">
+                        <div className="font-medium text-sm">{p.trait_name ?? "Trait"}</div>
+                        {Array.isArray(p.passives) && p.passives.length ? (
+                          <ul className="mt-1 text-xs text-muted-foreground list-disc pl-5 space-y-1">
+                            {p.passives.map((item: any, idx: number) => (
+                              <li key={idx}>{typeof item === "string" ? item : JSON.stringify(item)}</li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <div className="mt-1 text-xs text-muted-foreground">None</div>
+                        )}
+                      </div>
                     ))}
-                  </ul>
+                  </div>
                 ) : (
-                  <div className="mt-2 text-sm text-muted-foreground">No traits yet.</div>
+                  <div className="text-sm text-muted-foreground">None</div>
                 )}
               </section>
 
-              {/* Actions */}
-              <section>
-                <h4 className="text-xs font-semibold uppercase text-muted-foreground">
-                  Actions
-                </h4>
-
-                {actions.length ? (
-                  <ul className="mt-2 space-y-3">
-                    {actions.map((a: any, idx: number) => {
-                      const name = a.name ?? "Action";
-
-                      const dice = a.damage?.dice ?? a.damage_dice ?? a.dice;
-                      const bonus = a.damage?.bonus ?? a.damage_bonus ?? a.bonus;
-                      const dtype = a.damage?.type ?? a.damage_type ?? a.type;
-
-                      const atk = n(
-                        a.attackBonusOverride ?? a.attack_bonus ?? sb.melee_attack_bonus ?? 0,
-                        0
-                      );
-
-                      const usesAttack = a.usesAttackRoll !== false && !!dice;
-
-                      const save = a.save ?? null;
-                      const saveAbility = save?.ability ?? a.save_ability ?? null;
-                      const saveDc = n(save?.dcOverride ?? a.save_dc ?? dc, dc);
-
-                      return (
-                        <li key={a.id ?? `${name}-${idx}`} className="rounded-xl border p-2">
-                          <div className="text-sm font-medium">{name}</div>
-
-                          {usesAttack ? (
-                            <div className="mt-1 text-xs text-muted-foreground">
-                              <span className="font-medium">+{atk}</span> to hit •{" "}
-                              <span className="font-medium">{dice}</span>
-                              {bonus ? ` + ${bonus}` : ""} {dtype ?? ""}
-                            </div>
-                          ) : null}
-
-                          {saveAbility ? (
-                            <div className="mt-1 text-xs text-muted-foreground">
-                              DC <span className="font-medium">{saveDc}</span>{" "}
-                              <span className="font-medium">
-                                {String(saveAbility).toUpperCase()}
-                              </span>{" "}
-                              save
-                            </div>
-                          ) : null}
-
-                          {a.text ? (
-                            <div className="mt-1 text-xs text-muted-foreground">{a.text}</div>
-                          ) : null}
-                        </li>
-                      );
-                    })}
-                  </ul>
+              <section className="border rounded-lg p-3">
+                <div className="font-medium mb-2">Effective Actions</div>
+                {effectiveActions.length ? (
+                  <div className="space-y-2">
+                    {effectiveActions.map((a: any) => (
+                      <div key={a.action_id ?? a.name} className="border rounded-lg p-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="font-medium text-sm">{a.name ?? "Action"}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {String(a.activation ?? "").replaceAll("_", " ")}
+                          </div>
+                        </div>
+                        {a.description ? (
+                          <div className="text-xs text-muted-foreground mt-1">{a.description}</div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
                 ) : (
-                  <div className="mt-2 text-sm text-muted-foreground">No actions yet.</div>
+                  <div className="text-sm text-muted-foreground">None</div>
                 )}
               </section>
             </div>
