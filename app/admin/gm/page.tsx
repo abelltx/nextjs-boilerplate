@@ -32,8 +32,8 @@ async function getCounts(): Promise<Counts> {
   const [episodes, npcs, traits, actions, inventory, users] = await Promise.all([
     safeCount(supabase, "episodes"),
     safeCount(supabase, "npcs"),
-    safeCount(supabase, "npc_traits"), // adjust if your table name differs
-    safeCount(supabase, "npc_actions"), // adjust if your table name differs
+    safeCount(supabase, "traits"), // adjust if your table name differs
+    safeCount(supabase, "actions"), // adjust if your table name differs
     safeCount(supabase, "inventory_items"), // future
     safeCount(supabase, "profiles"), // usually your user table
   ]);
