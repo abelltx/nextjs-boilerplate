@@ -28,6 +28,17 @@ export default function NpcFlipCard({ npc }: { npc: any }) {
 
   // Your actual data shape
   const sb = npc.stat_block ?? {};
+  // TEMP DEBUG — remove after you confirm keys
+if (typeof window !== "undefined") {
+  const id = npc?.id ?? "no-id";
+  console.log(`[NpcFlipCard] npc keys (${id}):`, Object.keys(npc ?? {}));
+  console.log(`[NpcFlipCard] stat_block keys (${id}):`, Object.keys(sb ?? {}));
+  console.log(`[NpcFlipCard] stat_block.traits (${id}):`, sb?.traits);
+  console.log(`[NpcFlipCard] stat_block.actions (${id}):`, sb?.actions);
+  console.log(`[NpcFlipCard] npc.npc_traits (${id}):`, (npc as any)?.npc_traits);
+  console.log(`[NpcFlipCard] npc.npc_actions (${id}):`, (npc as any)?.npc_actions);
+}
+
   const abilities = abilitiesRow(sb.abilities);
 
   const hp = n(sb.hp, 10);

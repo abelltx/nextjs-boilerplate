@@ -41,7 +41,7 @@ export default async function EditNpcByQueryPage({
         <p className="text-sm opacity-80">
           Expected /admin/designer/npcs/edit?id=&lt;uuid&gt;
         </p>
-        <Link className="underline" href="/admin/designer/npcs">
+        <Link className="underline" href="/admin/designer/">
           Back
         </Link>
       </div>
@@ -206,7 +206,7 @@ try {
       Choose from the library. “Effective” results come from your views.
     </p>
   </div>
-  
+
 {(!allTraits.length && !allActions.length) ? (
   <div className="text-sm text-muted-foreground">
     Traits/actions library not loaded (check RLS policies or view permissions).
