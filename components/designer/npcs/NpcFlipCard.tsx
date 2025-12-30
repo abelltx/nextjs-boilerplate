@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { motion } from "framer-motion";
 
 type AbilityKey = "str" | "dex" | "con" | "int" | "wis" | "cha";
 type Abilities = Record<AbilityKey, number>;
@@ -28,8 +27,8 @@ type NpcCardModel = {
   hp?: number | null;
   speed?: string | null;
 
-  attack_bonus?: number | null; // fallback if action has no override
-  save_dc?: number | null;      // fallback if action has no override
+  attack_bonus?: number | null;
+  save_dc?: number | null;
 
   abilities?: Partial<Abilities> | null;
 
@@ -60,25 +59,19 @@ export default function NpcFlipCard({ npc }: { npc: NpcCardModel }) {
       className="group relative w-full text-left"
       aria-label={`Flip card for ${npc.name}`}
     >
-      {/* outer gives perspective */}
       <div className="[perspective:1200px]">
-        {/* inner rotates */}
-        <motion.div
-          animate={{ rotateY: flipped ? 180 : 0 }}
-          transition={{ duration: 0.5 }}
-          className="relative h-[320px] w-full [transform-style:preserve-3d]"
+        <div
+          className={[
+            "relative h-[320px] w-full [transform-style:preserve-3d] transition-transform duration-500",
+            flipped ? "[transform:rotateY(180deg)]" : "",
+          ].join(" ")}
         >
           {/* FRONT */}
           <div className="absolute inset-0 rounded-2xl border bg-background shadow-sm [backface-visibility:hidden] overflow-hidden">
-            {/* image header */}
             <div className="relative h-36 w-full bg-muted">
               {npc.image_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={npc.image_url}
-                  alt={npc.name}
-                  className="h-full w-full object-cover"
-                />
+                <img src={npc.image_url} alt={npc.name} className="h-full w-full object-cover" />
               ) : (
                 <div className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">
                   No Image
@@ -89,7 +82,6 @@ export default function NpcFlipCard({ npc }: { npc: NpcCardModel }) {
               </div>
             </div>
 
-            {/* quick stats */}
             <div className="p-3">
               <div className="grid grid-cols-3 gap-2 text-sm">
                 <Stat label="AC" value={npc.ac ?? "—"} />
@@ -121,7 +113,6 @@ export default function NpcFlipCard({ npc }: { npc: NpcCardModel }) {
             </div>
 
             <div className="h-[calc(320px-49px)] overflow-auto p-3">
-              {/* Traits */}
               {npc.traits?.length ? (
                 <section className="mb-4">
                   <h4 className="text-xs font-semibold uppercase text-muted-foreground">Traits</h4>
@@ -136,13 +127,12 @@ export default function NpcFlipCard({ npc }: { npc: NpcCardModel }) {
                 </section>
               ) : null}
 
-              {/* Actions */}
               {npc.actions?.length ? (
                 <section>
                   <h4 className="text-xs font-semibold uppercase text-muted-foreground">Actions</h4>
                   <ul className="mt-2 space-y-3">
                     {npc.actions.map((a) => {
-                      const usesAttack = a.usesAttackRoll !== false && (a.type === "melee" || a.type === "ranged" || a.type === "other");
+                      const usesAttack = a.usesAttackRoll !== false;
                       const atk = a.attackBonusOverride ?? atkFallback;
 
                       return (
@@ -164,8 +154,16 @@ export default function NpcFlipCard({ npc }: { npc: NpcCardModel }) {
                               <span className="font-medium">{a.save.ability.toUpperCase()}</span> save
                               {(a.save.onFail || a.save.onSuccess) ? (
                                 <div className="mt-1 space-y-1">
-                                  {a.save.onFail ? <div><span className="font-medium">Fail:</span> {a.save.onFail}</div> : null}
-                                  {a.save.onSuccess ? <div><span className="font-medium">Success:</span> {a.save.onSuccess}</div> : null}
+                                  {a.save.onFail ? (
+                                    <div>
+                                      <span className="font-medium">Fail:</span> {a.save.onFail}
+                                    </div>
+                                  ) : null}
+                                  {a.save.onSuccess ? (
+                                    <div>
+                                      <span className="font-medium">Success:</span> {a.save.onSuccess}
+                                    </div>
+                                  ) : null}
                                 </div>
                               ) : null}
                             </div>
@@ -180,7 +178,7 @@ export default function NpcFlipCard({ npc }: { npc: NpcCardModel }) {
               )}
             </div>
           </div>
-        </motion.div>
+        </div>
       </div>
     </button>
   );
