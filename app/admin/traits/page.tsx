@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/server";
+import { openTraitEditAction } from "./edit/actions";
 
 type TraitRow = {
   id: string | null;
@@ -19,8 +20,6 @@ function isUuid(value: unknown): value is string {
     )
   );
 }
-
-
 
 function typePill(t: string) {
   const base =
@@ -124,58 +123,64 @@ export default async function TraitsPage({
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {rows.map((t, idx) => {
-  const idStr = typeof t.id === "string" ? t.id : "";
-  const valid = isUuid(idStr);
+          {rows.map((t, idx) => {
+            const idStr = typeof t.id === "string" ? t.id : "";
+            const valid = isUuid(idStr);
 
-  const card = (
-    <div className="group flex h-full flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="truncate text-lg font-semibold text-slate-900">
-            {t.name || "Unnamed Trait"}
-          </h2>
-          <div className="mt-1 flex flex-wrap items-center gap-2">
-            <span className={typePill(t.type)}>{t.type}</span>
-          </div>
-        </div>
+            const card = (
+              <div className="group flex h-full flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h2 className="truncate text-lg font-semibold text-slate-900">
+                      {t.name || "Unnamed Trait"}
+                    </h2>
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      <span className={typePill(t.type)}>{t.type}</span>
+                    </div>
+                  </div>
 
-        <span
-          className={`text-sm font-semibold ${
-            valid
-              ? "text-slate-400 group-hover:text-slate-600"
-              : "text-red-600"
-          }`}
-        >
-          {valid ? "Edit →" : "Invalid ID"}
-        </span>
-      </div>
+                  <span
+                    className={`text-sm font-semibold ${
+                      valid
+                        ? "text-slate-400 group-hover:text-slate-600"
+                        : "text-red-600"
+                    }`}
+                  >
+                    {valid ? "Edit →" : "Invalid ID"}
+                  </span>
+                </div>
 
-      <p className="line-clamp-3 text-sm text-slate-700">
-        {t.summary || "No summary yet."}
-      </p>
-    </div>
-  );
+                <p className="line-clamp-3 text-sm text-slate-700">
+                  {t.summary || "No summary yet."}
+                </p>
+              </div>
+            );
 
-  if (!valid) {
-    return (
-      <div key={`invalid-${t.name}-${t.updated_at}-${idx}`} className="block">
-        {card}
-      </div>
-    );
-  }
+            if (!valid) {
+              return (
+                <div
+                  key={`invalid-${t.name}-${t.updated_at}-${idx}`}
+                  className="block"
+                >
+                  {card}
+                </div>
+              );
+            }
 
-  return (
-    <Link
-      key={idStr}
-      href={`/admin/traits/edit?id=${encodeURIComponent(idStr)}`}
-      className="block"
-    >
-      {card}
-    </Link>
-  );
-})}
-
+            // ✅ POST FORM: sets cookie then redirects to /admin/traits/edit
+            return (
+              <form
+                key={idStr}
+                action={openTraitEditAction}
+                className="block"
+              >
+                <input type="hidden" name="id" value={idStr} />
+                <button type="submit" className="block w-full text-left">
+                  {card}
+                </button>
+              </form>
+            );
+          })}
         </div>
       )}
     </div>
