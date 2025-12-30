@@ -158,7 +158,7 @@ export default async function TraitsPage({
 
   // 🔐 GUARD: only link when valid
   return valid ? (
-    <Link key={t.id} href={`/admin/traits/${t.id}`} className="block">
+    <Link key={t.id} href={`/admin/traits/edit?id=${t.id}`} className="block">
       {card}
     </Link>
   ) : (
