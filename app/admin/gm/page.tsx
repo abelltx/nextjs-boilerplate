@@ -169,7 +169,7 @@ export default async function GMHubPage() {
       description: "Manage the global trait library used by NPCs and players.",
       href: "/admin/traits", // set when built, e.g. "/admin/traits"
       count: counts.traits,
-      status: "coming",
+      status: "live",
       tone: "purple",
     },
     {

@@ -38,6 +38,7 @@ export default async function TraitEditPage({
         </Link>
       </div>
 
+      {/* UPDATE FORM */}
       <form
         action={updateTraitAction}
         className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
@@ -93,9 +94,7 @@ export default async function TraitEditPage({
           </label>
 
           <label className="flex flex-col gap-1">
-            <span className="text-sm font-semibold text-slate-900">
-              Mechanical Effect
-            </span>
+            <span className="text-sm font-semibold text-slate-900">Mechanical Effect</span>
             <textarea
               name="mechanical_effect"
               rows={3}
@@ -105,9 +104,7 @@ export default async function TraitEditPage({
           </label>
 
           <label className="flex flex-col gap-1">
-            <span className="text-sm font-semibold text-slate-900">
-              Narrative Signal
-            </span>
+            <span className="text-sm font-semibold text-slate-900">Narrative Signal</span>
             <textarea
               name="narrative_signal"
               rows={3}
@@ -117,9 +114,7 @@ export default async function TraitEditPage({
           </label>
 
           <label className="flex flex-col gap-1">
-            <span className="text-sm font-semibold text-slate-900">
-              Growth Condition
-            </span>
+            <span className="text-sm font-semibold text-slate-900">Growth Condition</span>
             <textarea
               name="growth_condition"
               rows={3}
@@ -150,21 +145,19 @@ export default async function TraitEditPage({
           Active
         </label>
 
-        <div className="mt-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <form action={deleteTraitAction}>
-            <input type="hidden" name="id" value={trait.id} />
-            <button
-              className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-800 shadow-sm hover:bg-red-100"
-              formAction={deleteTraitAction}
-            >
-              Delete
-            </button>
-          </form>
-
+        <div className="mt-5 flex items-center justify-end">
           <button className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800">
             Save Changes
           </button>
         </div>
+      </form>
+
+      {/* DELETE FORM (separate, NOT nested) */}
+      <form action={deleteTraitAction} className="mt-3">
+        <input type="hidden" name="id" value={trait.id} />
+        <button className="w-full rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-800 shadow-sm hover:bg-red-100">
+          Delete Trait
+        </button>
       </form>
     </div>
   );
