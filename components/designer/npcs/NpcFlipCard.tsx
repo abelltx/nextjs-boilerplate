@@ -1,204 +1,252 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
-type AbilityKey = "str" | "dex" | "con" | "int" | "wis" | "cha";
-type Abilities = Record<AbilityKey, number>;
-
-type NpcTrait = { id: string; name: string; text: string };
-
-type NpcActionType = "melee" | "ranged" | "other";
-type NpcAction = {
-  id: string;
-  name: string;
-  type: NpcActionType;
-  usesAttackRoll?: boolean;
-  attackBonusOverride?: number | null;
-  damage?: { dice: string; bonus?: number; type?: string };
-  save?: { ability: AbilityKey; dcOverride?: number | null; onFail?: string; onSuccess?: string };
-};
-
-type NpcCardModel = {
-  id: string;
-  name: string;
-  image_url?: string | null;
-
-  ac?: number | null;
-  hp?: number | null;
-  speed?: string | null;
-
-  attack_bonus?: number | null;
-  save_dc?: number | null;
-
-  abilities?: Partial<Abilities> | null;
-
-  traits?: NpcTrait[] | null;
-  actions?: NpcAction[] | null;
-};
-
-function mod(n?: number | null) {
-  const v = Number(n ?? 10);
-  return Math.floor((v - 10) / 2);
+/** ---------- helpers (from your NpcCard) ---------- */
+function n(v: any, fallback = 0) {
+  const x = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(x) ? x : fallback;
 }
-function fmtMod(n?: number | null) {
-  const m = mod(n);
-  return m >= 0 ? `+${m}` : `${m}`;
+function signed(num: number) {
+  return num >= 0 ? `+${num}` : String(num);
+}
+function abilitiesRow(abilities: any) {
+  const a = abilities ?? {};
+  return [
+    ["STR", n(a.str, 10)],
+    ["DEX", n(a.dex, 10)],
+    ["CON", n(a.con, 10)],
+    ["INT", n(a.int, 10)],
+    ["WIS", n(a.wis, 10)],
+    ["CHA", n(a.cha, 10)],
+  ] as const;
 }
 
-export default function NpcFlipCard({ npc }: { npc: NpcCardModel }) {
+export default function NpcFlipCard({ npc }: { npc: any }) {
   const [flipped, setFlipped] = useState(false);
 
-  const ab = npc.abilities ?? {};
-  const atkFallback = npc.attack_bonus ?? 0;
-  const dcFallback = npc.save_dc ?? 10;
+  // Your actual data shape
+  const sb = npc.stat_block ?? {};
+  const abilities = abilitiesRow(sb.abilities);
+
+  const hp = n(sb.hp, 10);
+  const ac = n(sb.ac, 10);
+  const speed = n(sb.speed, 30);
+
+  const mab = n(sb.melee_attack_bonus, 0);
+  const rab = n(sb.ranged_attack_bonus, 0);
+  const dc = n(sb.save_dc, 10);
+
+  const img = (npc.thumbUrl as string | null) ?? null;
+
+  // Traits/actions: support a couple possible shapes without crashing
+  const traits =
+    sb.traits ??
+    npc.traits ??
+    []; // expect [{id,name,text}] or [{name,text}]
+  const actions =
+    sb.actions ??
+    npc.actions ??
+    []; // expect array; we’ll render defensively
+
+  function onFlip() {
+    setFlipped((s) => !s);
+  }
 
   return (
-    <button
-      type="button"
-      onClick={() => setFlipped((s) => !s)}
-      className="group relative w-full text-left"
-      aria-label={`Flip card for ${npc.name}`}
-    >
+    <div className="group relative w-full">
       <div className="[perspective:1200px]">
         <div
           className={[
-            "relative h-[320px] w-full [transform-style:preserve-3d] transition-transform duration-500",
+            "relative h-[340px] w-full [transform-style:preserve-3d] transition-transform duration-500",
             flipped ? "[transform:rotateY(180deg)]" : "",
           ].join(" ")}
         >
-          {/* FRONT */}
-          <div className="absolute inset-0 rounded-2xl border bg-background shadow-sm [backface-visibility:hidden] overflow-hidden">
-            <div className="relative h-36 w-full bg-muted">
-              {npc.image_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={npc.image_url} alt={npc.name} className="h-full w-full object-cover" />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">
-                  No Image
+          {/* ================= FRONT ================= */}
+          <button
+            type="button"
+            onClick={onFlip}
+            className="absolute inset-0 w-full text-left rounded-2xl border bg-background shadow-sm [backface-visibility:hidden] overflow-hidden"
+            aria-label={`Flip card for ${npc.name}`}
+          >
+            <div className="p-4">
+              <div className="flex gap-3">
+                <div className="w-20 h-20 rounded-xl border bg-muted/30 overflow-hidden flex items-center justify-center shrink-0">
+                  {img ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={img}
+                      alt={npc.image_alt ?? npc.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-xs opacity-60">No Image</span>
+                  )}
                 </div>
-              )}
-              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-3">
-                <div className="text-lg font-semibold text-white">{npc.name}</div>
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <h3 className="font-semibold truncate">{npc.name}</h3>
+
+                      <div className="mt-1 flex flex-wrap gap-2 text-xs">
+                        <span className="px-2 py-0.5 rounded-full border">
+                          {npc.npc_type ?? "npc"}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full border">
+                          {npc.default_role ?? "neutral"}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Edit link MUST NOT flip the card */}
+                    <Link
+                      href={`/admin/designer/npcs/edit?id=${npc.id}`}
+                      className="shrink-0 px-3 py-2 rounded-lg border hover:bg-muted/40 text-sm"
+                      onClick={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onPointerDown={(e) => e.stopPropagation()}
+                    >
+                      Edit
+                    </Link>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                    <div className="border rounded-lg p-2">
+                      <div className="opacity-70">HP</div>
+                      <div className="font-semibold">{hp}</div>
+                    </div>
+                    <div className="border rounded-lg p-2">
+                      <div className="opacity-70">AC</div>
+                      <div className="font-semibold">{ac}</div>
+                    </div>
+                    <div className="border rounded-lg p-2">
+                      <div className="opacity-70">Speed</div>
+                      <div className="font-semibold">
+                        {speed}{" "}
+                        <span className="opacity-60">({Math.floor(speed / 5)} sq)</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-2 text-xs border rounded-lg p-2 flex flex-wrap gap-x-3 gap-y-1">
+                    <span>
+                      <span className="opacity-70">Melee</span>{" "}
+                      <span className="font-semibold">{signed(mab)}</span>
+                    </span>
+                    <span>
+                      <span className="opacity-70">Ranged</span>{" "}
+                      <span className="font-semibold">{signed(rab)}</span>
+                    </span>
+                    <span>
+                      <span className="opacity-70">DC</span>{" "}
+                      <span className="font-semibold">{dc}</span>
+                    </span>
+                  </div>
+
+                  <div className="mt-2 grid grid-cols-6 gap-1 text-[11px]">
+                    {abilities.map(([k, v]) => (
+                      <div key={k} className="border rounded-md p-1 text-center">
+                        <div className="opacity-70">{k}</div>
+                        <div className="font-semibold">{v}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                    <span>Click to flip</span>
+                    <span className="opacity-0 transition group-hover:opacity-100">
+                      Traits & Actions →
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
+          </button>
 
-            <div className="p-3">
-              <div className="grid grid-cols-3 gap-2 text-sm">
-                <Stat label="AC" value={npc.ac ?? "—"} />
-                <Stat label="HP" value={npc.hp ?? "—"} />
-                <Stat label="Speed" value={npc.speed ?? "—"} />
-              </div>
-
-              <div className="mt-3 grid grid-cols-6 gap-2 text-center text-xs">
-                <AbilityBox k="STR" score={ab.str} />
-                <AbilityBox k="DEX" score={ab.dex} />
-                <AbilityBox k="CON" score={ab.con} />
-                <AbilityBox k="INT" score={ab.int} />
-                <AbilityBox k="WIS" score={ab.wis} />
-                <AbilityBox k="CHA" score={ab.cha} />
-              </div>
-
-              <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
-                <span>Click to flip</span>
-                <span className="opacity-0 transition group-hover:opacity-100">Traits & Actions →</span>
-              </div>
-            </div>
-          </div>
-
-          {/* BACK */}
-          <div className="absolute inset-0 rounded-2xl border bg-background shadow-sm [transform:rotateY(180deg)] [backface-visibility:hidden] overflow-hidden">
+          {/* ================= BACK ================= */}
+          <button
+            type="button"
+            onClick={onFlip}
+            className="absolute inset-0 w-full text-left rounded-2xl border bg-background shadow-sm [transform:rotateY(180deg)] [backface-visibility:hidden] overflow-hidden"
+            aria-label={`Flip back for ${npc.name}`}
+          >
             <div className="flex items-center justify-between border-b p-3">
-              <div className="font-semibold">{npc.name}</div>
+              <div className="font-semibold truncate pr-2">{npc.name}</div>
               <div className="text-xs text-muted-foreground">Click to flip back</div>
             </div>
 
-            <div className="h-[calc(320px-49px)] overflow-auto p-3">
-              {npc.traits?.length ? (
-                <section className="mb-4">
-                  <h4 className="text-xs font-semibold uppercase text-muted-foreground">Traits</h4>
+            <div className="h-[calc(340px-49px)] overflow-auto p-3 space-y-4">
+              {/* Traits */}
+              <section>
+                <h4 className="text-xs font-semibold uppercase text-muted-foreground">Traits</h4>
+                {traits?.length ? (
                   <ul className="mt-2 space-y-2">
-                    {npc.traits.map((t) => (
-                      <li key={t.id} className="text-sm">
-                        <span className="font-medium">{t.name}.</span>{" "}
-                        <span className="text-muted-foreground italic">{t.text}</span>
+                    {traits.map((t: any, idx: number) => (
+                      <li key={t.id ?? `${t.name ?? "trait"}-${idx}`} className="text-sm">
+                        <span className="font-medium">{t.name ?? "Trait"}.</span>{" "}
+                        <span className="text-muted-foreground italic">{t.text ?? t.description ?? ""}</span>
                       </li>
                     ))}
                   </ul>
-                </section>
-              ) : null}
+                ) : (
+                  <div className="mt-2 text-sm text-muted-foreground">No traits yet.</div>
+                )}
+              </section>
 
-              {npc.actions?.length ? (
-                <section>
-                  <h4 className="text-xs font-semibold uppercase text-muted-foreground">Actions</h4>
+              {/* Actions */}
+              <section>
+                <h4 className="text-xs font-semibold uppercase text-muted-foreground">Actions</h4>
+                {actions?.length ? (
                   <ul className="mt-2 space-y-3">
-                    {npc.actions.map((a) => {
-                      const usesAttack = a.usesAttackRoll !== false;
-                      const atk = a.attackBonusOverride ?? atkFallback;
+                    {actions.map((a: any, idx: number) => {
+                      const name = a.name ?? "Action";
+                      const usesAttack = a.usesAttackRoll !== false && (a.damage?.dice || a.damage_dice);
+                      const atk = n(a.attackBonusOverride ?? a.attack_bonus ?? sb.melee_attack_bonus ?? 0, 0);
+
+                      const dice = a.damage?.dice ?? a.damage_dice;
+                      const bonus = a.damage?.bonus ?? a.damage_bonus;
+                      const dtype = a.damage?.type ?? a.damage_type;
+
+                      const save = a.save ?? null;
+                      const saveAbility = save?.ability ?? a.save_ability;
+                      const saveDc = n(save?.dcOverride ?? a.save_dc ?? dc, dc);
 
                       return (
-                        <li key={a.id} className="rounded-xl border p-2">
-                          <div className="text-sm font-medium">{a.name}</div>
+                        <li key={a.id ?? `${name}-${idx}`} className="rounded-xl border p-2">
+                          <div className="text-sm font-medium">{name}</div>
 
-                          {usesAttack && a.damage?.dice ? (
+                          {usesAttack && dice ? (
                             <div className="mt-1 text-xs text-muted-foreground">
                               <span className="font-medium">+{atk}</span> to hit •{" "}
-                              <span className="font-medium">{a.damage.dice}</span>
-                              {a.damage.bonus ? ` + ${a.damage.bonus}` : ""}{" "}
-                              {a.damage.type ?? ""}
+                              <span className="font-medium">{dice}</span>
+                              {bonus ? ` + ${bonus}` : ""} {dtype ?? ""}
                             </div>
                           ) : null}
 
-                          {a.save ? (
+                          {saveAbility ? (
                             <div className="mt-1 text-xs text-muted-foreground">
-                              DC <span className="font-medium">{a.save.dcOverride ?? dcFallback}</span>{" "}
-                              <span className="font-medium">{a.save.ability.toUpperCase()}</span> save
-                              {(a.save.onFail || a.save.onSuccess) ? (
-                                <div className="mt-1 space-y-1">
-                                  {a.save.onFail ? (
-                                    <div>
-                                      <span className="font-medium">Fail:</span> {a.save.onFail}
-                                    </div>
-                                  ) : null}
-                                  {a.save.onSuccess ? (
-                                    <div>
-                                      <span className="font-medium">Success:</span> {a.save.onSuccess}
-                                    </div>
-                                  ) : null}
-                                </div>
-                              ) : null}
+                              DC <span className="font-medium">{saveDc}</span>{" "}
+                              <span className="font-medium">{String(saveAbility).toUpperCase()}</span> save
                             </div>
+                          ) : null}
+
+                          {a.text ? (
+                            <div className="mt-1 text-xs text-muted-foreground">{a.text}</div>
                           ) : null}
                         </li>
                       );
                     })}
                   </ul>
-                </section>
-              ) : (
-                <div className="text-sm text-muted-foreground">No actions yet.</div>
-              )}
+                ) : (
+                  <div className="mt-2 text-sm text-muted-foreground">No actions yet.</div>
+                )}
+              </section>
             </div>
-          </div>
+          </button>
         </div>
       </div>
-    </button>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: any }) {
-  return (
-    <div className="rounded-xl border p-2">
-      <div className="text-[10px] font-semibold uppercase text-muted-foreground">{label}</div>
-      <div className="text-sm font-semibold">{String(value)}</div>
-    </div>
-  );
-}
-
-function AbilityBox({ k, score }: { k: string; score?: number }) {
-  return (
-    <div className="rounded-xl border p-2">
-      <div className="text-[10px] font-semibold text-muted-foreground">{k}</div>
-      <div className="text-sm font-semibold leading-4">{score ?? "—"}</div>
-      <div className="text-[11px] text-muted-foreground">{score != null ? fmtMod(score) : ""}</div>
     </div>
   );
 }

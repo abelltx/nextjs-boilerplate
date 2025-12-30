@@ -4,6 +4,7 @@ import NpcFlipCard from "@/components/designer/npcs/NpcFlipCard";
 
 
 
+
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
