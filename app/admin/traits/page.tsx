@@ -11,6 +11,17 @@ type TraitRow = {
   updated_at: string;
 };
 
+function isUuid(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value
+    )
+  );
+}
+
+
+
 function typePill(t: string) {
   const base =
     "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium";
@@ -113,45 +124,50 @@ export default async function TraitsPage({
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {rows.map((t) => (
-            <Link key={t.id} href={`/admin/traits/${t.id}`} className="block">
-              <div className="group flex h-full flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h2 className="truncate text-lg font-semibold text-slate-900">
-                      {t.name}
-                    </h2>
-                    <div className="mt-1 flex flex-wrap items-center gap-2">
-                      <span className={typePill(t.type)}>{t.type}</span>
-                      {!t.is_active ? (
-                        <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-700">
-                          Inactive
-                        </span>
-                      ) : null}
-                    </div>
-                  </div>
-                  <span className="text-sm font-semibold text-slate-400 group-hover:text-slate-600">
-                    Open →
-                  </span>
-                </div>
+          {rows.map((t) => {
+  const valid = isUuid(t.id);
 
-                <p className="line-clamp-3 text-sm text-slate-700">
-                  {t.summary || "No summary yet."}
-                </p>
+  const card = (
+    <div className="group flex h-full flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="truncate text-lg font-semibold text-slate-900">
+            {t.name || "Unnamed Trait"}
+          </h2>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <span className={typePill(t.type)}>{t.type}</span>
+          </div>
+        </div>
 
-                <div className="mt-auto flex flex-wrap gap-1">
-                  {(t.tags ?? []).slice(0, 6).map((tag) => (
-                    <span
-                      key={tag}
-                      className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-700"
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </Link>
-          ))}
+        <span
+          className={`text-sm font-semibold ${
+            valid
+              ? "text-slate-400 group-hover:text-slate-600"
+              : "text-red-600"
+          }`}
+        >
+          {valid ? "Open →" : "Invalid ID"}
+        </span>
+      </div>
+
+      <p className="line-clamp-3 text-sm text-slate-700">
+        {t.summary || "No summary yet."}
+      </p>
+    </div>
+  );
+
+  // 🔐 GUARD: only link when valid
+  return valid ? (
+    <Link key={t.id} href={`/admin/traits/${t.id}`} className="block">
+      {card}
+    </Link>
+  ) : (
+    <div key={`invalid-${t.name}`} className="block">
+      {card}
+    </div>
+  );
+})}
+
         </div>
       )}
     </div>
