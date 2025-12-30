@@ -18,7 +18,9 @@ export default async function ActionEditPage({
   const sp = (await searchParams) ?? {};
   const err = typeof sp.err === "string" ? sp.err : undefined;
 
-  const id = cookies().get(COOKIE_KEY)?.value ?? "";
+ const cookieStore = await cookies();
+const id = cookieStore.get(COOKIE_KEY)?.value ?? "";
+
   if (!isUuid(id)) redirect("/admin/actions?err=missing_or_invalid_cookie");
 
   const supabase = await createClient();
