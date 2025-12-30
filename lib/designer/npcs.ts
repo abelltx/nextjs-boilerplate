@@ -1,4 +1,7 @@
 ﻿import { createClient } from "@/utils/supabase/server";
+import { getNpcPassives } from "@/lib/designer/traits";
+import { getNpcEffectiveActions } from "@/lib/designer/actions";
+
 
 export type NpcRow = {
   id: string;
@@ -35,7 +38,6 @@ export async function listNpcs() {
 
   const res = await supabase
     .from("npcs")
-    // ✅ IMPORTANT: include stat_block so the cards can render real stats
     .select(
       "id,name,npc_type,default_role,description,stat_block,image_base_path,image_alt,image_updated_at,is_archived,updated_at"
     )
@@ -44,16 +46,33 @@ export async function listNpcs() {
 
   if (res.error) throw new Error(`listNpcs error: ${res.error.message}`);
 
-  return (res.data ?? []).map((n: any) => {
-    const hasImg = !!n.image_base_path && !!supabaseUrl;
-    const npcId = n.id as string;
+  const rows = res.data ?? [];
 
-    return {
-      ...n,
-      thumbUrl: hasImg ? buildNpcImageUrl(supabaseUrl, npcId, "thumb.webp", n.image_updated_at) : null,
-    };
-  });
+  // ✅ Pull effective traits/actions exactly like the edit page does
+  const enriched = await Promise.all(
+    rows.map(async (n: any) => {
+      const npcId = n.id as string;
+      const hasImg = !!n.image_base_path && !!supabaseUrl;
+
+      const [passives, effectiveActions] = await Promise.all([
+        getNpcPassives(npcId),
+        getNpcEffectiveActions(npcId),
+      ]);
+
+      return {
+        ...n,
+        thumbUrl: hasImg
+          ? buildNpcImageUrl(supabaseUrl, npcId, "thumb.webp", n.image_updated_at)
+          : null,
+        passives: passives ?? [],
+        effectiveActions: effectiveActions ?? [],
+      };
+    })
+  );
+
+  return enriched;
 }
+
 
 export async function getNpcById(
   id: string
