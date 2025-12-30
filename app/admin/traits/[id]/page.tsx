@@ -1,7 +1,12 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 import { updateTraitAction, deleteTraitAction } from "@/app/actions/traitsAdmin";
+
+function looksLikeUuid(id: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    id
+  );
+}
 
 export default async function TraitEditPage({
   params,
@@ -9,16 +14,80 @@ export default async function TraitEditPage({
   params: { id: string };
 }) {
   const supabase = await createClient();
+  const id = params?.id ?? "";
+
+  // Auth debug (helps detect "anon" vs authenticated)
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData?.user?.id ?? null;
+
+  // If id is bad, show it (do NOT redirect)
+  if (!looksLikeUuid(id)) {
+    return (
+      <div className="mx-auto max-w-3xl p-6">
+        <h1 className="text-2xl font-bold text-slate-900">Trait not found</h1>
+        <p className="mt-2 text-slate-700">
+          The route param is not a UUID:
+        </p>
+        <pre className="mt-3 rounded-xl border border-slate-200 bg-white p-3 text-sm">
+          {JSON.stringify({ id, userId }, null, 2)}
+        </pre>
+        <Link
+          href="/admin/traits"
+          className="mt-4 inline-block rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm hover:bg-slate-50"
+        >
+          ← Back to Traits
+        </Link>
+      </div>
+    );
+  }
 
   const { data: trait, error } = await supabase
     .from("traits")
     .select("*")
-    .eq("id", params.id)
+    .eq("id", id)
     .maybeSingle();
 
+  // If query fails or returns null, show WHY (do NOT redirect)
   if (error || !trait) {
-    console.error("TraitEditPage:", error?.message || "Trait not found");
-    redirect("/admin/traits");
+    return (
+      <div className="mx-auto max-w-3xl p-6">
+        <h1 className="text-2xl font-bold text-slate-900">Trait could not load</h1>
+        <p className="mt-2 text-slate-700">
+          This page is returning to the browser because the row lookup is failing.
+          Here’s the exact debug output:
+        </p>
+        <pre className="mt-3 rounded-xl border border-slate-200 bg-white p-3 text-sm overflow-auto">
+          {JSON.stringify(
+            {
+              id,
+              userId,
+              error: error?.message ?? null,
+              hint: (error as any)?.hint ?? null,
+              details: (error as any)?.details ?? null,
+              returnedTrait: !!trait,
+            },
+            null,
+            2
+          )}
+        </pre>
+
+        <div className="mt-4 flex gap-2">
+          <Link
+            href="/admin/traits"
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm hover:bg-slate-50"
+          >
+            ← Back to Traits
+          </Link>
+
+          <Link
+            href={`/admin/traits/${id}`}
+            className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800"
+          >
+            Retry
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   const tagStr = Array.isArray(trait.tags) ? trait.tags.join(", ") : "";
@@ -38,7 +107,6 @@ export default async function TraitEditPage({
         </Link>
       </div>
 
-      {/* UPDATE FORM */}
       <form
         action={updateTraitAction}
         className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
@@ -94,7 +162,9 @@ export default async function TraitEditPage({
           </label>
 
           <label className="flex flex-col gap-1">
-            <span className="text-sm font-semibold text-slate-900">Mechanical Effect</span>
+            <span className="text-sm font-semibold text-slate-900">
+              Mechanical Effect
+            </span>
             <textarea
               name="mechanical_effect"
               rows={3}
@@ -104,7 +174,9 @@ export default async function TraitEditPage({
           </label>
 
           <label className="flex flex-col gap-1">
-            <span className="text-sm font-semibold text-slate-900">Narrative Signal</span>
+            <span className="text-sm font-semibold text-slate-900">
+              Narrative Signal
+            </span>
             <textarea
               name="narrative_signal"
               rows={3}
@@ -114,7 +186,9 @@ export default async function TraitEditPage({
           </label>
 
           <label className="flex flex-col gap-1">
-            <span className="text-sm font-semibold text-slate-900">Growth Condition</span>
+            <span className="text-sm font-semibold text-slate-900">
+              Growth Condition
+            </span>
             <textarea
               name="growth_condition"
               rows={3}
@@ -152,7 +226,6 @@ export default async function TraitEditPage({
         </div>
       </form>
 
-      {/* DELETE FORM (separate, NOT nested) */}
       <form action={deleteTraitAction} className="mt-3">
         <input type="hidden" name="id" value={trait.id} />
         <button className="w-full rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-800 shadow-sm hover:bg-red-100">
