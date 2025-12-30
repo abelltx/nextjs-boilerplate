@@ -57,7 +57,7 @@ export default async function EditNpcByQueryPage({
       <div className="p-6">
         <h1 className="text-xl font-semibold">NPC not found (or access denied)</h1>
         <pre className="mt-4 text-sm opacity-80">id={id}</pre>
-        <Link className="underline" href="/admin/designer/npcs">
+        <Link className="underline" href="/admin/designer/">
           Back
         </Link>
       </div>
@@ -119,7 +119,7 @@ try {
         </div>
 
         <div className="flex items-center gap-2">
-          <Link href="/admin/designer/npcs" className="px-3 py-2 rounded-lg border hover:bg-muted/40">
+          <Link href="/admin/designer/" className="px-3 py-2 rounded-lg border hover:bg-muted/40">
             Back
           </Link>
          <DeleteNpcButton npcName={npc.name} onDelete={del} />
