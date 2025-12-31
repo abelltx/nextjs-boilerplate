@@ -7,7 +7,6 @@ import {
   addItemEffectAction,
   deleteItemEffectAction,
   deleteItemAction,
-  uploadItemImageAction,
 } from "@/app/admin/items/edit/actions";
 import DeleteItemButton from "@/app/admin/items/edit/DeleteItemButton";
 import ItemImageUploader from "@/app/admin/items/edit/ItemImageUploader";
