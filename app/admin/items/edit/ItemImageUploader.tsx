@@ -9,7 +9,22 @@ import { itemClearImageMetaAction, itemSetImageMetaAction } from "./actions";
 const BUCKET = "item-images";
 const FILES = ["portrait.webp", "medium.webp", "small.webp", "thumb.webp"] as const;
 
-export default function ItemImageUploader({ item }: { item: any }) {
+type ItemImg = {
+  thumbUrl?: string;
+  mediumUrl?: string;
+  alt?: string;
+};
+
+type ItemWithImg = any & {
+  // new: server page can attach signed urls here
+  _img?: ItemImg;
+
+  // backward-compatible: if you ever pass these directly
+  thumbUrl?: string;
+  mediumUrl?: string;
+};
+
+export default function ItemImageUploader({ item }: { item: ItemWithImg }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
   const [pickedFile, setPickedFile] = useState<File | null>(null);
@@ -103,23 +118,37 @@ export default function ItemImageUploader({ item }: { item: any }) {
     }
   }
 
-  // If your page already derives these URLs, pass them in as item.mediumUrl etc.
-  const mediumUrl = item.mediumUrl ?? null;
+  // ✅ Prefer server-derived signed URLs if provided
+  const mediumUrl =
+    item?._img?.mediumUrl ??
+    item?.mediumUrl ??
+    null;
+
+  const thumbUrl =
+    item?._img?.thumbUrl ??
+    item?.thumbUrl ??
+    null;
+
+  const altText =
+    item?._img?.alt ??
+    item?.image_alt ??
+    item?.name ??
+    "Item";
 
   return (
     <div className="flex items-start gap-4">
       <div>
-        {mediumUrl ? (
+        {mediumUrl || thumbUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={mediumUrl}
-            alt={item.image_alt ?? item.name}
+            src={(mediumUrl ?? thumbUrl) as string}
+            alt={altText}
             width={167}
             height={215}
             className="rounded-lg border object-cover"
           />
         ) : (
-          <div className="w-[167px] h-[215px] rounded-lg border bg-muted/40" />
+          <div className="h-[215px] w-[167px] rounded-lg border bg-muted/40" />
         )}
       </div>
 
@@ -133,7 +162,7 @@ export default function ItemImageUploader({ item }: { item: any }) {
             type="button"
             disabled={busy}
             onClick={openPicker}
-            className="px-3 py-2 rounded-lg bg-black text-white hover:opacity-90 disabled:opacity-50"
+            className="rounded-lg bg-black px-3 py-2 text-white hover:opacity-90 disabled:opacity-50"
           >
             {item.image_base_path ? "Replace image" : "Upload image"}
           </button>
@@ -142,7 +171,7 @@ export default function ItemImageUploader({ item }: { item: any }) {
             type="button"
             disabled={busy || !item.image_base_path}
             onClick={onRemove}
-            className="px-3 py-2 rounded-lg border hover:bg-muted/40 disabled:opacity-50"
+            className="rounded-lg border px-3 py-2 hover:bg-muted/40 disabled:opacity-50"
           >
             Remove image
           </button>
@@ -159,11 +188,7 @@ export default function ItemImageUploader({ item }: { item: any }) {
         />
 
         {pickedFile && (
-          <ItemCropModal
-            file={pickedFile}
-            onCancel={() => setPickedFile(null)}
-            onConfirm={onCropConfirm}
-          />
+          <ItemCropModal file={pickedFile} onCancel={() => setPickedFile(null)} onConfirm={onCropConfirm} />
         )}
       </div>
     </div>

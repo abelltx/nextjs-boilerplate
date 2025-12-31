@@ -11,7 +11,6 @@ import {
 import DeleteItemButton from "@/app/admin/items/edit/DeleteItemButton";
 import ItemImageUploader from "@/app/admin/items/edit/ItemImageUploader";
 
-
 const COOKIE_KEY = "item_edit_id";
 
 const EFFECT_KEYS: Record<string, { label: string; value: string }[]> = {
@@ -130,13 +129,25 @@ function isUuid(v: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
 }
 
+function joinBasePath(basePath: string, filename: string) {
+  const b = String(basePath || "");
+  if (!b) return "";
+  return b.endsWith("/") ? `${b}${filename}` : `${b}/${filename}`;
+}
+
+async function signedUrlFor(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  objectPath: string,
+  expiresInSeconds = 60 * 60
+) {
+  if (!objectPath) return null;
+  const { data, error } = await supabase.storage.from("item-images").createSignedUrl(objectPath, expiresInSeconds);
+  if (error) return null;
+  return data?.signedUrl ?? null;
+}
+
 // --- Small client widget for guided effect adds ---
 function EffectsAddForm({ itemId }: { itemId: string }) {
-  // Inline client component via dynamic import isn’t needed; Next supports client components only in separate files.
-  // So we’ll render a simple server form + a tiny progressive enhancement by using <select> + name defaults.
-  // (Guided keys/modes still happen because we constrain options per type with multiple forms.)
-  //
-  // If you want fully dynamic dependent dropdowns on one form, move this into a separate client component file.
   return (
     <div className="rounded-2xl border p-3">
       <div className="font-semibold">Add Effect</div>
@@ -160,9 +171,7 @@ function EffectsAddForm({ itemId }: { itemId: string }) {
               <div className="flex flex-wrap items-end gap-2">
                 <div className="min-w-[140px]">
                   <label className="text-xs text-muted-foreground">type</label>
-                  <div className="mt-1 h-9 rounded-md border px-3 text-sm flex items-center">
-                    {type}
-                  </div>
+                  <div className="mt-1 flex h-9 items-center rounded-md border px-3 text-sm">{type}</div>
                 </div>
 
                 <div className="min-w-[180px]">
@@ -218,7 +227,7 @@ function EffectsAddForm({ itemId }: { itemId: string }) {
                   />
                 </div>
 
-                <div className="flex-1 min-w-[220px]">
+                <div className="min-w-[220px] flex-1">
                   <label className="text-xs text-muted-foreground">notes</label>
                   <input
                     name="notes"
@@ -258,9 +267,7 @@ export default async function ItemEditPage({
     return (
       <div className="p-6">
         <h1 className="text-xl font-semibold">Edit Item</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          No item selected. Go back to the library and open an item.
-        </p>
+        <p className="mt-2 text-sm text-muted-foreground">No item selected. Go back to the library and open an item.</p>
         <div className="mt-4">
           <Link className="rounded-lg border px-3 py-2 text-sm hover:bg-muted" href="/admin/items">
             ← Back to Items
@@ -280,6 +287,16 @@ export default async function ItemEditPage({
   }
   if (!item) redirect("/admin/items");
 
+  // ✅ Signed URLs for item images from Storage bucket "item-images"
+  const base = (item.image_base_path ?? "") as string;
+  const thumbPath = base ? joinBasePath(base, "thumb.webp") : "";
+  const mediumPath = base ? joinBasePath(base, "medium.webp") : "";
+
+  const [thumbUrl, mediumUrl] = await Promise.all([
+    base ? signedUrlFor(supabase, thumbPath) : Promise.resolve(null),
+    base ? signedUrlFor(supabase, mediumPath) : Promise.resolve(null),
+  ]);
+
   const { data: effects, error: effErr } = await supabase
     .from("item_effects")
     .select("*")
@@ -298,19 +315,17 @@ export default async function ItemEditPage({
         {/* Save / Upload banners */}
         <div className="space-y-2">
           {saved ? (
-            <div className="rounded-xl border bg-emerald-50 px-3 py-2 text-sm text-emerald-900 animate-pulse">
+            <div className="animate-pulse rounded-xl border bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
               ✅ Saved.
             </div>
           ) : null}
           {img ? (
-            <div className="rounded-xl border bg-blue-50 px-3 py-2 text-sm text-blue-900 animate-pulse">
+            <div className="animate-pulse rounded-xl border bg-blue-50 px-3 py-2 text-sm text-blue-900">
               🖼️ Image updated.
             </div>
           ) : null}
           {err ? (
-            <div className="rounded-xl border bg-red-50 px-3 py-2 text-sm text-red-900">
-              Error: {err}
-            </div>
+            <div className="rounded-xl border bg-red-50 px-3 py-2 text-sm text-red-900">Error: {err}</div>
           ) : null}
         </div>
 
@@ -328,15 +343,34 @@ export default async function ItemEditPage({
           </div>
         </div>
 
-        {/* Image upload (file picker) - replaces URL-only workflow */}
-        <div className="mt-4 rounded-2xl border p-4">
-            <div className="font-semibold mb-2">Item Image</div>
-            <ItemImageUploader item={item} />
+        {/* Image upload (file picker) */}
+        <div className="mt-4 rounded-2xl border p-3">
+          <div className="font-semibold">Item Image</div>
+          <p className="text-xs text-muted-foreground">
+            Stored in bucket <span className="font-mono">item-images</span> at{" "}
+            <span className="font-mono">{item.image_base_path ?? "(no base path yet)"}</span>
+          </p>
+
+          <div className="mt-3">
+            <ItemImageUploader
+              item={{
+                ...item,
+                _img: {
+                  thumbUrl: thumbUrl ?? undefined,
+                  mediumUrl: mediumUrl ?? undefined,
+                  alt: (item.image_alt ?? item.name ?? "Item") as string,
+                },
+              }}
+            />
+          </div>
         </div>
-<input type="hidden" name="image_url" value={item.image_url ?? ""} />
+
         {/* Core editor */}
         <form action={updateItemAction} className="mt-4 rounded-2xl border p-4">
           <input type="hidden" name="id" value={itemId} />
+
+          {/* Keep legacy image_url so updates don't wipe it */}
+          <input type="hidden" name="image_url" value={item.image_url ?? ""} />
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div>
@@ -362,11 +396,7 @@ export default async function ItemEditPage({
 
               <div>
                 <label className="text-xs text-muted-foreground">Rarity</label>
-                <select
-                  name="rarity"
-                  defaultValue={item.rarity ?? ""}
-                  className="mt-1 h-9 w-full rounded-md border px-2 text-sm"
-                >
+                <select name="rarity" defaultValue={item.rarity ?? ""} className="mt-1 h-9 w-full rounded-md border px-2 text-sm">
                   <option value="">—</option>
                   {["common", "uncommon", "rare", "very_rare", "legendary", "artifact"].map((r) => (
                     <option key={r} value={r}>
@@ -455,10 +485,6 @@ export default async function ItemEditPage({
                 className="mt-1 min-h-[90px] w-full rounded-md border p-3 text-sm"
               />
             </div>
-
-            {/* We keep image_url in the form so your DB update doesn't wipe it.
-                Hidden because you don't want URL uploads. */}
-            <input type="hidden" name="image_url" value={item.image_url ?? ""} />
           </div>
 
           {/* Weaponizable */}
@@ -466,9 +492,7 @@ export default async function ItemEditPage({
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <div className="font-semibold">Weaponizable</div>
-                <div className="text-xs text-muted-foreground">
-                  Optional combat fields for items that can act like weapons.
-                </div>
+                <div className="text-xs text-muted-foreground">Optional combat fields for items that can act like weapons.</div>
               </div>
 
               <label className="flex items-center gap-2 text-sm">
@@ -567,11 +591,7 @@ export default async function ItemEditPage({
 
               <div>
                 <label className="text-xs text-muted-foreground">save_ability</label>
-                <select
-                  name="save_ability"
-                  defaultValue={item.save_ability ?? ""}
-                  className="mt-1 h-9 w-full rounded-md border px-2 text-sm"
-                >
+                <select name="save_ability" defaultValue={item.save_ability ?? ""} className="mt-1 h-9 w-full rounded-md border px-2 text-sm">
                   <option value="">—</option>
                   {["str", "dex", "con", "int", "wis", "cha"].map((a) => (
                     <option key={a} value={a}>
@@ -599,11 +619,7 @@ export default async function ItemEditPage({
 
               <div className="md:col-span-3">
                 <label className="text-xs text-muted-foreground">on_success</label>
-                <input
-                  name="on_success"
-                  defaultValue={item.on_success ?? ""}
-                  className="mt-1 h-9 w-full rounded-md border px-3 text-sm"
-                />
+                <input name="on_success" defaultValue={item.on_success ?? ""} className="mt-1 h-9 w-full rounded-md border px-3 text-sm" />
               </div>
             </div>
           </div>
@@ -621,9 +637,7 @@ export default async function ItemEditPage({
 
           <div className="rounded-2xl border p-3">
             <div className="font-semibold">Current Effects</div>
-            <p className="text-xs text-muted-foreground">
-              These are shown in the library card preview via the DB view.
-            </p>
+            <p className="text-xs text-muted-foreground">These are shown in the library card preview via the DB view.</p>
 
             <div className="mt-3 space-y-2">
               {(effects ?? []).length ? (
@@ -634,8 +648,8 @@ export default async function ItemEditPage({
                         {e.effect_type} • {e.effect_key} • {e.mode}
                         {e.value != null ? ` • ${e.value}` : ""}
                       </div>
-                      {e.notes ? <div className="text-xs text-muted-foreground mt-1">{e.notes}</div> : null}
-                      <div className="text-[11px] text-muted-foreground mt-1">sort: {e.sort_order}</div>
+                      {e.notes ? <div className="mt-1 text-xs text-muted-foreground">{e.notes}</div> : null}
+                      <div className="mt-1 text-[11px] text-muted-foreground">sort: {e.sort_order}</div>
                     </div>
 
                     <form action={deleteItemEffectAction}>
@@ -648,14 +662,15 @@ export default async function ItemEditPage({
                   </div>
                 ))
               ) : (
-                <div className="text-sm text-muted-foreground italic">No effects yet.</div>
+                <div className="text-sm italic text-muted-foreground">No effects yet.</div>
               )}
             </div>
           </div>
         </div>
 
         <div className="mt-6 text-xs text-muted-foreground">
-          Note: cookie selection is required by design. Open items from the library grid (POST action) to set the edit cookie.
+          Note: cookie selection is required by design. Open items from the library grid (POST action) to set the edit
+          cookie.
         </div>
       </div>
     </div>
