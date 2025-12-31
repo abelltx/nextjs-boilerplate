@@ -8,7 +8,82 @@ type SP = {
   rarity?: string;
   weaponizable?: string;
   active?: string;
+  saved?: string;
+  deleted?: string;
+  err?: string;
 };
+
+type ItemRow = {
+  id: string;
+  name: string;
+  category: string;
+  rarity: string | null;
+  weight_lb: number | null;
+  summary: string | null;
+  rules_text: string | null;
+  tags: string[] | null;
+  image_url: string | null;
+  is_active: boolean;
+  carry_behavior: string;
+  equip_slots: string[] | null;
+  is_weaponizable: boolean;
+  effects_preview: string | null;
+  effects_count: number | null;
+  updated_at: string;
+};
+
+function isUuid(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value
+    )
+  );
+}
+
+function categoryPill(cat: string) {
+  const base =
+    "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium";
+  switch (cat) {
+    case "weapon":
+      return `${base} border-red-200 bg-red-50 text-red-800`;
+    case "armor":
+      return `${base} border-blue-200 bg-blue-50 text-blue-800`;
+    case "consumable":
+      return `${base} border-purple-200 bg-purple-50 text-purple-800`;
+    case "gear":
+      return `${base} border-emerald-200 bg-emerald-50 text-emerald-800`;
+    case "tool":
+      return `${base} border-amber-200 bg-amber-50 text-amber-800`;
+    case "quest":
+      return `${base} border-yellow-200 bg-yellow-50 text-yellow-800`;
+    case "loot":
+      return `${base} border-slate-200 bg-slate-50 text-slate-800`;
+    default:
+      return `${base} border-zinc-200 bg-zinc-50 text-zinc-800`;
+  }
+}
+
+function rarityPill(r: string) {
+  const base =
+    "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium";
+  switch (r) {
+    case "common":
+      return `${base} border-slate-200 bg-slate-50 text-slate-700`;
+    case "uncommon":
+      return `${base} border-emerald-200 bg-emerald-50 text-emerald-800`;
+    case "rare":
+      return `${base} border-blue-200 bg-blue-50 text-blue-800`;
+    case "very_rare":
+      return `${base} border-purple-200 bg-purple-50 text-purple-800`;
+    case "legendary":
+      return `${base} border-amber-200 bg-amber-50 text-amber-900`;
+    case "artifact":
+      return `${base} border-rose-200 bg-rose-50 text-rose-900`;
+    default:
+      return `${base} border-zinc-200 bg-zinc-50 text-zinc-800`;
+  }
+}
 
 export default async function ItemsLibraryPage({
   searchParams,
@@ -16,65 +91,113 @@ export default async function ItemsLibraryPage({
   searchParams: Promise<SP>;
 }) {
   const sp = await searchParams;
+
   const q = (sp.q ?? "").trim();
   const category = (sp.category ?? "").trim();
   const rarity = (sp.rarity ?? "").trim();
   const weaponizable = (sp.weaponizable ?? "").trim(); // "1" | "0" | ""
   const active = (sp.active ?? "").trim(); // "1" | "0" | ""
 
+  // optional alerts (match Actions page vibe)
+  const saved = (sp.saved ?? "").trim();
+  const deleted = (sp.deleted ?? "").trim();
+  const err = (sp.err ?? "").trim();
+
   const supabase = await createClient();
 
-  let query = supabase
+  // ---- data query (cards) ----
+  let dataQuery = supabase
     .from("items_with_effects")
     .select("*")
     .order("updated_at", { ascending: false });
 
   if (q) {
-    query = query.or(
+    dataQuery = dataQuery.or(
       `name.ilike.%${q}%,summary.ilike.%${q}%,rules_text.ilike.%${q}%`
     );
   }
-  if (category) query = query.eq("category", category);
-  if (rarity) query = query.eq("rarity", rarity);
-  if (weaponizable === "1") query = query.eq("is_weaponizable", true);
-  if (weaponizable === "0") query = query.eq("is_weaponizable", false);
-  if (active === "1") query = query.eq("is_active", true);
-  if (active === "0") query = query.eq("is_active", false);
+  if (category) dataQuery = dataQuery.eq("category", category);
+  if (rarity) dataQuery = dataQuery.eq("rarity", rarity);
+  if (weaponizable === "1") dataQuery = dataQuery.eq("is_weaponizable", true);
+  if (weaponizable === "0") dataQuery = dataQuery.eq("is_weaponizable", false);
+  if (active === "1") dataQuery = dataQuery.eq("is_active", true);
+  if (active === "0") dataQuery = dataQuery.eq("is_active", false);
 
-  const { data: items, error } = await query;
+  // ---- count query (matching filters) ----
+  let countQuery = supabase.from("items").select("*", { count: "exact", head: true });
+
+  if (q) {
+    // keep count light: just name match (fast + good enough)
+    countQuery = countQuery.ilike("name", `%${q}%`);
+  }
+  if (category) countQuery = countQuery.eq("category", category);
+  if (rarity) countQuery = countQuery.eq("rarity", rarity);
+  if (weaponizable === "1") countQuery = countQuery.eq("is_weaponizable", true);
+  if (weaponizable === "0") countQuery = countQuery.eq("is_weaponizable", false);
+  if (active === "1") countQuery = countQuery.eq("is_active", true);
+  if (active === "0") countQuery = countQuery.eq("is_active", false);
+
+  const [{ data: items, error }, { count, error: countErr }] = await Promise.all([
+    dataQuery,
+    countQuery,
+  ]);
 
   if (error) {
     return (
       <div className="p-6">
-        <h1 className="text-xl font-semibold">Items Library</h1>
+        <h1 className="text-xl font-semibold">Items Designer</h1>
         <p className="mt-3 text-sm text-red-600">
           Error loading items: {error.message}
         </p>
       </div>
     );
   }
+  if (countErr) {
+    // non-fatal; just log it
+    console.error("Items count error:", countErr.message);
+  }
+
+  const rows = (items ?? []) as ItemRow[];
 
   return (
     <div className="p-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      {/* Header (slimmer like Traits/Actions) */}
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold">Items Library</h1>
+          <h1 className="text-xl font-semibold">Items Designer</h1>
           <p className="text-sm text-muted-foreground">
-            Global loot/gear library. Cards show an effects preview.
+            Global item library (loot/gear/consumables/weapons). Cards show effects previews.
           </p>
         </div>
 
-        <div className="flex gap-2">
-          <Link
-            href="/admin/items/new"
-            className="inline-flex items-center rounded-lg border px-3 py-2 text-sm hover:bg-muted"
-          >
-            + New Item
-          </Link>
-        </div>
+        <Link
+          href="/admin/items/new"
+          className="inline-flex items-center rounded-lg border px-3 py-2 text-sm hover:bg-muted"
+        >
+          + New Item
+        </Link>
       </div>
 
-      {/* Filters */}
+      {/* Alerts */}
+      <div className="mt-3 space-y-2">
+        {saved ? (
+          <div className="rounded-xl border bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+            ✅ Saved.
+          </div>
+        ) : null}
+        {deleted ? (
+          <div className="rounded-xl border bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            🗑️ Deleted.
+          </div>
+        ) : null}
+        {err ? (
+          <div className="rounded-xl border bg-red-50 px-3 py-2 text-sm text-red-900">
+            Error: {err}
+          </div>
+        ) : null}
+      </div>
+
+      {/* Slim filter bar (match Actions page vibe) */}
       <form className="mt-4 grid grid-cols-1 gap-2 rounded-xl border p-3 sm:grid-cols-5">
         <input
           name="q"
@@ -149,33 +272,33 @@ export default async function ItemsLibraryPage({
         </div>
       </form>
 
-      {/* Grid */}
-      <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-        {(items ?? []).map((it: any) => {
-          const pills = [
-            it.category ? String(it.category) : null,
-            it.rarity ? String(it.rarity) : null,
-            it.is_weaponizable ? "weaponizable" : null,
-            it.is_active ? "active" : "inactive",
-          ].filter(Boolean);
+      <div className="mt-3 text-sm text-muted-foreground">
+        Total items: {count ?? 0}
+      </div>
 
-          const weight =
-            it.weight_lb != null ? `${Number(it.weight_lb).toFixed(2)} lb` : "—";
-          const slots =
-            Array.isArray(it.equip_slots) && it.equip_slots.length
-              ? it.equip_slots.join(", ")
-              : "—";
+      {/* Compact library grid (like Traits/Actions) */}
+      <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {rows.length === 0 ? (
+          <div className="rounded-xl border p-4 text-sm text-muted-foreground">
+            No items yet. Create your first one.
+          </div>
+        ) : (
+          rows.map((it) => {
+            const idStr = typeof it.id === "string" ? it.id : "";
+            const valid = isUuid(idStr);
 
-          return (
-            <form key={it.id} action={openItemEditAction} className="contents">
-              <input type="hidden" name="item_id" value={it.id} />
-              <button
-                type="submit"
-                className="group text-left rounded-2xl border p-3 shadow-sm hover:bg-muted/40 transition"
-              >
+            const weight =
+              it.weight_lb != null ? `${Number(it.weight_lb).toFixed(2)} lb` : "—";
+            const slots =
+              Array.isArray(it.equip_slots) && it.equip_slots.length
+                ? it.equip_slots.join(", ")
+                : "—";
+
+            const card = (
+              <div className="rounded-2xl border p-3 shadow-sm hover:bg-muted/40 transition">
                 {/* Header row: image + name/pills + edit */}
                 <div className="flex gap-3">
-                  {/* ITEM IMAGE */}
+                  {/* Image */}
                   <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg border bg-muted">
                     {it.image_url ? (
                       <img
@@ -190,45 +313,53 @@ export default async function ItemsLibraryPage({
                     )}
                   </div>
 
-                  {/* TEXT + EDIT */}
+                  {/* Name + pills */}
                   <div className="flex min-w-0 flex-1 items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="font-semibold leading-tight truncate">
-                        {it.name}
+                        {it.name || "Unnamed Item"}
                       </div>
 
                       <div className="mt-1 flex flex-wrap gap-1">
-                        {pills.map((p: any, idx: number) => (
-                          <span
-                            key={idx}
-                            className="rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground"
-                          >
-                            {p}
+                        <span className={categoryPill(it.category || "misc")}>
+                          {it.category || "misc"}
+                        </span>
+
+                        {it.rarity ? (
+                          <span className={rarityPill(it.rarity)}>{it.rarity}</span>
+                        ) : null}
+
+                        {it.is_weaponizable ? (
+                          <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium border-slate-200 bg-slate-50 text-slate-800">
+                            weaponizable
                           </span>
-                        ))}
+                        ) : null}
+
+                        {!it.is_active ? (
+                          <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium border-zinc-200 bg-zinc-50 text-zinc-700">
+                            inactive
+                          </span>
+                        ) : null}
                       </div>
                     </div>
 
                     <div className="text-xs text-muted-foreground group-hover:text-foreground">
-                      Edit →
+                      {valid ? "Edit →" : "Invalid ID"}
                     </div>
                   </div>
                 </div>
 
-                {it.summary ? (
-                  <div className="mt-2 text-sm text-muted-foreground line-clamp-2">
-                    {it.summary}
-                  </div>
-                ) : (
-                  <div className="mt-2 text-sm text-muted-foreground italic">
-                    No summary
-                  </div>
-                )}
+                {/* Summary */}
+                <div className="mt-2 text-sm text-muted-foreground line-clamp-2">
+                  {it.summary || "No summary yet."}
+                </div>
 
+                {/* Meta */}
                 <div className="mt-2 text-xs text-muted-foreground">
                   Weight: {weight} • Carry: {it.carry_behavior} • Slots: {slots}
                 </div>
 
+                {/* Effects preview */}
                 <div className="mt-2 text-xs">
                   <span className="text-muted-foreground">Effects:</span>{" "}
                   {it.effects_count ? (
@@ -237,10 +368,22 @@ export default async function ItemsLibraryPage({
                     <span className="text-muted-foreground italic">none</span>
                   )}
                 </div>
-              </button>
-            </form>
-          );
-        })}
+              </div>
+            );
+
+            if (!valid) return <div key={it.id}>{card}</div>;
+
+            // ✅ POST FORM: sets cookie then redirects to /admin/items/edit
+            return (
+              <form key={it.id} action={openItemEditAction} className="contents">
+                <input type="hidden" name="item_id" value={it.id} />
+                <button type="submit" className="group text-left">
+                  {card}
+                </button>
+              </form>
+            );
+          })
+        )}
       </div>
     </div>
   );
