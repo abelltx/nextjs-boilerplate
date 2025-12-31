@@ -208,10 +208,12 @@ export async function itemSetImageAction(itemId: string, imageAlt: string | null
     })
     .eq("id", itemId);
 
-  if (error) {
-    console.error("itemSetImageAction:", error.message);
-    redirect("/admin/items/edit?err=db_update_failed");
-  }
+    if (error) {
+    console.error("itemSetImageAction:", error);
+    const msg = encodeURIComponent(error.message ?? "db_update_failed");
+    redirect(`/admin/items/edit?err=${msg}`);
+    }
+
 }
 
 export async function itemClearImageAction(itemId: string) {
@@ -229,9 +231,11 @@ export async function itemClearImageAction(itemId: string) {
     })
     .eq("id", itemId);
 
-  if (error) {
-    console.error("itemClearImageAction:", error.message);
-    redirect("/admin/items/edit?err=db_update_failed");
-  }
+    if (error) {
+    console.error("itemClearImageAction:", error);
+    const msg = encodeURIComponent(error.message ?? "db_update_failed");
+    redirect(`/admin/items/edit?err=${msg}`);
+    }
+
 }
 
