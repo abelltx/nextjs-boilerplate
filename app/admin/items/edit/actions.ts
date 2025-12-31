@@ -39,6 +39,7 @@ export async function updateItemAction(formData: FormData) {
     weight_lb: formData.get("weight_lb") ? Number(formData.get("weight_lb")) : null,
     summary: (String(formData.get("summary") ?? "").trim() || null) as string | null,
     rules_text: (String(formData.get("rules_text") ?? "").trim() || null) as string | null,
+    // IMPORTANT: We keep this field so updates don't wipe existing image_url.
     image_url: (String(formData.get("image_url") ?? "").trim() || null) as string | null,
 
     is_active: String(formData.get("is_active") ?? "") === "on",
@@ -50,9 +51,7 @@ export async function updateItemAction(formData: FormData) {
     is_weaponizable: String(formData.get("is_weaponizable") ?? "") === "on",
     weapon_kind: (String(formData.get("weapon_kind") ?? "").trim() || null) as string | null,
     uses_attack_roll: String(formData.get("uses_attack_roll") ?? "on") === "on",
-    attack_bonus_override: formData.get("attack_bonus_override")
-      ? Number(formData.get("attack_bonus_override"))
-      : null,
+    attack_bonus_override: formData.get("attack_bonus_override") ? Number(formData.get("attack_bonus_override")) : null,
 
     damage_dice: (String(formData.get("damage_dice") ?? "").trim() || null) as string | null,
     damage_bonus: formData.get("damage_bonus") ? Number(formData.get("damage_bonus")) : null,
@@ -69,27 +68,23 @@ export async function updateItemAction(formData: FormData) {
 
   // equip_slots: comma-separated
   const slotsRaw = String(formData.get("equip_slots") ?? "").trim();
-  payload.equip_slots = slotsRaw
-    ? slotsRaw.split(",").map((s) => s.trim()).filter(Boolean)
-    : null;
+  payload.equip_slots = slotsRaw ? slotsRaw.split(",").map((s) => s.trim()).filter(Boolean) : null;
 
   // tags: comma-separated
   const tagsRaw = String(formData.get("tags") ?? "").trim();
-  payload.tags = tagsRaw
-    ? tagsRaw.split(",").map((s) => s.trim()).filter(Boolean)
-    : null;
+  payload.tags = tagsRaw ? tagsRaw.split(",").map((s) => s.trim()).filter(Boolean) : null;
 
   if (!payload.name || !payload.category) redirect("/admin/items/edit?err=missing_required");
 
-  const { error } = await supabase.from("items").update(payload).eq("id", itemId);
-  if (error) console.error("updateItemAction error:", error.message);
+  const { error: updateErr } = await supabase.from("items").update(payload).eq("id", itemId);
+  if (updateErr) console.error("updateItemAction error:", updateErr.message);
 
   redirect("/admin/items/edit?saved=1");
 }
 
 /**
- * Uploads a square-ish image file to Supabase Storage and updates items.image_url
- * Bucket: item-images (public recommended)
+ * Uploads an image file to Supabase Storage and updates items.image_url
+ * Bucket: item-images (public recommended OR use signed URLs)
  */
 export async function uploadItemImageAction(formData: FormData) {
   const itemId = String(formData.get("item_id") ?? "");
@@ -108,16 +103,15 @@ export async function uploadItemImageAction(formData: FormData) {
   const safeName = file.name.replace(/[^\w.\-]+/g, "_");
   const path = `items/${itemId}/${Date.now()}_${safeName}`;
 
+  // ✅ Upload ONCE (you had it duplicated)
   const { error: uploadErr } = await supabase.storage
     .from(IMAGE_BUCKET)
-    .upload(path, file, {
-      upsert: true,
-      contentType: file.type,
-    });
+    .upload(path, file, { upsert: true, contentType: file.type });
 
   if (uploadErr) {
-    console.error("uploadItemImageAction upload error:", uploadErr.message);
-    redirect("/admin/items/edit?err=upload_failed");
+    const msg = String((uploadErr as any)?.message ?? "upload_failed");
+    console.error("uploadItemImageAction upload:", msg);
+    redirect(`/admin/items/edit?err=${encodeURIComponent(msg)}`);
   }
 
   const { data: pub } = supabase.storage.from(IMAGE_BUCKET).getPublicUrl(path);
@@ -125,10 +119,7 @@ export async function uploadItemImageAction(formData: FormData) {
 
   if (!publicUrl) redirect("/admin/items/edit?err=no_public_url");
 
-  const { error: upErr } = await supabase
-    .from("items")
-    .update({ image_url: publicUrl })
-    .eq("id", itemId);
+  const { error: upErr } = await supabase.from("items").update({ image_url: publicUrl }).eq("id", itemId);
 
   if (upErr) {
     console.error("uploadItemImageAction update item error:", upErr.message);
@@ -162,17 +153,17 @@ export async function addItemEffectAction(formData: FormData) {
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.from("item_effects").insert({
+  const { error: insertErr } = await supabase.from("item_effects").insert({
     item_id: itemId,
     effect_type,
     effect_key,
     mode,
     value: ["resistance", "immunity", "advantage", "special"].includes(effect_type) ? null : value,
-    notes: effect_type === "special" ? notes : (notes || null),
+    notes: effect_type === "special" ? notes : notes || null,
     sort_order,
   });
 
-  if (error) console.error("addItemEffectAction error:", error.message);
+  if (insertErr) console.error("addItemEffectAction error:", insertErr.message);
 
   redirect("/admin/items/edit");
 }
@@ -183,8 +174,8 @@ export async function deleteItemEffectAction(formData: FormData) {
   if (!isUuid(effectId) || !isUuid(itemId)) redirect("/admin/items/edit?err=bad_effect_id");
 
   const supabase = await createClient();
-  const { error } = await supabase.from("item_effects").delete().eq("id", effectId);
-  if (error) console.error("deleteItemEffectAction error:", error.message);
+  const { error: delErr } = await supabase.from("item_effects").delete().eq("id", effectId);
+  if (delErr) console.error("deleteItemEffectAction error:", delErr.message);
 
   redirect("/admin/items/edit");
 }
@@ -194,8 +185,8 @@ export async function deleteItemAction(formData: FormData) {
   if (!isUuid(itemId)) redirect("/admin/items");
 
   const supabase = await createClient();
-  const { error } = await supabase.from("items").delete().eq("id", itemId);
-  if (error) console.error("deleteItemAction error:", error.message);
+  const { error: delItemErr } = await supabase.from("items").delete().eq("id", itemId);
+  if (delItemErr) console.error("deleteItemAction error:", delItemErr.message);
 
   const c = await cookies();
   c.set(COOKIE_KEY, "", { path: COOKIE_PATH, maxAge: 0 });
