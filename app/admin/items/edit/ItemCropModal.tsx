@@ -20,17 +20,15 @@ export default function ItemCropModal({
   const [zoom, setZoom] = useState(1);
   const [cropPixels, setCropPixels] = useState<Area | null>(null);
 
-  const aspect = 1;
+  // Same portrait ratio as NPC (334/430). Change later if you want square items.
+  const aspect = 334 / 430;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
       <div className="w-full max-w-3xl bg-background rounded-xl overflow-hidden border shadow-xl">
         <div className="p-4 border-b flex items-center justify-between">
           <div className="font-semibold">Crop Item Image</div>
-          <button
-            className="px-3 py-1 rounded-lg border hover:bg-muted/40"
-            onClick={onCancel}
-          >
+          <button className="px-3 py-1 rounded-lg border hover:bg-muted/40" onClick={onCancel}>
             Close
           </button>
         </div>
@@ -63,10 +61,7 @@ export default function ItemCropModal({
           </div>
 
           <div className="flex justify-end gap-2">
-            <button
-              className="px-3 py-2 rounded-lg border hover:bg-muted/40"
-              onClick={onCancel}
-            >
+            <button className="px-3 py-2 rounded-lg border hover:bg-muted/40" onClick={onCancel}>
               Cancel
             </button>
             <button
