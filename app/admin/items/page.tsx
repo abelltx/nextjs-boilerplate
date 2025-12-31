@@ -30,7 +30,9 @@ export default async function ItemsLibraryPage({
     .order("updated_at", { ascending: false });
 
   if (q) {
-    query = query.or(`name.ilike.%${q}%,summary.ilike.%${q}%,rules_text.ilike.%${q}%`);
+    query = query.or(
+      `name.ilike.%${q}%,summary.ilike.%${q}%,rules_text.ilike.%${q}%`
+    );
   }
   if (category) query = query.eq("category", category);
   if (rarity) query = query.eq("rarity", rarity);
@@ -45,7 +47,9 @@ export default async function ItemsLibraryPage({
     return (
       <div className="p-6">
         <h1 className="text-xl font-semibold">Items Library</h1>
-        <p className="mt-3 text-sm text-red-600">Error loading items: {error.message}</p>
+        <p className="mt-3 text-sm text-red-600">
+          Error loading items: {error.message}
+        </p>
       </div>
     );
   }
@@ -79,41 +83,67 @@ export default async function ItemsLibraryPage({
           className="h-9 rounded-md border px-3 text-sm"
         />
 
-        <select name="category" defaultValue={category} className="h-9 rounded-md border px-2 text-sm">
+        <select
+          name="category"
+          defaultValue={category}
+          className="h-9 rounded-md border px-2 text-sm"
+        >
           <option value="">All categories</option>
-          {["loot", "gear", "consumable", "weapon", "armor", "tool", "quest", "misc"].map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
+          {["loot", "gear", "consumable", "weapon", "armor", "tool", "quest", "misc"].map(
+            (c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            )
+          )}
         </select>
 
-        <select name="rarity" defaultValue={rarity} className="h-9 rounded-md border px-2 text-sm">
+        <select
+          name="rarity"
+          defaultValue={rarity}
+          className="h-9 rounded-md border px-2 text-sm"
+        >
           <option value="">All rarities</option>
-          {["common", "uncommon", "rare", "very_rare", "legendary", "artifact"].map((r) => (
-            <option key={r} value={r}>
-              {r}
-            </option>
-          ))}
+          {["common", "uncommon", "rare", "very_rare", "legendary", "artifact"].map(
+            (r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            )
+          )}
         </select>
 
-        <select name="weaponizable" defaultValue={weaponizable} className="h-9 rounded-md border px-2 text-sm">
+        <select
+          name="weaponizable"
+          defaultValue={weaponizable}
+          className="h-9 rounded-md border px-2 text-sm"
+        >
           <option value="">Weaponizable: Any</option>
           <option value="1">Weaponizable: Yes</option>
           <option value="0">Weaponizable: No</option>
         </select>
 
-        <select name="active" defaultValue={active} className="h-9 rounded-md border px-2 text-sm">
+        <select
+          name="active"
+          defaultValue={active}
+          className="h-9 rounded-md border px-2 text-sm"
+        >
           <option value="">Active: Any</option>
           <option value="1">Active: Yes</option>
           <option value="0">Active: No</option>
         </select>
 
         <div className="sm:col-span-5 flex gap-2 pt-1">
-          <button className="h-9 rounded-md border px-3 text-sm hover:bg-muted" type="submit">
+          <button
+            className="h-9 rounded-md border px-3 text-sm hover:bg-muted"
+            type="submit"
+          >
             Apply
           </button>
-          <Link className="h-9 rounded-md border px-3 text-sm inline-flex items-center hover:bg-muted" href="/admin/items">
+          <Link
+            className="h-9 rounded-md border px-3 text-sm inline-flex items-center hover:bg-muted"
+            href="/admin/items"
+          >
             Reset
           </Link>
         </div>
@@ -129,8 +159,12 @@ export default async function ItemsLibraryPage({
             it.is_active ? "active" : "inactive",
           ].filter(Boolean);
 
-          const weight = it.weight_lb != null ? `${Number(it.weight_lb).toFixed(2)} lb` : "—";
-          const slots = Array.isArray(it.equip_slots) && it.equip_slots.length ? it.equip_slots.join(", ") : "—";
+          const weight =
+            it.weight_lb != null ? `${Number(it.weight_lb).toFixed(2)} lb` : "—";
+          const slots =
+            Array.isArray(it.equip_slots) && it.equip_slots.length
+              ? it.equip_slots.join(", ")
+              : "—";
 
           return (
             <form key={it.id} action={openItemEditAction} className="contents">
@@ -139,23 +173,45 @@ export default async function ItemsLibraryPage({
                 type="submit"
                 className="group text-left rounded-2xl border p-3 shadow-sm hover:bg-muted/40 transition"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="font-semibold leading-tight truncate">{it.name}</div>
-                    <div className="mt-1 flex flex-wrap gap-1">
-                      {pills.map((p: any, idx: number) => (
-                        <span
-                          key={idx}
-                          className="rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground"
-                        >
-                          {p}
-                        </span>
-                      ))}
-                    </div>
+                {/* Header row: image + name/pills + edit */}
+                <div className="flex gap-3">
+                  {/* ITEM IMAGE */}
+                  <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg border bg-muted">
+                    {it.image_url ? (
+                      <img
+                        src={it.image_url}
+                        alt={it.name}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
+                        No Image
+                      </div>
+                    )}
                   </div>
 
-                  <div className="text-xs text-muted-foreground group-hover:text-foreground">
-                    Edit →
+                  {/* TEXT + EDIT */}
+                  <div className="flex min-w-0 flex-1 items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="font-semibold leading-tight truncate">
+                        {it.name}
+                      </div>
+
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {pills.map((p: any, idx: number) => (
+                          <span
+                            key={idx}
+                            className="rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground"
+                          >
+                            {p}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="text-xs text-muted-foreground group-hover:text-foreground">
+                      Edit →
+                    </div>
                   </div>
                 </div>
 
@@ -164,7 +220,9 @@ export default async function ItemsLibraryPage({
                     {it.summary}
                   </div>
                 ) : (
-                  <div className="mt-2 text-sm text-muted-foreground italic">No summary</div>
+                  <div className="mt-2 text-sm text-muted-foreground italic">
+                    No summary
+                  </div>
                 )}
 
                 <div className="mt-2 text-xs text-muted-foreground">
