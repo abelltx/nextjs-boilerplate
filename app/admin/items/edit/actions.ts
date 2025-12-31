@@ -6,6 +6,7 @@ import { createClient } from "@/utils/supabase/server";
 
 const COOKIE_KEY = "item_edit_id";
 const COOKIE_PATH = "/admin/items/edit";
+const IMAGE_BUCKET = "item-images";
 
 function isUuid(v: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
@@ -66,33 +67,75 @@ export async function updateItemAction(formData: FormData) {
     on_success: (String(formData.get("on_success") ?? "").trim() || null) as string | null,
   };
 
-  // equip_slots: comma-separated or empty
+  // equip_slots: comma-separated
   const slotsRaw = String(formData.get("equip_slots") ?? "").trim();
   payload.equip_slots = slotsRaw
-    ? slotsRaw
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean)
+    ? slotsRaw.split(",").map((s) => s.trim()).filter(Boolean)
     : null;
 
-  // tags: comma-separated or empty
+  // tags: comma-separated
   const tagsRaw = String(formData.get("tags") ?? "").trim();
   payload.tags = tagsRaw
-    ? tagsRaw
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean)
+    ? tagsRaw.split(",").map((s) => s.trim()).filter(Boolean)
     : null;
 
-  // Basic sanity: required
-  if (!payload.name || !payload.category) redirect("/admin/items/edit");
+  if (!payload.name || !payload.category) redirect("/admin/items/edit?err=missing_required");
 
   const { error } = await supabase.from("items").update(payload).eq("id", itemId);
-  if (error) {
-    console.error("updateItemAction error:", error.message);
+  if (error) console.error("updateItemAction error:", error.message);
+
+  redirect("/admin/items/edit?saved=1");
+}
+
+/**
+ * Uploads a square-ish image file to Supabase Storage and updates items.image_url
+ * Bucket: item-images (public recommended)
+ */
+export async function uploadItemImageAction(formData: FormData) {
+  const itemId = String(formData.get("item_id") ?? "");
+  if (!isUuid(itemId)) redirect("/admin/items/edit?err=bad_id");
+
+  const file = formData.get("file");
+  if (!(file instanceof File)) redirect("/admin/items/edit?err=no_file");
+
+  // basic guards
+  if (!file.type.startsWith("image/")) redirect("/admin/items/edit?err=not_image");
+  if (file.size > 5 * 1024 * 1024) redirect("/admin/items/edit?err=file_too_large"); // 5MB
+
+  const supabase = await createClient();
+
+  // Use a stable folder per item
+  const safeName = file.name.replace(/[^\w.\-]+/g, "_");
+  const path = `items/${itemId}/${Date.now()}_${safeName}`;
+
+  const { error: uploadErr } = await supabase.storage
+    .from(IMAGE_BUCKET)
+    .upload(path, file, {
+      upsert: true,
+      contentType: file.type,
+    });
+
+  if (uploadErr) {
+    console.error("uploadItemImageAction upload error:", uploadErr.message);
+    redirect("/admin/items/edit?err=upload_failed");
   }
 
-  redirect("/admin/items/edit");
+  const { data: pub } = supabase.storage.from(IMAGE_BUCKET).getPublicUrl(path);
+  const publicUrl = pub?.publicUrl || null;
+
+  if (!publicUrl) redirect("/admin/items/edit?err=no_public_url");
+
+  const { error: upErr } = await supabase
+    .from("items")
+    .update({ image_url: publicUrl })
+    .eq("id", itemId);
+
+  if (upErr) {
+    console.error("uploadItemImageAction update item error:", upErr.message);
+    redirect("/admin/items/edit?err=db_update_failed");
+  }
+
+  redirect("/admin/items/edit?img=1");
 }
 
 export async function addItemEffectAction(formData: FormData) {
@@ -108,19 +151,14 @@ export async function addItemEffectAction(formData: FormData) {
   const valueRaw = formData.get("value");
   const value = valueRaw === null || valueRaw === "" ? null : Number(valueRaw);
 
-  // Enforce requireds per your rules:
-  if (!effect_type || !effect_key || !mode) redirect("/admin/items/edit");
+  if (!effect_type || !effect_key || !mode) redirect("/admin/items/edit?err=bad_effect");
 
   if (["ability", "ac", "speed", "skill", "save"].includes(effect_type)) {
-    if (value === null || !isFinite(value)) redirect("/admin/items/edit");
+    if (value === null || !isFinite(value)) redirect("/admin/items/edit?err=value_required");
   }
 
   if (effect_type === "special") {
-    if (!notes) redirect("/admin/items/edit");
-  }
-
-  if (["resistance", "immunity", "advantage"].includes(effect_type)) {
-    // value must be null; ignore if provided
+    if (!notes) redirect("/admin/items/edit?err=notes_required");
   }
 
   const supabase = await createClient();
@@ -142,7 +180,7 @@ export async function addItemEffectAction(formData: FormData) {
 export async function deleteItemEffectAction(formData: FormData) {
   const effectId = String(formData.get("effect_id") ?? "");
   const itemId = String(formData.get("item_id") ?? "");
-  if (!isUuid(effectId) || !isUuid(itemId)) redirect("/admin/items/edit");
+  if (!isUuid(effectId) || !isUuid(itemId)) redirect("/admin/items/edit?err=bad_effect_id");
 
   const supabase = await createClient();
   const { error } = await supabase.from("item_effects").delete().eq("id", effectId);
@@ -159,9 +197,8 @@ export async function deleteItemAction(formData: FormData) {
   const { error } = await supabase.from("items").delete().eq("id", itemId);
   if (error) console.error("deleteItemAction error:", error.message);
 
-  // Clear cookie (optional); still only in action
   const c = await cookies();
   c.set(COOKIE_KEY, "", { path: COOKIE_PATH, maxAge: 0 });
 
-  redirect("/admin/items");
+  redirect("/admin/items?deleted=1");
 }
