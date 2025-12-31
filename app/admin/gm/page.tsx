@@ -7,9 +7,11 @@ type Counts = {
   npcs: number;
   traits: number;
   actions: number;
+  items: number;
   inventory: number;
   users: number;
 };
+
 
 async function safeCount(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -29,17 +31,18 @@ async function getCounts(): Promise<Counts> {
   const supabase = await createClient();
 
   // If some tables don't exist yet, safeCount() returns 0.
-  const [episodes, npcs, traits, actions, inventory, users] = await Promise.all([
-    safeCount(supabase, "episodes"),
-    safeCount(supabase, "npcs"),
-    safeCount(supabase, "traits"), // adjust if your table name differs
-    safeCount(supabase, "actions"), // adjust if your table name differs
-    safeCount(supabase, "inventory_items"), // future
-    safeCount(supabase, "profiles"), // usually your user table
-  ]);
+const [episodes, npcs, traits, actions, items, inventory, users] = await Promise.all([
+  safeCount(supabase, "episodes"),
+  safeCount(supabase, "npcs"),
+  safeCount(supabase, "traits"),
+  safeCount(supabase, "actions"),
+  safeCount(supabase, "items"), // ✅ new: items dashboard count
+  safeCount(supabase, "inventory_items"), // future
+  safeCount(supabase, "profiles"), // usually your user table
+]);
 
-  return { episodes, npcs, traits, actions, inventory, users };
-}
+return { episodes, npcs, traits, actions, items, inventory, users };
+
 
 type Card = {
   title: string;
@@ -185,7 +188,7 @@ export default async function GMHubPage() {
       description: "Items, loot tables, equipment cards, and rewards.",
       href: undefined, // set when built, e.g. "/admin/inventory"
       count: counts.inventory,
-      status: "coming",
+      status: "live",
       tone: "amber",
     },
     {
