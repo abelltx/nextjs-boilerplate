@@ -87,60 +87,81 @@ export default async function ItemsLibraryPage({
 
   const supabase = await createClient();
 
-  let dataQuery = supabase
-    .from("items_with_effects")
-    .select("*")
+  // ---- Load ITEMS from items table (so we always have image_base_path) ----
+  let itemsQuery = supabase
+    .from("items")
+    .select(
+      "id,name,summary,category,rarity,weight_lb,image_base_path,image_alt,image_updated_at,image_url,is_active,is_weaponizable,updated_at"
+    )
     .order("updated_at", { ascending: false });
 
   if (q) {
-    dataQuery = dataQuery.or(
+    // Keep search simple/robust across columns you actually have
+    itemsQuery = itemsQuery.or(
       `name.ilike.%${q}%,summary.ilike.%${q}%,rules_text.ilike.%${q}%`
     );
   }
-  if (category) dataQuery = dataQuery.eq("category", category);
-  if (rarity) dataQuery = dataQuery.eq("rarity", rarity);
-  if (weaponizable === "1") dataQuery = dataQuery.eq("is_weaponizable", true);
-  if (weaponizable === "0") dataQuery = dataQuery.eq("is_weaponizable", false);
-  if (active === "1") dataQuery = dataQuery.eq("is_active", true);
-  if (active === "0") dataQuery = dataQuery.eq("is_active", false);
+  if (category) itemsQuery = itemsQuery.eq("category", category);
+  if (rarity) itemsQuery = itemsQuery.eq("rarity", rarity);
+  if (weaponizable === "1") itemsQuery = itemsQuery.eq("is_weaponizable", true);
+  if (weaponizable === "0") itemsQuery = itemsQuery.eq("is_weaponizable", false);
+  if (active === "1") itemsQuery = itemsQuery.eq("is_active", true);
+  if (active === "0") itemsQuery = itemsQuery.eq("is_active", false);
 
-  const [{ data: items, error }, { count }] = await Promise.all([
-    dataQuery,
+  const [{ data: items, error: itemsErr }, { count }] = await Promise.all([
+    itemsQuery,
     supabase.from("items").select("*", { count: "exact", head: true }),
   ]);
 
-  if (error) {
+  if (itemsErr) {
     return (
       <div className="p-6">
-        <h1 className="text-xl font-semibold">Items Library</h1>
+        <h1 className="text-xl font-semibold">Items Designer</h1>
         <p className="mt-2 text-sm text-red-600">
-          Error loading items: {error.message}
+          Error loading items: {itemsErr.message}
         </p>
       </div>
     );
   }
 
-  // ✅ Derive signed URLs from image_base_path + filename
+  const ids = (items ?? []).map((x: any) => x.id).filter(Boolean);
+
+  // ---- Load effects preview from the VIEW and merge by id ----
+  // This avoids depending on the view having image_* columns.
+  let effectsMap: Record<
+    string,
+    { effects_count?: number; effects_preview?: string }
+  > = {};
+
+  if (ids.length) {
+    const { data: effRows } = await supabase
+      .from("items_with_effects")
+      .select("id,effects_count,effects_preview")
+      .in("id", ids);
+
+    effectsMap = Object.fromEntries(
+      (effRows ?? []).map((r: any) => [
+        r.id,
+        { effects_count: r.effects_count, effects_preview: r.effects_preview },
+      ])
+    );
+  }
+
+  // ---- Signed thumb urls ----
   const itemsWithImages = await Promise.all(
     (items ?? []).map(async (it: any) => {
       const base = it.image_base_path as string | null;
       const alt = (it.image_alt ?? it.name ?? "Item") as string;
 
       const thumbPath = base ? joinBasePath(base, "thumb.webp") : "";
-      const mediumPath = base ? joinBasePath(base, "medium.webp") : "";
+      const thumbUrl = base ? await signedUrlFor(supabase, thumbPath) : null;
 
-      const [thumbUrl, mediumUrl] = await Promise.all([
-        base ? signedUrlFor(supabase, thumbPath) : Promise.resolve(null),
-        base ? signedUrlFor(supabase, mediumPath) : Promise.resolve(null),
-      ]);
-
+      const eff = effectsMap[it.id] ?? {};
       return {
         ...it,
-        __img: {
-          alt,
-          thumbUrl: thumbUrl ?? null,
-          mediumUrl: mediumUrl ?? null,
-        },
+        effects_count: eff.effects_count ?? 0,
+        effects_preview: eff.effects_preview ?? "",
+        __img: { alt, thumbUrl: thumbUrl ?? null },
       };
     })
   );
@@ -188,13 +209,20 @@ export default async function ItemsLibraryPage({
               className="mt-1 h-9 w-full rounded-md border px-2 text-sm"
             >
               <option value="">All categories</option>
-              {["loot", "gear", "consumable", "weapon", "armor", "tool", "quest", "misc"].map(
-                (c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                )
-              )}
+              {[
+                "loot",
+                "gear",
+                "consumable",
+                "weapon",
+                "armor",
+                "tool",
+                "quest",
+                "misc",
+              ].map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -206,11 +234,13 @@ export default async function ItemsLibraryPage({
               className="mt-1 h-9 w-full rounded-md border px-2 text-sm"
             >
               <option value="">All rarities</option>
-              {["common", "uncommon", "rare", "very_rare", "legendary", "artifact"].map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
+              {["common", "uncommon", "rare", "very_rare", "legendary", "artifact"].map(
+                (r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                )
+              )}
             </select>
           </div>
 
@@ -305,15 +335,12 @@ export default async function ItemsLibraryPage({
                       </div>
                     </div>
 
-                    {/* Existing cookie-based open action */}
                     <Link
-                        href="/admin/items/edit"
-                        className="rounded-lg border px-3 py-2 text-sm hover:bg-muted"
-                        aria-label={`Edit ${it.name}`}
-                        >
-                        Edit →
+                      href="/admin/items/edit"
+                      className="rounded-lg border px-3 py-2 text-sm hover:bg-muted"
+                    >
+                      Edit →
                     </Link>
-
                   </div>
 
                   <div className="mt-2 text-sm text-muted-foreground">
