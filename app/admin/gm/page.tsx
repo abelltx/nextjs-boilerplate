@@ -1,4 +1,3 @@
-// app/admin/gm/page.tsx
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/server";
 
@@ -12,17 +11,14 @@ type Counts = {
   users: number;
 };
 
-
 async function safeCount(
   supabase: Awaited<ReturnType<typeof createClient>>,
   table: string
 ) {
-  // HEAD + count avoids pulling rows
   const { count, error } = await supabase
     .from(table as any)
     .select("*", { count: "exact", head: true });
 
-  // If the table doesn't exist yet (or RLS blocks), just show 0 rather than crash
   if (error) return 0;
   return count ?? 0;
 }
@@ -30,19 +26,19 @@ async function safeCount(
 async function getCounts(): Promise<Counts> {
   const supabase = await createClient();
 
-  // If some tables don't exist yet, safeCount() returns 0.
-const [episodes, npcs, traits, actions, items, inventory, users] = await Promise.all([
-  safeCount(supabase, "episodes"),
-  safeCount(supabase, "npcs"),
-  safeCount(supabase, "traits"),
-  safeCount(supabase, "actions"),
-  safeCount(supabase, "items"), // ✅ new: items dashboard count
-  safeCount(supabase, "inventory_items"), // future
-  safeCount(supabase, "profiles"), // usually your user table
-]);
+  const [episodes, npcs, traits, actions, items, inventory, users] =
+    await Promise.all([
+      safeCount(supabase, "episodes"),
+      safeCount(supabase, "npcs"),
+      safeCount(supabase, "traits"),
+      safeCount(supabase, "actions"),
+      safeCount(supabase, "items"), // ✅ Items dashboard count
+      safeCount(supabase, "inventory_items"),
+      safeCount(supabase, "profiles"),
+    ]);
 
-return { episodes, npcs, traits, actions, items, inventory, users };
-
+  return { episodes, npcs, traits, actions, items, inventory, users };
+}
 
 type Card = {
   title: string;
@@ -50,18 +46,10 @@ type Card = {
   href?: string;
   count: number;
   status?: "live" | "coming";
-  tone:
-    | "orange"
-    | "blue"
-    | "green"
-    | "purple"
-    | "red"
-    | "slate"
-    | "amber";
+  tone: "orange" | "blue" | "green" | "purple" | "red" | "slate" | "amber";
 };
 
 function toneClasses(tone: Card["tone"]) {
-  // Tailwind-only, no custom CSS needed
   switch (tone) {
     case "orange":
       return "border-orange-200 bg-orange-50/60 hover:bg-orange-50";
@@ -85,9 +73,10 @@ function StatusPill({ status }: { status: "live" | "coming" }) {
     status === "live"
       ? "bg-green-100 text-green-800 border-green-200"
       : "bg-slate-100 text-slate-700 border-slate-200";
+
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${cls}`}
+      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${cls}`}
     >
       {status === "live" ? "Live" : "Coming Soon"}
     </span>
@@ -96,55 +85,45 @@ function StatusPill({ status }: { status: "live" | "coming" }) {
 
 function CountBadge({ n }: { n: number }) {
   return (
-    <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs font-semibold text-slate-900 shadow-sm">
+    <span className="inline-flex items-center rounded-full border bg-white/70 px-2 py-0.5 text-xs font-medium">
       {n}
     </span>
   );
 }
 
 function CardTile({ c }: { c: Card }) {
-  const content = (
+  const inner = (
     <div
-      className={`group relative flex h-full flex-col gap-3 rounded-2xl border p-5 shadow-sm transition ${toneClasses(
+      className={`rounded-2xl border p-4 transition ${toneClasses(
         c.tone
-      )} ${c.href ? "cursor-pointer" : "cursor-default opacity-90"}`}
+      )} flex flex-col gap-2`}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <h2 className="truncate text-lg font-semibold text-slate-900">
-              {c.title}
-            </h2>
-            <CountBadge n={c.count} />
-          </div>
-          <p className="mt-1 text-sm text-slate-700">{c.description}</p>
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-base font-semibold">{c.title}</div>
+        <div className="flex items-center gap-2">
+          <CountBadge n={c.count} />
+          {c.status ? <StatusPill status={c.status} /> : null}
         </div>
-
-        <StatusPill status={c.status ?? (c.href ? "live" : "coming")} />
       </div>
 
-      <div className="mt-auto flex items-center justify-between">
-        <span className="text-xs text-slate-500">
-          {c.href ? c.href : "Not wired yet"}
-        </span>
+      <div className="text-sm text-muted-foreground">{c.description}</div>
+
+      <div className="mt-1 text-xs text-muted-foreground">
+        {c.href ? c.href : "Not wired yet"}{" "}
         {c.href ? (
-          <span className="text-sm font-semibold text-slate-900 transition group-hover:translate-x-0.5">
+          <span className="ml-2 inline-flex items-center rounded-lg border bg-white/70 px-2 py-1 text-xs">
             Open →
           </span>
         ) : (
-          <span className="text-sm font-semibold text-slate-500">Soon</span>
+          <span className="ml-2 inline-flex items-center rounded-lg border bg-white/70 px-2 py-1 text-xs">
+            Soon
+          </span>
         )}
       </div>
     </div>
   );
 
-  return c.href ? (
-    <Link href={c.href} className="block h-full">
-      {content}
-    </Link>
-  ) : (
-    content
-  );
+  return c.href ? <Link href={c.href}>{inner}</Link> : inner;
 }
 
 export default async function GMHubPage() {
@@ -170,7 +149,7 @@ export default async function GMHubPage() {
     {
       title: "Traits Designer",
       description: "Manage the global trait library used by NPCs and players.",
-      href: "/admin/traits", // set when built, e.g. "/admin/traits"
+      href: "/admin/traits",
       count: counts.traits,
       status: "live",
       tone: "purple",
@@ -178,23 +157,31 @@ export default async function GMHubPage() {
     {
       title: "Actions Designer",
       description: "Manage the global action library (melee/ranged/other).",
-      href: "/admin/actions", // set when built, e.g. "/admin/actions"
+      href: "/admin/actions",
       count: counts.actions,
       status: "live",
       tone: "green",
     },
     {
+      title: "Items Designer",
+      description: "Manage items, images, and item effects for loot & equipment.",
+      href: "/admin/items",
+      count: counts.items,
+      status: "live",
+      tone: "amber",
+    },
+    {
       title: "Inventory Designer",
       description: "Items, loot tables, equipment cards, and rewards.",
-      href: undefined, // set when built, e.g. "/admin/inventory"
+      href: undefined,
       count: counts.inventory,
-      status: "live",
+      status: "coming",
       tone: "amber",
     },
     {
       title: "User Manager",
       description: "Manage Storytellers, players, roles, and access.",
-      href: undefined, // set when built, e.g. "/admin/users"
+      href: undefined,
       count: counts.users,
       status: "coming",
       tone: "red",
@@ -202,37 +189,21 @@ export default async function GMHubPage() {
   ];
 
   return (
-    <div className="mx-auto max-w-6xl p-6">
-      <div className="mb-6 flex flex-col gap-2">
-        <h1 className="text-2xl font-bold text-slate-900">GameMaster Hub</h1>
-        <p className="text-slate-700">
-          Your command center for building and running Neweyes content.
-        </p>
-      </div>
+    <div className="mx-auto max-w-5xl p-6">
+      <h1 className="text-2xl font-semibold">GameMaster Hub</h1>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Your command center for building and running Neweyes content.
+      </p>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
         {cards.map((c) => (
           <CardTile key={c.title} c={c} />
         ))}
       </div>
 
-      <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 className="text-sm font-semibold text-slate-900">
-          Quick setup notes
-        </h3>
-        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">
-          <li>
-            This page is at <span className="font-mono">/admin/gm</span>.
-          </li>
-          <li>
-            Counts use Supabase <span className="font-mono">head: true</span> so
-            it’s fast.
-          </li>
-          <li>
-            If a table doesn’t exist yet (Traits/Actions/Inventory), it shows{" "}
-            <b>0</b> instead of crashing.
-          </li>
-        </ul>
+      <div className="mt-8 text-xs text-muted-foreground">
+        Counts are fetched using <span className="font-mono">head: true</span>{" "}
+        for speed. Missing tables show as 0 instead of crashing.
       </div>
     </div>
   );
