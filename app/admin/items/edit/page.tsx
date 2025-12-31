@@ -10,6 +10,8 @@ import {
   uploadItemImageAction,
 } from "@/app/admin/items/edit/actions";
 import DeleteItemButton from "@/app/admin/items/edit/DeleteItemButton";
+import ItemImageUploader from "@/app/admin/items/edit/ItemImageUploader";
+
 
 const COOKIE_KEY = "item_edit_id";
 
@@ -329,38 +331,10 @@ export default async function ItemEditPage({
 
         {/* Image upload (file picker) - replaces URL-only workflow */}
         <div className="mt-4 rounded-2xl border p-4">
-          <div className="flex items-start gap-4">
-            <div className="h-24 w-24 overflow-hidden rounded-2xl border bg-muted">
-              {item.image_url ? (
-                <img src={item.image_url} alt={item.name} className="h-full w-full object-cover" />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
-                  No Image
-                </div>
-              )}
-            </div>
-
-            <div className="flex-1">
-              <div className="font-semibold">Item Image</div>
-              <p className="text-xs text-muted-foreground">
-                Click Choose File, then Upload. Recommended square 1:1 (512×512).
-              </p>
-
-              <form
-                action={uploadItemImageAction}
-                encType="multipart/form-data"
-                className="mt-2 flex flex-wrap items-center gap-2"
-              >
-                <input type="hidden" name="item_id" value={itemId} />
-                <input name="file" type="file" accept="image/*" className="text-sm" />
-                <button className="h-9 rounded-md border px-3 text-sm hover:bg-muted" type="submit">
-                  Upload Image
-                </button>
-              </form>
-            </div>
-          </div>
+            <div className="font-semibold mb-2">Item Image</div>
+            <ItemImageUploader item={item} />
         </div>
-
+<input type="hidden" name="image_url" value={item.image_url ?? ""} />
         {/* Core editor */}
         <form action={updateItemAction} className="mt-4 rounded-2xl border p-4">
           <input type="hidden" name="id" value={itemId} />

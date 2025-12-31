@@ -193,3 +193,57 @@ export async function deleteItemAction(formData: FormData) {
 
   redirect("/admin/items?deleted=1");
 }
+export async function itemSetImageAction(itemId: string) {
+  if (!isUuid(itemId)) redirect("/admin/items/edit?err=bad_id");
+
+  const supabase = await createClient();
+
+  // public URL for `${itemId}/medium.webp`
+  const { data: pub } = supabase.storage.from(IMAGE_BUCKET).getPublicUrl(`${itemId}/medium.webp`);
+  const url = pub?.publicUrl ?? null;
+  if (!url) redirect("/admin/items/edit?err=no_public_url");
+
+  const { error: upErr } = await supabase.from("items").update({ image_url: url }).eq("id", itemId);
+  if (upErr) {
+    console.error("itemSetImageAction:", upErr.message);
+    redirect("/admin/items/edit?err=db_update_failed");
+  }
+}
+
+export async function itemClearImageAction(itemId: string) {
+  if (!isUuid(itemId)) redirect("/admin/items/edit?err=bad_id");
+
+  const supabase = await createClient();
+  const { error: upErr } = await supabase.from("items").update({ image_url: null }).eq("id", itemId);
+  if (upErr) {
+    console.error("itemClearImageAction:", upErr.message);
+    redirect("/admin/items/edit?err=db_update_failed");
+  }
+}
+export async function itemSetImageAction(itemId: string) {
+  if (!isUuid(itemId)) redirect("/admin/items/edit?err=bad_id");
+
+  const supabase = await createClient();
+
+  // Use medium.webp as the canonical item image URL
+  const { data: pub } = supabase.storage.from(IMAGE_BUCKET).getPublicUrl(`${itemId}/medium.webp`);
+  const url = pub?.publicUrl ?? null;
+  if (!url) redirect("/admin/items/edit?err=no_public_url");
+
+  const { error: upErr } = await supabase.from("items").update({ image_url: url }).eq("id", itemId);
+  if (upErr) {
+    console.error("itemSetImageAction:", upErr.message);
+    redirect("/admin/items/edit?err=db_update_failed");
+  }
+}
+
+export async function itemClearImageAction(itemId: string) {
+  if (!isUuid(itemId)) redirect("/admin/items/edit?err=bad_id");
+
+  const supabase = await createClient();
+  const { error: upErr } = await supabase.from("items").update({ image_url: null }).eq("id", itemId);
+  if (upErr) {
+    console.error("itemClearImageAction:", upErr.message);
+    redirect("/admin/items/edit?err=db_update_failed");
+  }
+}
