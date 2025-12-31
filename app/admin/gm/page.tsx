@@ -163,7 +163,7 @@ export default async function GMHubPage() {
     },
     {
       title: "Items",
-      description: "Items + images + effects.",
+      description: "weapons + quest items + gear.",
       href: "/admin/items",
       count: counts.items,
       status: "live",
