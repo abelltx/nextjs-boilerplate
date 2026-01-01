@@ -5,6 +5,7 @@ import PlayerStatusHeader from "./PlayerStatusHeader";
 import JourneyLog from "./JourneyLog";
 import JoinSessionModal from "./JoinSessionModal";
 import { AbilitiesCard, SavesCard, SkillsCard, PassivesCard } from "./PlayerSheetPanels";
+import RollPanel from "./RollPanel";
 
 type TabKey = "inventory" | "actions" | "traits" | "talents" | "journey" | "sessions";
 
@@ -143,11 +144,16 @@ export default function PlayerHubClient(props: {
                   </div>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  <div className="text-sm font-semibold">Actions</div>
-                  <div className="text-sm text-neutral-300">Next: roll buttons, attacks, and use-item actions.</div>
-                </div>
-              )}
+                    <div className="space-y-3">
+                      <div className="text-sm font-semibold">Actions</div>
+                      <RollPanel
+                        stat={stat}
+                        disabled={isLiveMode}
+                        disabledReason="Rolls are handled in Live Mode."
+                      />
+                    </div>
+                  )
+                  }
             </div>
           </section>
         </div>
