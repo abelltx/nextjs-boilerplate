@@ -2,9 +2,9 @@
 
 import { useMemo, useState } from "react";
 import PlayerStatusHeader from "./PlayerStatusHeader";
-import { AbilitiesCard, SavesCard, SkillsCard, PassivesCard, type StatBlock } from "./PlayerSheetPanels";
 import JourneyLog from "./JourneyLog";
 import JoinSessionModal from "./JoinSessionModal";
+import { AbilitiesCard, SavesCard, SkillsCard, PassivesCard } from "./PlayerSheetPanels";
 
 type TabKey = "inventory" | "actions" | "traits" | "talents" | "journey" | "sessions";
 
@@ -20,8 +20,8 @@ export default function PlayerHubClient(props: {
   const [tab, setTab] = useState<TabKey>("inventory");
   const [joinOpen, setJoinOpen] = useState(false);
 
-  // If you don’t have a character stat_block yet, this still renders using safe defaults.
-  const stat: StatBlock = (props.character?.stat_block ?? {}) as any;
+  // stat_block is optional for now. Panels will show defaults if empty.
+  const stat = (props.character?.stat_block ?? {}) as any;
 
   const liveSession = useMemo(() => {
     const candidates = (props.sessions ?? [])
@@ -36,15 +36,14 @@ export default function PlayerHubClient(props: {
       return false;
     };
 
-    const live = candidates.find(({ state }) => isLive(state));
-    return live?.session ?? null;
+    return candidates.find(({ state }) => isLive(state))?.session ?? null;
   }, [props.sessions, props.sessionStates]);
 
-  const isLiveMode = Boolean(liveSession);
+  const derived = stat?.derived ?? {};
+  const resources = stat?.resources ?? {};
+  const effects = stat?.effects ?? [];
 
-  const derived = stat.derived ?? {};
-  const resources = stat.resources ?? {};
-  const effects = stat.effects ?? [];
+  const isLiveMode = Boolean(liveSession);
 
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100">
@@ -75,7 +74,6 @@ export default function PlayerHubClient(props: {
               Signed in as {props.userEmail} • {props.accessLabel}
             </div>
 
-            {/* Recent Journey */}
             <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4">
               <div className="flex items-center justify-between">
                 <div className="text-sm font-semibold">Recent Journey</div>
@@ -121,11 +119,7 @@ export default function PlayerHubClient(props: {
             </div>
 
             <div className="mt-4 rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4">
-              {isLiveMode ? (
-                <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-100">
-                  LIVE mode panel goes here next (your realtime components). For now, hub stays usable.
-                </div>
-              ) : tab === "inventory" ? (
+              {tab === "inventory" ? (
                 <InventoryPanel items={props.inventory} />
               ) : tab === "journey" ? (
                 <div>
