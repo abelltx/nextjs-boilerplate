@@ -1,6 +1,10 @@
 ﻿import { redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth/getProfile";
 import { supabaseServer } from "@/lib/supabase/server";
+import PlayerHubClient from "./_components/PlayerHubClient";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default async function PlayerPage() {
   const { user, profile } = await getProfile();
@@ -10,8 +14,9 @@ export default async function PlayerPage() {
 
   const accessLabel = profile
     ? `${profile.is_admin ? "admin " : ""}${profile.is_storyteller ? "storyteller " : ""}player`.trim()
-    : "unknown";
+    : "player";
 
+  // --- Character (MVP: one per user) ---
   const { data: existingCharacters, error: charReadErr } = await supabase
     .from("characters")
     .select("id,user_id,name,class,level,created_at")
@@ -34,29 +39,7 @@ export default async function PlayerPage() {
     character = created;
   }
 
-  const { data: storyRow, error: storyReadErr } = await supabase
-    .from("story_state")
-    .select("user_id, story_text, updated_at")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (storyReadErr) throw new Error(`Failed to load story: ${storyReadErr.message}`);
-
-  let storyText = storyRow?.story_text ?? "";
-
-  if (!storyRow) {
-    const { error: storyCreateErr } = await supabase.from("story_state").insert({
-      user_id: user.id,
-      story_text:
-        "Welcome to Neweyes Online.\n\nYour story will appear here. (MVP: read-only for now.)",
-    });
-
-    if (storyCreateErr) throw new Error(`Failed to create story: ${storyCreateErr.message}`);
-
-    storyText =
-      "Welcome to Neweyes Online.\n\nYour story will appear here. (MVP: read-only for now.)";
-  }
-
+  // --- Inventory ---
   const { data: inventory, error: invErr } = await supabase
     .from("inventory_items")
     .select("id,name,quantity,created_at")
@@ -65,73 +48,96 @@ export default async function PlayerPage() {
 
   if (invErr) throw new Error(`Failed to load inventory: ${invErr.message}`);
 
+  // --- Sessions joined (for hub + LIVE detection) ---
+  // Expect: session_players(session_id, player_id)
+  const { data: joins, error: joinErr } = await supabase
+    .from("session_players")
+    .select("session_id, created_at")
+    .eq("player_id", user.id)
+    .order("created_at", { ascending: false });
+
+  if (joinErr) {
+    // If table doesn’t exist yet or RLS blocks, we still render hub.
+    console.warn("PlayerPage: failed to load session_players", joinErr.message);
+  }
+
+  const sessionIds = (joins ?? []).map((j: any) => j.session_id).filter(Boolean);
+
+  // session metadata
+  let sessions: any[] = [];
+  if (sessionIds.length) {
+    const { data: sData, error: sErr } = await supabase
+      .from("sessions")
+      .select("id,name,episode_id,created_at")
+      .in("id", sessionIds);
+
+    if (sErr) {
+      console.warn("PlayerPage: failed to load sessions", sErr.message);
+    } else {
+      sessions = sData ?? [];
+    }
+  }
+
+  // session_state for LIVE detection (we’ll treat “live” if certain flags exist)
+  // Expect: session_state(session_id, ... flags ...)
+  let sessionStates: Record<string, any> = {};
+  if (sessionIds.length) {
+    const { data: stData, error: stErr } = await supabase
+      .from("session_state")
+      .select("*")
+      .in("session_id", sessionIds);
+
+    if (stErr) {
+      console.warn("PlayerPage: failed to load session_state", stErr.message);
+    } else {
+      for (const row of stData ?? []) sessionStates[row.session_id] = row;
+    }
+  }
+
+  // --- Journey log (structured, not a text blob) ---
+  // Requires: game_log table (SQL provided below). If absent, we just show empty.
+  let gameLog: any[] = [];
+  const { data: logData, error: logErr } = await supabase
+    .from("game_log")
+    .select("id, event_type, title, summary, session_id, episode_id, created_at")
+    .eq("user_id", user.id)
+    .eq("character_id", character.id)
+    .order("created_at", { ascending: false })
+    .limit(25);
+
+  if (logErr) {
+    console.warn("PlayerPage: game_log not available (yet)", logErr.message);
+  } else {
+    gameLog = logData ?? [];
+  }
+
+  // --- Header stats (MVP defaults) ---
+  // These columns likely don’t exist yet. Keep it safe.
+  // When you add them to `characters`, wire them here.
+  const headerStats = {
+    health_current: null as number | null,
+    health_max: null as number | null,
+    defense: null as number | null,
+    speed: null as number | null,
+
+    // Faith always visible
+    faith_available: 0,
+    faith_total_cap: 100,
+
+    // Effects (table optional later)
+    effects: [] as Array<{ name: string; kind?: "buff" | "debuff"; note?: string }>,
+  };
+
   return (
-    <main style={{ maxWidth: 920, margin: "40px auto", padding: 16, display: "grid", gap: 16 }}>
-      <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div>
-          <h1 style={{ fontSize: 28, fontWeight: 900, margin: 0 }}>Player Dashboard</h1>
-          <div style={{ opacity: 0.8, marginTop: 6 }}>
-            <span>Signed in as: <b>{user.email}</b></span>
-            <span style={{ marginLeft: 12 }}>Access: <b>{accessLabel}</b></span>
-          </div>
-        </div>
-
-        <form action="/logout" method="post">
-          <button style={{ padding: "10px 12px", fontWeight: 800 }}>Sign out</button>
-        </form>
-      </header>
-
-      <section style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 16 }}>
-          <h2 style={{ marginTop: 0 }}>Character</h2>
-          <div style={{ display: "grid", gap: 8 }}>
-            <div><b>Name:</b> {character.name}</div>
-            <div><b>Class:</b> {character.class}</div>
-            <div><b>Level:</b> {character.level}</div>
-          </div>
-          <div style={{ marginTop: 14, opacity: 0.7, fontSize: 13 }}>
-            MVP note: one character per user (for now).
-          </div>
-        </div>
-
-        <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 16 }}>
-          <h2 style={{ marginTop: 0 }}>Inventory</h2>
-
-          {!inventory || inventory.length === 0 ? (
-            <p style={{ opacity: 0.8 }}>
-              No items yet. (Next step: we’ll add an “Add item” button.)
-            </p>
-          ) : (
-            <ul style={{ margin: 0, paddingLeft: 18 }}>
-              {inventory.map((it) => (
-                <li key={it.id}>
-                  {it.name} {it.quantity > 1 ? `× ${it.quantity}` : ""}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </section>
-
-      <section style={{ border: "1px solid #ddd", borderRadius: 12, padding: 16 }}>
-        <h2 style={{ marginTop: 0 }}>Story</h2>
-        <textarea
-          value={storyText}
-          readOnly
-          style={{
-            width: "100%",
-            minHeight: 220,
-            padding: 12,
-            borderRadius: 10,
-            border: "1px solid #ccc",
-            fontFamily: "inherit",
-            lineHeight: 1.4,
-          }}
-        />
-        <div style={{ marginTop: 8, opacity: 0.7, fontSize: 13 }}>
-          MVP note: read-only. Storytellers will update this in the next phase.
-        </div>
-      </section>
-    </main>
+    <PlayerHubClient
+      userEmail={user.email ?? ""}
+      accessLabel={accessLabel}
+      character={character}
+      inventory={inventory ?? []}
+      sessions={sessions}
+      sessionStates={sessionStates}
+      gameLog={gameLog}
+      headerStats={headerStats}
+    />
   );
 }
