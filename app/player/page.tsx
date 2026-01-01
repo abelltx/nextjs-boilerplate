@@ -19,7 +19,7 @@ export default async function PlayerPage() {
   // --- Character (MVP: one per user) ---
   const { data: existingCharacters, error: charReadErr } = await supabase
     .from("characters")
-    .select("id,user_id,name,class,level,created_at")
+    .select("id,user_id,name,class,level,created_at,stat_block")
     .eq("user_id", user.id)
     .order("created_at", { ascending: true })
     .limit(1);
@@ -32,7 +32,7 @@ export default async function PlayerPage() {
     const { data: created, error: charCreateErr } = await supabase
       .from("characters")
       .insert({ user_id: user.id, name: "Neweyes Adventurer", class: "Pilgrim", level: 1 })
-      .select("id,user_id,name,class,level,created_at")
+      .select("id,user_id,name,class,level,created_at,stat_block")
       .single();
 
     if (charCreateErr) throw new Error(`Failed to create character: ${charCreateErr.message}`);
