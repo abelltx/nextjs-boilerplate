@@ -2,18 +2,11 @@
 
 import { useMemo, useState } from "react";
 import PlayerStatusHeader from "./PlayerStatusHeader";
-import JoinSessionModal from "./JoinSessionModal";
+import { AbilitiesCard, SavesCard, SkillsCard, PassivesCard, type StatBlock } from "./PlayerSheetPanels";
 import JourneyLog from "./JourneyLog";
+import JoinSessionModal from "./JoinSessionModal";
 
-type HeaderStats = {
-  health_current: number | null;
-  health_max: number | null;
-  defense: number | null;
-  speed: number | null;
-  faith_available: number;
-  faith_total_cap: number;
-  effects: Array<{ name: string; kind?: "buff" | "debuff"; note?: string }>;
-};
+type TabKey = "inventory" | "actions" | "traits" | "talents" | "journey" | "sessions";
 
 export default function PlayerHubClient(props: {
   userEmail: string;
@@ -23,24 +16,23 @@ export default function PlayerHubClient(props: {
   sessions: any[];
   sessionStates: Record<string, any>;
   gameLog: any[];
-  headerStats: HeaderStats;
 }) {
-  const [tab, setTab] = useState<"inventory" | "sessions" | "journey" | "talents" | "actions">("inventory");
+  const [tab, setTab] = useState<TabKey>("inventory");
   const [joinOpen, setJoinOpen] = useState(false);
 
+  // If you don’t have a character stat_block yet, this still renders using safe defaults.
+  const stat: StatBlock = (props.character?.stat_block ?? {}) as any;
+
   const liveSession = useMemo(() => {
-    // “Live” detection is intentionally tolerant.
-    // If you later add a canonical boolean (recommended), update this.
-    const candidates = props.sessions
+    const candidates = (props.sessions ?? [])
       .map((s) => ({ session: s, state: props.sessionStates?.[s.id] }))
       .filter(({ state }) => Boolean(state));
 
     const isLive = (state: any) => {
-      // Prefer explicit flags if present; fall back to roll_open as a signal.
       if (state?.player_view === true) return true;
       if (state?.is_live === true) return true;
       if (state?.live === true) return true;
-      if (state?.roll_open === true) return true;
+      if (state?.roll_open === true) return true; // fallback signal
       return false;
     };
 
@@ -50,95 +42,73 @@ export default function PlayerHubClient(props: {
 
   const isLiveMode = Boolean(liveSession);
 
+  const derived = stat.derived ?? {};
+  const resources = stat.resources ?? {};
+  const effects = stat.effects ?? [];
+
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100">
       <div className="mx-auto max-w-6xl px-4 py-6">
         <PlayerStatusHeader
           characterName={props.character?.name ?? "Adventurer"}
           becomingLabel={"Pilgrim (MVP)"}
-          healthCurrent={props.headerStats.health_current}
-          healthMax={props.headerStats.health_max}
-          defense={props.headerStats.defense}
-          speed={props.headerStats.speed}
-          faithAvailable={props.headerStats.faith_available}
-          faithCap={props.headerStats.faith_total_cap}
-          effects={props.headerStats.effects}
+          healthCurrent={derived.hp_current ?? null}
+          healthMax={derived.hp_max ?? null}
+          defense={derived.defense ?? null}
+          speed={derived.speed ?? null}
+          faithAvailable={Number(resources.faith_available ?? 0)}
+          faithCap={Number(resources.faith_cap ?? 100)}
+          effects={effects}
           liveSessionName={liveSession?.name ?? null}
           onJoinClick={() => setJoinOpen(true)}
         />
 
         <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-12">
-          {/* Left rail (MVP placeholder; we’ll wire stats later) */}
-          <aside className="lg:col-span-3">
-            <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4 shadow-sm">
-              <div className="text-sm font-semibold">Character</div>
-              <div className="mt-2 text-sm text-neutral-300">
-                <div className="flex items-center justify-between">
-                  <span className="opacity-70">Class</span>
-                  <span>{props.character?.class ?? "Pilgrim"}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="opacity-70">Level (legacy)</span>
-                  <span>{props.character?.level ?? 1}</span>
-                </div>
-                <div className="mt-3 text-xs opacity-60">
-                  Signed in as {props.userEmail} • {props.accessLabel}
-                </div>
-              </div>
+          {/* LEFT RAIL (big rock) */}
+          <aside className="lg:col-span-3 space-y-4">
+            <AbilitiesCard stat={stat} />
+            <SavesCard stat={stat} />
+            <SkillsCard stat={stat} />
+            <PassivesCard stat={stat} />
 
-              <div className="mt-4 border-t border-neutral-800 pt-4 text-xs text-neutral-400">
-                Left rail will become: abilities, saves, skills, passives.
-              </div>
+            <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4 text-xs text-neutral-400">
+              Signed in as {props.userEmail} • {props.accessLabel}
             </div>
 
-            {/* Quick panel: Recent Journey (always visible) */}
-            <div className="mt-4 rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4">
+            {/* Recent Journey */}
+            <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4">
               <div className="flex items-center justify-between">
                 <div className="text-sm font-semibold">Recent Journey</div>
-                <button
-                  className="text-xs text-neutral-300 hover:text-white"
-                  onClick={() => setTab("journey")}
-                >
+                <button className="text-xs text-neutral-300 hover:text-white" onClick={() => setTab("journey")}>
                   View all
                 </button>
               </div>
-
               <div className="mt-3">
-                <JourneyLog items={props.gameLog.slice(0, 5)} compact />
+                <JourneyLog items={(props.gameLog ?? []).slice(0, 5)} compact />
               </div>
             </div>
           </aside>
 
-          {/* Main */}
+          {/* MAIN */}
           <section className="lg:col-span-9">
-            {/* Tabs */}
             <div className="flex flex-wrap gap-2 rounded-2xl border border-neutral-800 bg-neutral-900/40 p-2">
-              <TabButton active={tab === "inventory"} onClick={() => setTab("inventory")}>
-                Inventory
-              </TabButton>
-              <TabButton active={tab === "actions"} onClick={() => setTab("actions")}>
-                Actions
-              </TabButton>
-              <TabButton
+              <Tab active={tab === "inventory"} onClick={() => setTab("inventory")}>Inventory</Tab>
+              <Tab active={tab === "actions"} onClick={() => setTab("actions")}>Actions</Tab>
+              <Tab active={tab === "traits"} onClick={() => setTab("traits")}>Abilities & Traits</Tab>
+              <Tab
                 active={tab === "talents"}
                 onClick={() => setTab("talents")}
                 disabled={isLiveMode}
-                title={isLiveMode ? "Talents are spent between sessions in the Elder tents." : undefined}
+                title={isLiveMode ? "Spend points between sessions in the Elder tents." : undefined}
               >
                 Talents
-              </TabButton>
-              <TabButton active={tab === "journey"} onClick={() => setTab("journey")}>
-                Journey Log
-              </TabButton>
-              <TabButton active={tab === "sessions"} onClick={() => setTab("sessions")}>
-                Sessions
-              </TabButton>
+              </Tab>
+              <Tab active={tab === "journey"} onClick={() => setTab("journey")}>Journey Log</Tab>
+              <Tab active={tab === "sessions"} onClick={() => setTab("sessions")}>Sessions</Tab>
 
               <div className="ml-auto flex items-center gap-2 pr-2 text-xs text-neutral-300">
                 {isLiveMode ? (
-                  <span className="rounded-full bg-red-500/20 px-2 py-1 text-red-200">
-                    LIVE • {liveSession?.name ?? "Session"}
-                  </span>
+                  <span className="rounded-full bg-red-500/20 px-2 py-1 text-red-200">LIVE • {liveSession?.name}</span>
                 ) : (
                   <button
                     className="rounded-full border border-neutral-700 bg-neutral-950 px-3 py-1 hover:bg-neutral-900"
@@ -150,20 +120,39 @@ export default function PlayerHubClient(props: {
               </div>
             </div>
 
-            {/* Content */}
             <div className="mt-4 rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4">
               {isLiveMode ? (
-                <LiveModePanel session={liveSession} />
+                <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-100">
+                  LIVE mode panel goes here next (your realtime components). For now, hub stays usable.
+                </div>
               ) : tab === "inventory" ? (
                 <InventoryPanel items={props.inventory} />
-              ) : tab === "sessions" ? (
-                <SessionsPanel sessions={props.sessions} onJoin={() => setJoinOpen(true)} />
               ) : tab === "journey" ? (
-                <JourneyPanel items={props.gameLog} />
+                <div>
+                  <div className="text-sm font-semibold">Journey Log</div>
+                  <div className="mt-3">
+                    <JourneyLog items={props.gameLog ?? []} />
+                  </div>
+                </div>
+              ) : tab === "sessions" ? (
+                <SessionsPanel sessions={props.sessions ?? []} onJoin={() => setJoinOpen(true)} />
               ) : tab === "talents" ? (
-                <TalentsPanel faithAvailable={props.headerStats.faith_available} />
+                <div className="space-y-2">
+                  <div className="text-sm font-semibold">Talents</div>
+                  <div className="text-sm text-neutral-300">Scaffold only for now. Next: Elder cards + spend drawer.</div>
+                </div>
+              ) : tab === "traits" ? (
+                <div className="space-y-2">
+                  <div className="text-sm font-semibold">Abilities & Traits</div>
+                  <div className="text-sm text-neutral-300">
+                    Next: show passive traits, trainings, callings, and effect sources (items/talents).
+                  </div>
+                </div>
               ) : (
-                <ActionsPanel />
+                <div className="space-y-2">
+                  <div className="text-sm font-semibold">Actions</div>
+                  <div className="text-sm text-neutral-300">Next: roll buttons, attacks, and use-item actions.</div>
+                </div>
               )}
             </div>
           </section>
@@ -175,13 +164,7 @@ export default function PlayerHubClient(props: {
   );
 }
 
-function TabButton(props: {
-  active: boolean;
-  onClick: () => void;
-  disabled?: boolean;
-  title?: string;
-  children: any;
-}) {
+function Tab(props: { active: boolean; onClick: () => void; disabled?: boolean; title?: string; children: any }) {
   return (
     <button
       onClick={props.onClick}
@@ -190,7 +173,7 @@ function TabButton(props: {
       className={[
         "rounded-xl px-3 py-2 text-sm transition",
         props.active ? "bg-white text-black" : "bg-neutral-950 text-neutral-200 hover:bg-neutral-900",
-        props.disabled ? "opacity-40 hover:bg-neutral-950 cursor-not-allowed" : "",
+        props.disabled ? "opacity-40 cursor-not-allowed hover:bg-neutral-950" : "",
       ].join(" ")}
     >
       {props.children}
@@ -199,9 +182,7 @@ function TabButton(props: {
 }
 
 function InventoryPanel({ items }: { items: any[] }) {
-  if (!items?.length) {
-    return <div className="text-sm text-neutral-300">No items yet. (Next: Add item button + equip slots.)</div>;
-  }
+  if (!items?.length) return <div className="text-sm text-neutral-300">No items yet.</div>;
   return (
     <div className="space-y-2">
       <div className="text-sm font-semibold">Inventory</div>
@@ -226,16 +207,12 @@ function SessionsPanel({ sessions, onJoin }: { sessions: any[]; onJoin: () => vo
           Join another
         </button>
       </div>
-      {!sessions?.length ? (
+      {!sessions.length ? (
         <div className="text-sm text-neutral-300">You haven’t joined a session yet.</div>
       ) : (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {sessions.map((s) => (
-            <a
-              key={s.id}
-              href={`/player/sessions/${s.id}`}
-              className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4 hover:bg-neutral-900/40"
-            >
+            <a key={s.id} href={`/player/sessions/${s.id}`} className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4 hover:bg-neutral-900/40">
               <div className="text-sm font-semibold">{s.name ?? "Session"}</div>
               <div className="mt-1 text-xs text-neutral-400">{s.id}</div>
               <div className="mt-3 text-xs text-neutral-300">Open</div>
@@ -243,59 +220,6 @@ function SessionsPanel({ sessions, onJoin }: { sessions: any[]; onJoin: () => vo
           ))}
         </div>
       )}
-    </div>
-  );
-}
-
-function JourneyPanel({ items }: { items: any[] }) {
-  return (
-    <div>
-      <div className="text-sm font-semibold">Journey Log</div>
-      <div className="mt-3">
-        <JourneyLog items={items} />
-      </div>
-    </div>
-  );
-}
-
-function TalentsPanel({ faithAvailable }: { faithAvailable: number }) {
-  return (
-    <div className="space-y-3">
-      <div className="text-sm font-semibold">Talents (Elder Tents)</div>
-      <div className="text-sm text-neutral-300">
-        Faith available to spend: <span className="font-semibold text-white">{faithAvailable}</span>
-      </div>
-      <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-4 text-sm text-neutral-300">
-        Scaffold only (Phase 1): next we’ll add Elder cards + spend drawer + tier gating.
-      </div>
-    </div>
-  );
-}
-
-function ActionsPanel() {
-  return (
-    <div className="space-y-3">
-      <div className="text-sm font-semibold">Actions</div>
-      <div className="text-sm text-neutral-300">MVP placeholder. Next: roll/skill buttons, interact, use item.</div>
-    </div>
-  );
-}
-
-function LiveModePanel({ session }: { session: any }) {
-  return (
-    <div className="space-y-3">
-      <div className="text-sm font-semibold">Live Mode</div>
-      <div className="text-sm text-neutral-300">
-        Storyteller is live: <span className="font-semibold text-white">{session?.name ?? "Session"}</span>
-      </div>
-      <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-100">
-        Next step: render your realtime components here (StoryRealtime / PresentedBlockRealtime / PlayerRollEntryRealtime).
-        The hub stays the home URL; the main panel becomes the session screen.
-      </div>
-
-      <div className="text-sm text-neutral-300">
-        If you want, we can keep /player/sessions/[id] for deep linking, but the “hub becomes live” happens here.
-      </div>
     </div>
   );
 }

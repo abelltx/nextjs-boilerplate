@@ -20,9 +20,7 @@ export default function PlayerStatusHeader(props: {
   const hc = props.healthCurrent;
   const hm = props.healthMax;
 
-  const healthText =
-    hc != null && hm != null ? `${hc} / ${hm}` : "—";
-
+  const healthText = hc != null && hm != null ? `${hc} / ${hm}` : "—";
   const defenseText = props.defense != null ? String(props.defense) : "—";
   const speedText = props.speed != null ? `${props.speed} ft` : "—";
 
@@ -35,13 +33,11 @@ export default function PlayerStatusHeader(props: {
   return (
     <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4 shadow-sm">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        {/* Identity */}
         <div>
           <div className="text-lg font-semibold">{props.characterName}</div>
           <div className="text-sm text-neutral-300">{props.becomingLabel}</div>
         </div>
 
-        {/* Cockpit blocks */}
         <div className="flex flex-wrap gap-2">
           <StatPill label="Health" value={healthText} />
           <StatPill label="Defense" value={defenseText} />
@@ -85,9 +81,7 @@ function EffectsPill(props: { shown: Array<{ name: string; kind?: string }>; ext
               </span>
             ))}
             {props.extra > 0 ? (
-              <span className="rounded-full bg-neutral-800 px-2 py-0.5 text-xs text-neutral-200">
-                +{props.extra} more
-              </span>
+              <span className="rounded-full bg-neutral-800 px-2 py-0.5 text-xs text-neutral-200">+{props.extra} more</span>
             ) : null}
           </>
         )}

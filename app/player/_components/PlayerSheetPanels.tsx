@@ -1,8 +1,8 @@
 "use client";
 
-type AbilityKey = "str" | "dex" | "con" | "int" | "wis" | "cha";
+export type AbilityKey = "str" | "dex" | "con" | "int" | "wis" | "cha";
 
-type StatBlock = {
+export type StatBlock = {
   abilities?: Record<AbilityKey, number>;
   saves?: Partial<Record<AbilityKey, number>>;
   skills?: Record<string, number>;
@@ -16,6 +16,7 @@ function mod(score?: number) {
   const s = Number(score ?? 10);
   return Math.floor((s - 10) / 2);
 }
+
 function fmt(n: number) {
   return n >= 0 ? `+${n}` : String(n);
 }
@@ -66,9 +67,7 @@ export function SavesCard({ stat }: { stat: StatBlock }) {
       <div className="space-y-1">
         {rows.map((r) => {
           const bonus = mod(a[r.k]) + Number(s[r.k] ?? 0);
-          return (
-            <Row key={r.k} left={r.label} right={fmt(bonus)} />
-          );
+          return <Row key={r.k} left={r.label} right={fmt(bonus)} />;
         })}
       </div>
     </Card>
@@ -87,9 +86,7 @@ export function SkillsCard({ stat }: { stat: StatBlock }) {
         <div className="space-y-1">
           {entries
             .sort((a, b) => a[0].localeCompare(b[0]))
-            .map(([name, bonus]) => (
-              <Row key={name} left={name} right={fmt(Number(bonus ?? 0))} />
-            ))}
+            .map(([name, bonus]) => <Row key={name} left={name} right={fmt(Number(bonus ?? 0))} />)}
         </div>
       )}
     </Card>
@@ -108,9 +105,7 @@ export function PassivesCard({ stat }: { stat: StatBlock }) {
         <div className="space-y-1">
           {entries
             .sort((a, b) => a[0].localeCompare(b[0]))
-            .map(([name, val]) => (
-              <Row key={name} left={name} right={String(val)} />
-            ))}
+            .map(([name, val]) => <Row key={name} left={name} right={String(val)} />)}
         </div>
       )}
     </Card>
@@ -119,7 +114,7 @@ export function PassivesCard({ stat }: { stat: StatBlock }) {
 
 function Card({ title, children }: { title: string; children: any }) {
   return (
-    <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4">
+    <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4 shadow-sm">
       <div className="text-sm font-semibold">{title}</div>
       <div className="mt-3">{children}</div>
     </div>
