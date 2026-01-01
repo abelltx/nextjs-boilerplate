@@ -155,7 +155,7 @@ export default function PlayerHubClient(props: {
                   )
                   }
             </div>
-          </section>
+          </section> 
         </div>
       </div>
 
