@@ -8,6 +8,8 @@ import JoinSessionModal from "./JoinSessionModal";
 import { AbilitiesCard, SavesCard, SkillsCard, PassivesCard } from "./PlayerSheetPanels";
 import RollPanel from "./RollPanel";
 import { leaveSessionAction, submitRollResultAction } from "../actions";
+import PlayerInventoryPanel from "./PlayerInventoryPanel";
+
 
 type TabKey = "inventory" | "actions" | "traits" | "talents" | "journey" | "sessions";
 
@@ -247,7 +249,7 @@ export default function PlayerHubClient(props: {
 
             <div className="mt-4 rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4">
               {tab === "inventory" ? (
-                <InventoryPanel items={props.inventory} />
+                <PlayerInventoryPanel characterId={props.character.id} />
               ) : tab === "journey" ? (
                 <div>
                   <div className="text-sm font-semibold">Journey Log</div>

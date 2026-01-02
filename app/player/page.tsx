@@ -3,6 +3,7 @@ import { getProfile } from "@/lib/auth/getProfile";
 import { supabaseServer } from "@/lib/supabase/server";
 import PlayerHubClient from "./_components/PlayerHubClient";
 
+
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
@@ -121,10 +122,10 @@ export default async function PlayerPage() {
       accessLabel={accessLabel}
       character={character}
       inventory={inventory ?? []}
-      sessions={sessions}
-      sessionStates={sessionStates}
-      presentedBlocks={presentedBlocks}
-      gameLog={gameLog}
+      sessions={sessions ?? []}
+      sessionStates={sessionStates ?? {}}
+      presentedBlocks={presentedBlocks ?? {}}
+      gameLog={gameLog ?? []}
     />
   );
 }
