@@ -39,6 +39,7 @@ export default async function PlayerPage() {
     if (charCreateErr) throw new Error(`Failed to create character: ${charCreateErr.message}`);
     character = created;
   }
+  
 
   // ---- Inventory ----
   const { data: inventory, error: invErr } = await supabase
@@ -115,6 +116,17 @@ export default async function PlayerPage() {
 
   if (logErr) throw new Error(`Failed to load game log: ${logErr.message}`);
   gameLog = logData ?? [];
+
+  
+const { data: curRow, error: curErr } = await supabase
+  .from("character_stats_current")
+  .select("stat_block_current")
+  .eq("character_id", character.id)
+  .single();
+
+if (curErr) throw new Error(`Failed to load current stats: ${curErr.message}`);
+
+character = { ...character, stat_block: curRow?.stat_block_current ?? character.stat_block };
 
   return (
     <PlayerHubClient
