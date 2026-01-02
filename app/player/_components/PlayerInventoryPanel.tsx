@@ -310,7 +310,7 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-lg font-semibold">{safeName(selected)}</div>
-                <div className="text-sm opacity-70">{safeType(selected)}</div>
+                <div className="text-sm text-gray-600">{safeType(selected)}</div>
               </div>
               <button
                 className="rounded-md border px-2 py-1 text-sm"
@@ -362,7 +362,7 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
                   </button>
                 ) : (
                   <button
-                    className="rounded-md border px-3 py-2 text-sm"
+                    className="rounded-md border border-gray-300 bg-gray-100 hover:bg-gray-200 px-3 py-2 text-sm font-medium text-gray-900"
                     onClick={() => setEquipped(selected, true)}
                   >
                     Equip
@@ -370,7 +370,7 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
                 )}
 
                 <button
-                  className="rounded-md border px-3 py-2 text-sm"
+                  className="rounded-md border border-red-300 bg-red-50 hover:bg-red-100 px-3 py-2 text-sm font-medium text-red-700"
                   onClick={() => dropOne(selected)}
                 >
                   Drop
