@@ -14,7 +14,7 @@ function isLiveState(state: any) {
   if (state.player_view === true) return true;
   if (state.is_live === true) return true;
   if (state.live === true) return true;
-  if (state.roll_open === true) return true; // fallback signal
+  if (state.roll_open === true) return true;
   return false;
 }
 
@@ -25,6 +25,7 @@ export default function PlayerHubClient(props: {
   inventory: any[];
   sessions: any[];
   sessionStates: Record<string, any>;
+  presentedBlocks: Record<string, any>;
   gameLog: any[];
 }) {
   const [tab, setTab] = useState<TabKey>("inventory");
@@ -43,6 +44,10 @@ export default function PlayerHubClient(props: {
     return candidates.find(({ state }) => isLiveState(state))?.session ?? null;
   }, [props.sessions, props.sessionStates]);
 
+  // Stage selection inside Sessions tab
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+
+  // Auto-default to Sessions tab + glow when live (once)
   useEffect(() => {
     if (!autoRouted && liveSession) {
       setTab("sessions");
@@ -51,16 +56,18 @@ export default function PlayerHubClient(props: {
       setPulseSessions(true);
       setTimeout(() => setPulseSessions(false), 4500);
 
-      setTimeout(() => {
-        sessionsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 50);
+      setTimeout(() => sessionsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
     }
   }, [liveSession, autoRouted]);
+
+  // If a live session exists, default the selected session to it.
+  useEffect(() => {
+    if (!selectedSessionId && liveSession?.id) setSelectedSessionId(liveSession.id);
+  }, [liveSession, selectedSessionId]);
 
   const derived = stat?.derived ?? {};
   const resources = stat?.resources ?? {};
   const effects = stat?.effects ?? [];
-
   const isLiveMode = Boolean(liveSession);
 
   return (
@@ -79,31 +86,6 @@ export default function PlayerHubClient(props: {
           liveSessionName={liveSession?.name ?? null}
           onJoinClick={() => setJoinOpen(true)}
         />
-
-        {liveSession ? (
-          <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <div className="text-sm font-semibold text-red-100">A session is LIVE right now</div>
-                <div className="text-sm text-red-200/80">{liveSession.name}</div>
-              </div>
-
-              <button
-                onClick={() => {
-                  setTab("sessions");
-                  setPulseSessions(true);
-                  setTimeout(() => setPulseSessions(false), 4500);
-                  setTimeout(() => {
-                    sessionsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-                  }, 50);
-                }}
-                className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-black hover:bg-neutral-200"
-              >
-                View Session Status ↓
-              </button>
-            </div>
-          </div>
-        ) : null}
 
         <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-12">
           <aside className="lg:col-span-3 space-y-4">
@@ -147,9 +129,7 @@ export default function PlayerHubClient(props: {
                 active={tab === "sessions"}
                 onClick={() => {
                   setTab("sessions");
-                  setTimeout(() => {
-                    sessionsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-                  }, 50);
+                  setTimeout(() => sessionsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
                 }}
                 glow={pulseSessions}
               >
@@ -188,9 +168,12 @@ export default function PlayerHubClient(props: {
                     pulseSessions ? "rounded-2xl ring-2 ring-red-400/60 shadow-[0_0_22px_rgba(248,113,113,0.28)]" : "",
                   ].join(" ")}
                 >
-                  <SessionsPanel
+                  <SessionsWithStage
                     sessions={props.sessions ?? []}
                     sessionStates={props.sessionStates ?? {}}
+                    presentedBlocks={props.presentedBlocks ?? {}}
+                    selectedSessionId={selectedSessionId}
+                    onSelect={(id) => setSelectedSessionId(id)}
                     onJoin={() => setJoinOpen(true)}
                   />
                 </div>
@@ -241,9 +224,7 @@ function Tab(props: {
       ].join(" ")}
     >
       {props.children}
-      {props.glow ? (
-        <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-red-400 animate-pulse" />
-      ) : null}
+      {props.glow ? <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-red-400 animate-pulse" /> : null}
     </button>
   );
 }
@@ -255,7 +236,10 @@ function InventoryPanel({ items }: { items: any[] }) {
       <div className="text-sm font-semibold">Inventory</div>
       <ul className="mt-2 space-y-1 text-sm text-neutral-200">
         {items.map((it) => (
-          <li key={it.id} className="flex items-center justify-between rounded-lg border border-neutral-800 bg-neutral-950/40 px-3 py-2">
+          <li
+            key={it.id}
+            className="flex items-center justify-between rounded-lg border border-neutral-800 bg-neutral-950/40 px-3 py-2"
+          >
             <span>{it.name}</span>
             <span className="text-neutral-400">{it.quantity > 1 ? `× ${it.quantity}` : ""}</span>
           </li>
@@ -265,60 +249,142 @@ function InventoryPanel({ items }: { items: any[] }) {
   );
 }
 
-function SessionsPanel({
-  sessions,
-  sessionStates,
-  onJoin,
-}: {
+function SessionsWithStage(props: {
   sessions: any[];
   sessionStates: Record<string, any>;
+  presentedBlocks: Record<string, any>;
+  selectedSessionId: string | null;
+  onSelect: (id: string) => void;
   onJoin: () => void;
 }) {
+  const selected = props.sessions.find((s) => s.id === props.selectedSessionId) ?? props.sessions[0] ?? null;
+  const state = selected ? props.sessionStates?.[selected.id] : null;
+
+  const presentedId = state?.presented_block_id as string | undefined;
+  const block = presentedId ? props.presentedBlocks?.[presentedId] : null;
+
+  const rollOpen = Boolean(state?.roll_open);
+  const rollDie = String(state?.roll_die ?? "d20");
+  const rollPrompt = String(state?.roll_prompt ?? "");
+  const rollTarget = String(state?.roll_target ?? "all");
+
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="text-sm font-semibold">Your Sessions</div>
-        <button className="rounded-xl border border-neutral-700 px-3 py-2 text-sm hover:bg-neutral-950" onClick={onJoin}>
-          Join another
-        </button>
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+      {/* Session list */}
+      <div className="lg:col-span-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="text-sm font-semibold">Your Sessions</div>
+          <button className="rounded-xl border border-neutral-700 px-3 py-2 text-sm hover:bg-neutral-950" onClick={props.onJoin}>
+            Join another
+          </button>
+        </div>
+
+        {!props.sessions.length ? (
+          <div className="text-sm text-neutral-300">You haven’t joined a session yet.</div>
+        ) : (
+          <div className="space-y-2">
+            {props.sessions.map((s) => {
+              const st = props.sessionStates?.[s.id];
+              const live = isLiveState(st);
+              const active = selected?.id === s.id;
+
+              return (
+                <button
+                  key={s.id}
+                  onClick={() => props.onSelect(s.id)}
+                  className={[
+                    "w-full text-left rounded-2xl border p-4 transition",
+                    active
+                      ? "border-neutral-600 bg-neutral-950/60"
+                      : "border-neutral-800 bg-neutral-950/40 hover:bg-neutral-900/40",
+                  ].join(" ")}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold">{s.name ?? "Session"}</div>
+                      <div className="mt-1 text-xs text-neutral-400">{s.id}</div>
+                    </div>
+                    {live ? (
+                      <span className="rounded-full bg-red-500/20 px-2 py-1 text-xs text-red-200">LIVE</span>
+                    ) : (
+                      <span className="rounded-full bg-neutral-800 px-2 py-1 text-xs text-neutral-300">OFFLINE</span>
+                    )}
+                  </div>
+                  {st?.presented_block_id ? (
+                    <div className="mt-2 text-xs text-neutral-300">Presented content available</div>
+                  ) : (
+                    <div className="mt-2 text-xs text-neutral-500">Nothing presented yet</div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {!sessions.length ? (
-        <div className="text-sm text-neutral-300">You haven’t joined a session yet.</div>
-      ) : (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          {sessions.map((s) => {
-            const state = sessionStates?.[s.id];
-            const live = isLiveState(state);
+      {/* Stage */}
+      <div className="lg:col-span-7 space-y-4">
+        <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-semibold">Stage</div>
+            <div className="text-xs text-neutral-400">
+              {selected ? selected.name : "No session selected"}
+            </div>
+          </div>
 
-            return (
-              <div
-                key={s.id}
-                className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4 hover:bg-neutral-900/40"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-semibold">{s.name ?? "Session"}</div>
-                    <div className="mt-1 text-xs text-neutral-400">{s.id}</div>
-                  </div>
-
-                  {live ? (
-                    <span className="rounded-full bg-red-500/20 px-2 py-1 text-xs text-red-200">LIVE</span>
-                  ) : (
-                    <span className="rounded-full bg-neutral-800 px-2 py-1 text-xs text-neutral-300">OFFLINE</span>
-                  )}
-                </div>
-
-                {live ? (
-                  <div className="mt-3 text-xs text-neutral-200">DM is active — open now</div>
-                ) : (
-                  <div className="mt-3 text-xs text-neutral-400">Not currently live</div>
-                )}
-              </div>
-            );
-          })}
+          {block ? (
+            <div className="mt-3 space-y-3">
+              <div className="text-lg font-extrabold">{block.title ?? block.block_type ?? "Presented"}</div>
+              {block.image_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={block.image_url} alt={block.title ?? "Presented"} className="w-full rounded-xl border border-neutral-800" />
+              ) : null}
+              {block.body ? (
+                <div className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-200">{block.body}</div>
+              ) : (
+                <div className="text-sm text-neutral-400">No body text.</div>
+              )}
+            </div>
+          ) : (
+            <div className="mt-3 text-sm text-neutral-300">
+              When the storyteller clicks <span className="text-neutral-100">Present to Players</span>, it will appear here.
+            </div>
+          )}
         </div>
-      )}
+
+        <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-semibold">Roll Request</div>
+            {rollOpen ? (
+              <span className="rounded-full bg-red-500/20 px-2 py-1 text-xs text-red-200">OPEN</span>
+            ) : (
+              <span className="rounded-full bg-neutral-800 px-2 py-1 text-xs text-neutral-300">CLOSED</span>
+            )}
+          </div>
+
+          <div className="mt-3 space-y-2 text-sm text-neutral-200">
+            <div>
+              Die: <span className="font-bold text-white">{rollDie}</span>
+            </div>
+            {rollPrompt ? <div className="text-neutral-300">{rollPrompt}</div> : <div className="text-neutral-500">No prompt.</div>}
+            <div className="text-xs text-neutral-500">Target: {rollTarget}</div>
+          </div>
+
+          <div className="mt-4 text-xs text-neutral-500">
+            Next phase: we’ll wire the “submit roll” controls right here (manual or digital) using the same logic from
+            <code className="ml-1 rounded bg-neutral-900 px-1">/player/sessions/[id]</code>.
+          </div>
+        </div>
+
+        {selected?.story_text ? (
+          <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
+            <div className="text-sm font-semibold">Story (Board)</div>
+            <div className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-neutral-200">
+              {selected.story_text}
+            </div>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

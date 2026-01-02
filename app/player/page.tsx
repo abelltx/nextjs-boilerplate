@@ -53,30 +53,53 @@ export default async function PlayerPage() {
   let sessionStates: Record<string, any> = {};
 
   const { data: joins, error: joinErr } = await supabase
-  .from("session_players")
-  .select("session_id, joined_at")
-  .eq("player_id", user.id)
-  .order("joined_at", { ascending: false });
+    .from("session_players")
+    .select("session_id, joined_at")
+    .eq("player_id", user.id)
+    .order("joined_at", { ascending: false });
+
   if (joinErr) throw new Error(`Failed to load session joins: ${joinErr.message}`);
 
-  if (!joinErr && joins?.length) {
+  if (joins?.length) {
     const sessionIds = joins.map((j: any) => j.session_id).filter(Boolean);
 
     const { data: sData, error: sErr } = await supabase
       .from("sessions")
-      .select("id,name,episode_id,created_at")
+      .select("id,name,episode_id,story_text,created_at")
       .in("id", sessionIds);
 
-    if (!sErr) sessions = sData ?? [];
+    if (sErr) throw new Error(`Failed to load sessions: ${sErr.message}`);
+    sessions = sData ?? [];
 
     const { data: stData, error: stErr } = await supabase
       .from("session_state")
       .select("*")
       .in("session_id", sessionIds);
 
-    if (!stErr) {
-      for (const row of stData ?? []) sessionStates[row.session_id] = row;
-    }
+    if (stErr) throw new Error(`Failed to load session state: ${stErr.message}`);
+
+    for (const row of stData ?? []) sessionStates[row.session_id] = row;
+  }
+
+  // ---- Presented blocks lookup (for stage) ----
+  const presentedIds = Array.from(
+    new Set(
+      Object.values(sessionStates)
+        .map((st: any) => st?.presented_block_id)
+        .filter((id: any) => typeof id === "string" && id.length > 0)
+    )
+  );
+
+  let presentedBlocks: Record<string, any> = {};
+  if (presentedIds.length) {
+    const { data: blocks, error: bErr } = await supabase
+      .from("episode_blocks")
+      .select("id,sort_order,block_type,audience,mode,title,body,image_url,meta")
+      .in("id", presentedIds);
+
+    if (bErr) throw new Error(`Failed to load presented blocks: ${bErr.message}`);
+
+    for (const b of blocks ?? []) presentedBlocks[b.id] = b;
   }
 
   // ---- Journey Log ----
@@ -89,7 +112,8 @@ export default async function PlayerPage() {
     .order("created_at", { ascending: false })
     .limit(25);
 
-  if (!logErr) gameLog = logData ?? [];
+  if (logErr) throw new Error(`Failed to load game log: ${logErr.message}`);
+  gameLog = logData ?? [];
 
   return (
     <PlayerHubClient
@@ -99,6 +123,7 @@ export default async function PlayerPage() {
       inventory={inventory ?? []}
       sessions={sessions}
       sessionStates={sessionStates}
+      presentedBlocks={presentedBlocks}
       gameLog={gameLog}
     />
   );
