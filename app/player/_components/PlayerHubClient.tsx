@@ -319,11 +319,35 @@ export default function PlayerHubClient(props: {
                   <div className="text-sm text-neutral-300">Scaffold only for now.</div>
                 </div>
               ) : tab === "traits" ? (
-                <div className="space-y-2">
-                  <div className="text-sm font-semibold">Abilities & Traits</div>
-                  <div className="text-sm text-neutral-300">Next: passive traits and sources.</div>
-                </div>
-              ) : (
+                  <div className="space-y-4">
+                    <div className="text-sm font-semibold">Abilities & Traits</div>
+
+                    {/* Core sheet panels (read from computed stat_block) */}
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <AbilitiesCard stat={stat} />
+                      <SavesCard stat={stat} />
+                      <SkillsCard stat={stat} />
+                      <PassivesCard stat={stat} />
+                    </div>
+
+                    {/* Quick resource peek (since you now have resources.stamina, etc.) */}
+                    <div className="rounded-2xl border border-neutral-800 bg-neutral-950 p-4">
+                      <div className="text-sm font-semibold">Resources</div>
+                      <div className="mt-2 grid grid-cols-2 gap-3 text-sm">
+                        <div className="opacity-80">Stamina</div>
+                        <div className="text-right font-semibold">
+                          {resources?.stamina ?? 0}
+                        </div>
+
+                        <div className="opacity-80">Faith</div>
+                        <div className="text-right font-semibold">
+                          {resources?.faith_available ?? 0} / {resources?.faith_cap ?? 0}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+
                 <div className="space-y-3">
                   <div className="text-sm font-semibold">Actions</div>
                   <RollPanel stat={stat} disabled={isLiveMode} disabledReason="Rolls are handled in Live Mode." />
