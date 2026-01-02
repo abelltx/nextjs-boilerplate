@@ -303,10 +303,10 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
       {selected && (
         <div className="fixed inset-0 z-50">
           <div
-            className="absolute inset-0 bg-black/50"
+            className="absolute inset-0 bg-black/60"
             onClick={() => setSelected(null)}
           />
-          <div className="absolute right-0 top-0 h-full w-full sm:w-[420px] bg-background border-l shadow-xl p-4 overflow-y-auto">
+          <div className="absolute right-0 top-0 h-full w-full sm:w-[420px] bg-white text-gray-900 border-l border-gray-300 shadow-2xl p-5 overflow-y-auto">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-lg font-semibold">{safeName(selected)}</div>
@@ -347,7 +347,7 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
 
               <div className="flex gap-2">
                 <button
-                  className="rounded-md border px-3 py-2 text-sm"
+                  className="rounded-md border border-gray-300 bg-gray-100 hover:bg-gray-200 px-3 py-2 text-sm font-medium text-gray-900"
                   onClick={() => useItem(selected)}
                 >
                   Use (stub)
@@ -355,7 +355,7 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
 
                 {selected.equipped ? (
                   <button
-                    className="rounded-md border px-3 py-2 text-sm"
+                    className="rounded-md border border-gray-300 bg-gray-100 hover:bg-gray-200 px-3 py-2 text-sm font-medium text-gray-900"
                     onClick={() => setEquipped(selected, false)}
                   >
                     Unequip
