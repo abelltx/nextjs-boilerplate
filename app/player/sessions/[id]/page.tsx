@@ -39,7 +39,7 @@ function parseDieSides(d: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function rollDie(sides: number) {
+function rollOne(sides: number) {
   return Math.floor(Math.random() * sides) + 1;
 }
 
@@ -107,7 +107,7 @@ export default async function PlayerSessionPage({
 
   // --- Roll state ---
   const rollOpen = Boolean((state as any).roll_open);
-  const rollDie = String((state as any).roll_die ?? "d20");
+  const rollDieCode = String((state as any).roll_die ?? "d20");
   const rollPrompt = String((state as any).roll_prompt ?? "");
   const rollTarget = String((state as any).roll_target ?? "all");
 
@@ -169,8 +169,8 @@ export default async function PlayerSessionPage({
     redirect(`/player/sessions/${sessionId}`);
   }
 
-  const dieLabel = fmtDieLabel(rollDie);
-  const dieSides = parseDieSides(rollDie);
+const dieLabel = fmtDieLabel(rollDieCode);
+const dieSides = parseDieSides(rollDieCode);
 
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100">
@@ -332,7 +332,7 @@ export default async function PlayerSessionPage({
                           action={async () => {
                             "use server";
                             if (!dieSides) redirect(`/player/sessions/${sessionId}`);
-                            const val = rollDie(dieSides);
+                            const val = rollOne(dieSides);
                             const fd = new FormData();
                             fd.set("roll_value", String(val));
                             fd.set("source", "digital");
@@ -353,8 +353,8 @@ export default async function PlayerSessionPage({
                           action={async () => {
                             "use server";
                             if (!dieSides) redirect(`/player/sessions/${sessionId}`);
-                            const a = rollDie(dieSides);
-                            const b = rollDie(dieSides);
+                            const a = rollOne(dieSides);
+                            const b = rollOne(dieSides);
                             const val = Math.max(a, b); // advantage by default
                             const fd = new FormData();
                             fd.set("roll_value", String(val));
@@ -375,8 +375,8 @@ export default async function PlayerSessionPage({
                           action={async () => {
                             "use server";
                             if (!dieSides) redirect(`/player/sessions/${sessionId}`);
-                            const a = rollDie(dieSides);
-                            const b = rollDie(dieSides);
+                            const a = rollOne(dieSides);
+                            const b = rollOne(dieSides);
                             const val = Math.min(a, b); // disadvantage
                             const fd = new FormData();
                             fd.set("roll_value", String(val));
@@ -404,7 +404,7 @@ export default async function PlayerSessionPage({
 
                       {!dieSides ? (
                         <div className="text-xs text-yellow-200">
-                          This roll die value looks invalid: <span className="text-yellow-100">{String(rollDie)}</span>
+                          This roll die value looks invalid: <span className="text-yellow-100">{String(rollDieCode)}</span>
                         </div>
                       ) : null}
                     </div>
