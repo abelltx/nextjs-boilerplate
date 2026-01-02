@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import PlayerStatusHeader from "./PlayerStatusHeader";
 import JourneyLog from "./JourneyLog";
 import JoinSessionModal from "./JoinSessionModal";
@@ -33,6 +33,9 @@ export default function PlayerHubClient(props: {
   // Prevent "tab yanking": only auto-route once.
   const [autoRouted, setAutoRouted] = useState(false);
 
+  const sessionsRef = useRef<HTMLDivElement | null>(null);
+  const [pulseSessions, setPulseSessions] = useState(false);
+
   // stat_block is optional for now. Panels will show defaults if empty.
   const stat = (props.character?.stat_block ?? {}) as any;
 
@@ -47,11 +50,20 @@ export default function PlayerHubClient(props: {
   // Auto-default to Sessions tab if any session is live (once).
   useEffect(() => {
     if (!autoRouted && liveSession) {
-      // Only auto-switch if they haven't already navigated away.
-      setTab((t) => (t === "inventory" ? "sessions" : t));
+      setTab("sessions");
       setAutoRouted(true);
+
+      // glow for a few seconds
+      setPulseSessions(true);
+      setTimeout(() => setPulseSessions(false), 4500);
+
+      // scroll to Sessions panel after DOM paints
+      setTimeout(() => {
+        sessionsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 50);
     }
   }, [liveSession, autoRouted]);
+
 
   const derived = stat?.derived ?? {};
   const resources = stat?.resources ?? {};
@@ -78,20 +90,28 @@ export default function PlayerHubClient(props: {
 
         {/* Soft "enter live" banner */}
         {liveSession ? (
-          <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <div className="text-sm font-semibold text-red-100">A session is LIVE right now</div>
-                <div className="text-sm text-red-200/80">{liveSession.name}</div>
-              </div>
-              <a
-                href={`/player/sessions/${liveSession.id}`}
-                className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-black hover:bg-neutral-200"
-              >
-                Enter Live Session →
-              </a>
+        <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-red-100">A session is LIVE right now</div>
+              <div className="text-sm text-red-200/80">{liveSession.name}</div>
             </div>
+
+            <button
+              onClick={() => {
+                setTab("sessions");
+                setPulseSessions(true);
+                setTimeout(() => setPulseSessions(false), 4500);
+                setTimeout(() => {
+                  sessionsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }, 50);
+              }}
+              className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-black hover:bg-neutral-200"
+            >
+              View Session Status ↓
+            </button>
           </div>
+        </div>
         ) : null}
 
         <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-12">
@@ -143,9 +163,17 @@ export default function PlayerHubClient(props: {
               <Tab active={tab === "journey"} onClick={() => setTab("journey")}>
                 Journey Log
               </Tab>
-              <Tab active={tab === "sessions"} onClick={() => setTab("sessions")}>
-                Sessions
-              </Tab>
+              <Tab
+              active={tab === "sessions"}
+              onClick={() => {
+                setTab("sessions");
+                sessionsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+              }}
+              glow={pulseSessions}
+            >
+              Sessions
+</Tab>
+
 
               <div className="ml-auto flex items-center gap-2 pr-2 text-xs text-neutral-300">
                 {isLiveMode ? (
@@ -172,11 +200,22 @@ export default function PlayerHubClient(props: {
                   </div>
                 </div>
               ) : tab === "sessions" ? (
-                <SessionsPanel
-                  sessions={props.sessions ?? []}
-                  sessionStates={props.sessionStates ?? {}}
-                  onJoin={() => setJoinOpen(true)}
-                />
+                <div
+                  ref={sessionsRef}
+                  className={[
+                    "scroll-mt-24",
+                    pulseSessions
+                      ? "rounded-2xl ring-2 ring-red-400/60 shadow-[0_0_22px_rgba(248,113,113,0.28)]"
+                      : "",
+                  ].join(" ")}
+                >
+                  <SessionsPanel
+                    sessions={props.sessions ?? []}
+                    sessionStates={props.sessionStates ?? {}}
+                    onJoin={() => setJoinOpen(true)}
+                  />
+                </div>
+
               ) : tab === "talents" ? (
                 <div className="space-y-2">
                   <div className="text-sm font-semibold">Talents</div>
@@ -207,22 +246,34 @@ export default function PlayerHubClient(props: {
   );
 }
 
-function Tab(props: { active: boolean; onClick: () => void; disabled?: boolean; title?: string; children: any }) {
+function Tab(props: {
+  active: boolean;
+  onClick: () => void;
+  disabled?: boolean;
+  title?: string;
+  glow?: boolean;
+  children: any;
+}) {
   return (
     <button
       onClick={props.onClick}
       disabled={props.disabled}
       title={props.title}
       className={[
-        "rounded-xl px-3 py-2 text-sm transition",
+        "rounded-xl px-3 py-2 text-sm transition relative",
         props.active ? "bg-white text-black" : "bg-neutral-950 text-neutral-200 hover:bg-neutral-900",
         props.disabled ? "opacity-40 cursor-not-allowed hover:bg-neutral-950" : "",
+        props.glow ? "ring-2 ring-red-400/60 shadow-[0_0_18px_rgba(248,113,113,0.35)]" : "",
       ].join(" ")}
     >
       {props.children}
+      {props.glow ? (
+        <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-red-400 animate-pulse" />
+      ) : null}
     </button>
   );
 }
+
 
 function InventoryPanel({ items }: { items: any[] }) {
   if (!items?.length) return <div className="text-sm text-neutral-300">No items yet.</div>;
