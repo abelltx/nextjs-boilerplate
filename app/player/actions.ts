@@ -66,4 +66,60 @@ export async function joinSessionAction(joinCodeOrId: string): Promise<{ ok: boo
   return { ok: true, sessionId };
 }
 
+export async function leaveSessionAction(sessionId: string): Promise<{ ok: boolean; error?: string }> {
+  "use server";
+  const { user } = await getProfile();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const supabase = await supabaseServer();
+
+  const { error } = await supabase
+    .from("session_players")
+    .delete()
+    .eq("session_id", sessionId)
+    .eq("player_id", user.id);
+
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+export async function submitRollResultAction(input: {
+  sessionId: string;
+  playerId: string;
+  rollValue: number;
+  source: "manual" | "digital";
+}): Promise<{ ok: boolean; error?: string }> {
+  "use server";
+  const { user } = await getProfile();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const supabase = await supabaseServer();
+
+  const { data: st, error: stErr } = await supabase
+    .from("session_state")
+    .select("roll_results")
+    .eq("session_id", input.sessionId)
+    .single();
+
+  if (stErr) return { ok: false, error: stErr.message };
+
+  const current = ((st as any)?.roll_results ?? {}) as Record<string, any>;
+  const next = {
+    ...current,
+    [input.playerId]: {
+      roll_value: input.rollValue,
+      source: input.source,
+      updated_at: new Date().toISOString(),
+      entered_by: user.id,
+    },
+  };
+
+  const { error: upErr } = await supabase
+    .from("session_state")
+    .update({ roll_results: next })
+    .eq("session_id", input.sessionId);
+
+  if (upErr) return { ok: false, error: upErr.message };
+  return { ok: true };
+}
 
