@@ -111,26 +111,27 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
     });
   }, [rows, q, type]);
 
-  async function setEquipped(row: ItemRow, equipped: boolean) {
+    async function setEquipped(row: ItemRow, equipped: boolean) {
     setBusyId(row.id);
     setErr(null);
 
-    const { error } = await supabase
-      .from("inventory_items")
-      .update({ equipped })
-      .eq("id", row.id);
+    const { error } = await supabase.rpc("set_inventory_equipped", {
+        p_inventory_item_id: row.id,
+        p_equipped: equipped,
+    });
 
     if (error) setErr(error.message);
+
     await load();
 
-    // keep drawer in sync
+    // keep drawer in sync (use fresh data, not stale `rows`)
     if (selected?.id === row.id) {
-      const next = rows.find((r) => r.id === row.id) ?? null;
-      setSelected(next);
+        setSelected((prev: any) => (prev ? { ...prev, equipped } : prev));
     }
 
     setBusyId(null);
-  }
+    }
+
 
   async function dropOne(row: ItemRow) {
     setBusyId(row.id);
