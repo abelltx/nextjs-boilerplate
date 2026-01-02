@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import PlayerStatusHeader from "./PlayerStatusHeader";
 import JourneyLog from "./JourneyLog";
 import JoinSessionModal from "./JoinSessionModal";
 import { AbilitiesCard, SavesCard, SkillsCard, PassivesCard } from "./PlayerSheetPanels";
 import RollPanel from "./RollPanel";
+import { leaveSessionAction, submitRollResultAction } from "../actions";
 
 type TabKey = "inventory" | "actions" | "traits" | "talents" | "journey" | "sessions";
 
@@ -16,6 +18,16 @@ function isLiveState(state: any) {
   if (state.live === true) return true;
   if (state.roll_open === true) return true;
   return false;
+}
+
+function parseDieSides(die: string) {
+  const m = String(die || "").match(/d(\d+)/i);
+  return m ? Number(m[1]) : 20;
+}
+
+function rollDie(die: string) {
+  const sides = parseDieSides(die);
+  return Math.floor(Math.random() * sides) + 1;
 }
 
 export default function PlayerHubClient(props: {
@@ -31,11 +43,12 @@ export default function PlayerHubClient(props: {
   const [tab, setTab] = useState<TabKey>("inventory");
   const [joinOpen, setJoinOpen] = useState(false);
 
-  const sessionsRef = useRef<HTMLDivElement | null>(null);
-  const [pulseSessions, setPulseSessions] = useState(false);
-  const [autoRouted, setAutoRouted] = useState(false);
+  const router = useRouter();
 
   const stat = (props.character?.stat_block ?? {}) as any;
+  const derived = stat?.derived ?? {};
+  const resources = stat?.resources ?? {};
+  const effects = stat?.effects ?? [];
 
   const liveSession = useMemo(() => {
     const candidates = (props.sessions ?? [])
@@ -44,31 +57,113 @@ export default function PlayerHubClient(props: {
     return candidates.find(({ state }) => isLiveState(state))?.session ?? null;
   }, [props.sessions, props.sessionStates]);
 
-  // Stage selection inside Sessions tab
+  const isLiveMode = Boolean(liveSession);
+
+  // Selected session for the Sessions tab (default: live, else first)
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
 
-  // Auto-default to Sessions tab + glow when live (once)
   useEffect(() => {
-    if (!autoRouted && liveSession) {
-      setTab("sessions");
-      setAutoRouted(true);
-
-      setPulseSessions(true);
-      setTimeout(() => setPulseSessions(false), 4500);
-
-      setTimeout(() => sessionsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+    if (!selectedSessionId) {
+      if (liveSession?.id) setSelectedSessionId(liveSession.id);
+      else if (props.sessions?.[0]?.id) setSelectedSessionId(props.sessions[0].id);
     }
-  }, [liveSession, autoRouted]);
+  }, [selectedSessionId, liveSession, props.sessions]);
 
-  // If a live session exists, default the selected session to it.
+  // Live/polled stage payload
+  const [stage, setStage] = useState<{
+    ok: boolean;
+    session?: any;
+    state?: any;
+    block?: any;
+    players?: string[];
+  } | null>(null);
+
+  const selectedSession = props.sessions.find((s) => s.id === selectedSessionId) ?? null;
+
+  // Poll while Sessions tab is active
   useEffect(() => {
-    if (!selectedSessionId && liveSession?.id) setSelectedSessionId(liveSession.id);
-  }, [liveSession, selectedSessionId]);
+    if (tab !== "sessions") return;
+    if (!selectedSessionId) return;
 
-  const derived = stat?.derived ?? {};
-  const resources = stat?.resources ?? {};
-  const effects = stat?.effects ?? [];
-  const isLiveMode = Boolean(liveSession);
+    let alive = true;
+    let t: any = null;
+
+    const tick = async () => {
+      try {
+        const res = await fetch(`/api/player/session-stage?session_id=${selectedSessionId}`, { cache: "no-store" });
+        const json = await res.json();
+        if (!alive) return;
+        setStage(json);
+      } catch {
+        if (!alive) return;
+        setStage((s) => s ?? { ok: false });
+      }
+    };
+
+    tick();
+    t = setInterval(tick, 1500);
+
+    return () => {
+      alive = false;
+      if (t) clearInterval(t);
+    };
+  }, [tab, selectedSessionId]);
+
+  // Auto-focus Sessions tab if a live session exists (once per mount)
+  useEffect(() => {
+    if (liveSession) setTab("sessions");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!liveSession]);
+
+  const stageState = stage?.state ?? (selectedSessionId ? props.sessionStates?.[selectedSessionId] : null);
+  const stageBlock = stage?.block ?? null;
+
+  const rollOpen = Boolean(stageState?.roll_open);
+  const rollDieStr = String(stageState?.roll_die ?? "d20");
+  const rollPrompt = String(stageState?.roll_prompt ?? "");
+  const rollTarget = String(stageState?.roll_target ?? "all");
+  const rollModes = (stageState?.roll_modes ?? {}) as Record<string, any>;
+  const rollResults = (stageState?.roll_results ?? {}) as Record<string, any>;
+
+  const players = stage?.players ?? [];
+
+  // DM roll entry UI state
+  const [dmTargetPlayer, setDmTargetPlayer] = useState<string>("");
+  const [dmManual, setDmManual] = useState<string>("");
+
+  useEffect(() => {
+    if (!dmTargetPlayer && players.length) setDmTargetPlayer(players[0]);
+  }, [dmTargetPlayer, players]);
+
+  async function submitFor(playerId: string, value: number, source: "manual" | "digital") {
+    const res = await submitRollResultAction({
+      sessionId: selectedSessionId!,
+      playerId,
+      rollValue: value,
+      source,
+    });
+    if (!res.ok) alert(res.error ?? "Failed to submit roll.");
+    router.refresh(); // refresh server props too (nice to keep list state consistent)
+  }
+
+  async function handleLeave() {
+    if (!selectedSessionId) return;
+
+    const ok = window.confirm(
+      "Leave this session?\n\nWARNING: If you leave, your current participation/progress for this session may be lost and you’ll need a new join code to re-enter."
+    );
+    if (!ok) return;
+
+    const res = await leaveSessionAction(selectedSessionId);
+    if (!res.ok) {
+      alert(res.error ?? "Failed to leave session.");
+      return;
+    }
+
+    setStage(null);
+    setSelectedSessionId(null);
+    router.refresh();
+  }
 
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100">
@@ -125,28 +220,28 @@ export default function PlayerHubClient(props: {
                 Talents
               </Tab>
               <Tab active={tab === "journey"} onClick={() => setTab("journey")}>Journey Log</Tab>
-              <Tab
-                active={tab === "sessions"}
-                onClick={() => {
-                  setTab("sessions");
-                  setTimeout(() => sessionsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
-                }}
-                glow={pulseSessions}
-              >
-                Sessions
-              </Tab>
+              <Tab active={tab === "sessions"} onClick={() => setTab("sessions")}>Sessions</Tab>
 
               <div className="ml-auto flex items-center gap-2 pr-2 text-xs text-neutral-300">
                 {isLiveMode ? (
                   <span className="rounded-full bg-red-500/20 px-2 py-1 text-red-200">LIVE • {liveSession?.name}</span>
-                ) : (
+                ) : null}
+
+                <button
+                  className="rounded-full border border-neutral-700 bg-neutral-950 px-3 py-1 hover:bg-neutral-900"
+                  onClick={() => setJoinOpen(true)}
+                >
+                  Join Session
+                </button>
+
+                {selectedSessionId ? (
                   <button
-                    className="rounded-full border border-neutral-700 bg-neutral-950 px-3 py-1 hover:bg-neutral-900"
-                    onClick={() => setJoinOpen(true)}
+                    className="rounded-full border border-red-500/40 bg-red-500/10 px-3 py-1 text-red-200 hover:bg-red-500/15"
+                    onClick={handleLeave}
                   >
-                    Join Session
+                    Leave Session
                   </button>
-                )}
+                ) : null}
               </div>
             </div>
 
@@ -161,21 +256,60 @@ export default function PlayerHubClient(props: {
                   </div>
                 </div>
               ) : tab === "sessions" ? (
-                <div
-                  ref={sessionsRef}
-                  className={[
-                    "scroll-mt-24",
-                    pulseSessions ? "rounded-2xl ring-2 ring-red-400/60 shadow-[0_0_22px_rgba(248,113,113,0.28)]" : "",
-                  ].join(" ")}
-                >
-                  <SessionsWithStage
-                    sessions={props.sessions ?? []}
-                    sessionStates={props.sessionStates ?? {}}
-                    presentedBlocks={props.presentedBlocks ?? {}}
-                    selectedSessionId={selectedSessionId}
-                    onSelect={(id) => setSelectedSessionId(id)}
-                    onJoin={() => setJoinOpen(true)}
+                <div className="space-y-4">
+                  {/* session selector (keeps full-width stage) */}
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-sm font-semibold">Session</div>
+
+                    <select
+                      value={selectedSessionId ?? ""}
+                      onChange={(e) => setSelectedSessionId(e.target.value)}
+                      className="rounded-xl border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm text-white"
+                    >
+                      {(props.sessions ?? []).map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name ?? s.id.slice(0, 8)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <StagePanel block={stageBlock} />
+
+                  <RollRequestPanel
+                    open={rollOpen}
+                    die={rollDieStr}
+                    prompt={rollPrompt}
+                    target={rollTarget}
+                    players={players}
+                    rollModes={rollModes}
+                    rollResults={rollResults}
+                    dmTargetPlayer={dmTargetPlayer}
+                    setDmTargetPlayer={setDmTargetPlayer}
+                    dmManual={dmManual}
+                    setDmManual={setDmManual}
+                    onSubmitManual={async () => {
+                      if (!dmTargetPlayer) return;
+                      const n = Number(dmManual);
+                      if (!Number.isFinite(n)) return alert("Enter a number.");
+                      await submitFor(dmTargetPlayer, n, "manual");
+                      setDmManual("");
+                    }}
+                    onSubmitDigital={async () => {
+                      if (!dmTargetPlayer) return;
+                      const val = rollDie(rollDieStr);
+                      await submitFor(dmTargetPlayer, val, "digital");
+                    }}
                   />
+
+                  {selectedSession?.story_text ? (
+                    <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
+                      <div className="text-sm font-semibold">Story (Board)</div>
+                      <div className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-neutral-200">
+                        {selectedSession.story_text}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               ) : tab === "talents" ? (
                 <div className="space-y-2">
@@ -208,7 +342,6 @@ function Tab(props: {
   onClick: () => void;
   disabled?: boolean;
   title?: string;
-  glow?: boolean;
   children: any;
 }) {
   return (
@@ -220,11 +353,9 @@ function Tab(props: {
         "rounded-xl px-3 py-2 text-sm transition relative",
         props.active ? "bg-white text-black" : "bg-neutral-950 text-neutral-200 hover:bg-neutral-900",
         props.disabled ? "opacity-40 cursor-not-allowed hover:bg-neutral-950" : "",
-        props.glow ? "ring-2 ring-red-400/60 shadow-[0_0_18px_rgba(248,113,113,0.35)]" : "",
       ].join(" ")}
     >
       {props.children}
-      {props.glow ? <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-red-400 animate-pulse" /> : null}
     </button>
   );
 }
@@ -249,141 +380,137 @@ function InventoryPanel({ items }: { items: any[] }) {
   );
 }
 
-function SessionsWithStage(props: {
-  sessions: any[];
-  sessionStates: Record<string, any>;
-  presentedBlocks: Record<string, any>;
-  selectedSessionId: string | null;
-  onSelect: (id: string) => void;
-  onJoin: () => void;
-}) {
-  const selected = props.sessions.find((s) => s.id === props.selectedSessionId) ?? props.sessions[0] ?? null;
-  const state = selected ? props.sessionStates?.[selected.id] : null;
-
-  const presentedId = state?.presented_block_id as string | undefined;
-  const block = presentedId ? props.presentedBlocks?.[presentedId] : null;
-
-  const rollOpen = Boolean(state?.roll_open);
-  const rollDie = String(state?.roll_die ?? "d20");
-  const rollPrompt = String(state?.roll_prompt ?? "");
-  const rollTarget = String(state?.roll_target ?? "all");
-
+function StagePanel({ block }: { block: any }) {
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-      {/* Session list */}
-      <div className="lg:col-span-5 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="text-sm font-semibold">Your Sessions</div>
-          <button className="rounded-xl border border-neutral-700 px-3 py-2 text-sm hover:bg-neutral-950" onClick={props.onJoin}>
-            Join another
-          </button>
+    <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
+      <div className="text-sm font-semibold">Stage</div>
+
+      {block ? (
+        <div className="mt-3 space-y-3">
+          <div className="text-lg font-extrabold">{block.title ?? block.block_type ?? "Presented"}</div>
+
+          {block.image_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={block.image_url}
+              alt={block.title ?? "Presented"}
+              className="w-full rounded-xl border border-neutral-800"
+            />
+          ) : null}
+
+          {block.body ? (
+            <div className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-200">{block.body}</div>
+          ) : (
+            <div className="text-sm text-neutral-400">No body text.</div>
+          )}
         </div>
+      ) : (
+        <div className="mt-3 text-sm text-neutral-300">
+          When the storyteller clicks <span className="text-neutral-100">Present to Players</span>, it will appear here.
+        </div>
+      )}
+    </div>
+  );
+}
 
-        {!props.sessions.length ? (
-          <div className="text-sm text-neutral-300">You haven’t joined a session yet.</div>
+function RollRequestPanel(props: {
+  open: boolean;
+  die: string;
+  prompt: string;
+  target: string;
+  players: string[];
+  rollModes: Record<string, any>;
+  rollResults: Record<string, any>;
+  dmTargetPlayer: string;
+  setDmTargetPlayer: (v: string) => void;
+  dmManual: string;
+  setDmManual: (v: string) => void;
+  onSubmitManual: () => void;
+  onSubmitDigital: () => void;
+}) {
+  return (
+    <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-semibold">Roll Request</div>
+        {props.open ? (
+          <span className="rounded-full bg-red-500/20 px-2 py-1 text-xs text-red-200">OPEN</span>
         ) : (
-          <div className="space-y-2">
-            {props.sessions.map((s) => {
-              const st = props.sessionStates?.[s.id];
-              const live = isLiveState(st);
-              const active = selected?.id === s.id;
-
-              return (
-                <button
-                  key={s.id}
-                  onClick={() => props.onSelect(s.id)}
-                  className={[
-                    "w-full text-left rounded-2xl border p-4 transition",
-                    active
-                      ? "border-neutral-600 bg-neutral-950/60"
-                      : "border-neutral-800 bg-neutral-950/40 hover:bg-neutral-900/40",
-                  ].join(" ")}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-semibold">{s.name ?? "Session"}</div>
-                      <div className="mt-1 text-xs text-neutral-400">{s.id}</div>
-                    </div>
-                    {live ? (
-                      <span className="rounded-full bg-red-500/20 px-2 py-1 text-xs text-red-200">LIVE</span>
-                    ) : (
-                      <span className="rounded-full bg-neutral-800 px-2 py-1 text-xs text-neutral-300">OFFLINE</span>
-                    )}
-                  </div>
-                  {st?.presented_block_id ? (
-                    <div className="mt-2 text-xs text-neutral-300">Presented content available</div>
-                  ) : (
-                    <div className="mt-2 text-xs text-neutral-500">Nothing presented yet</div>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+          <span className="rounded-full bg-neutral-800 px-2 py-1 text-xs text-neutral-300">CLOSED</span>
         )}
       </div>
 
-      {/* Stage */}
-      <div className="lg:col-span-7 space-y-4">
-        <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
-          <div className="flex items-center justify-between">
-            <div className="text-sm font-semibold">Stage</div>
-            <div className="text-xs text-neutral-400">
-              {selected ? selected.name : "No session selected"}
-            </div>
-          </div>
+      <div className="mt-3 space-y-2 text-sm text-neutral-200">
+        <div>
+          Die: <span className="font-bold text-white">{props.die || "d20"}</span>
+        </div>
+        {props.prompt ? <div className="text-neutral-300">{props.prompt}</div> : <div className="text-neutral-500">No prompt.</div>}
+        <div className="text-xs text-neutral-500">Target: {props.target}</div>
+      </div>
 
-          {block ? (
-            <div className="mt-3 space-y-3">
-              <div className="text-lg font-extrabold">{block.title ?? block.block_type ?? "Presented"}</div>
-              {block.image_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={block.image_url} alt={block.title ?? "Presented"} className="w-full rounded-xl border border-neutral-800" />
-              ) : null}
-              {block.body ? (
-                <div className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-200">{block.body}</div>
-              ) : (
-                <div className="text-sm text-neutral-400">No body text.</div>
-              )}
-            </div>
-          ) : (
-            <div className="mt-3 text-sm text-neutral-300">
-              When the storyteller clicks <span className="text-neutral-100">Present to Players</span>, it will appear here.
-            </div>
-          )}
+      {/* DM roll entry controls */}
+      <div className="mt-4 rounded-xl border border-neutral-800 bg-neutral-950/60 p-3">
+        <div className="text-xs font-semibold text-neutral-200">DM Roll Entry</div>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <select
+            value={props.dmTargetPlayer}
+            onChange={(e) => props.setDmTargetPlayer(e.target.value)}
+            className="rounded-xl border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm text-white"
+          >
+            {props.players.length ? (
+              props.players.map((pid) => (
+                <option key={pid} value={pid}>
+                  {pid.slice(0, 8)} ({props.rollModes?.[pid] ?? "dm"})
+                </option>
+              ))
+            ) : (
+              <option value="">No players</option>
+            )}
+          </select>
+
+          <input
+            value={props.dmManual}
+            onChange={(e) => props.setDmManual(e.target.value)}
+            placeholder="Manual value…"
+            className="w-40 rounded-xl border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm text-white"
+          />
+
+          <button
+            className="rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200 hover:bg-neutral-900"
+            onClick={props.onSubmitManual}
+            disabled={!props.open || !props.dmTargetPlayer}
+            title={!props.open ? "Roll is closed" : ""}
+          >
+            Submit Manual
+          </button>
+
+          <button
+            className="rounded-xl bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-neutral-200"
+            onClick={props.onSubmitDigital}
+            disabled={!props.open || !props.dmTargetPlayer}
+            title={!props.open ? "Roll is closed" : ""}
+          >
+            Roll & Submit
+          </button>
         </div>
 
-        <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
-          <div className="flex items-center justify-between">
-            <div className="text-sm font-semibold">Roll Request</div>
-            {rollOpen ? (
-              <span className="rounded-full bg-red-500/20 px-2 py-1 text-xs text-red-200">OPEN</span>
+        {/* Results snapshot */}
+        <div className="mt-3 text-xs text-neutral-400">
+          Latest results:
+          <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
+            {Object.keys(props.rollResults ?? {}).length ? (
+              Object.entries(props.rollResults ?? {}).map(([pid, r]: any) => (
+                <div key={pid} className="rounded-lg border border-neutral-800 bg-neutral-950/40 p-2">
+                  <div className="text-neutral-200">
+                    {pid.slice(0, 8)}: <span className="font-semibold text-white">{String(r?.roll_value ?? "")}</span>
+                  </div>
+                  <div className="text-neutral-500">source: {String(r?.source ?? "")}</div>
+                </div>
+              ))
             ) : (
-              <span className="rounded-full bg-neutral-800 px-2 py-1 text-xs text-neutral-300">CLOSED</span>
+              <div className="text-neutral-500">No results yet.</div>
             )}
           </div>
-
-          <div className="mt-3 space-y-2 text-sm text-neutral-200">
-            <div>
-              Die: <span className="font-bold text-white">{rollDie}</span>
-            </div>
-            {rollPrompt ? <div className="text-neutral-300">{rollPrompt}</div> : <div className="text-neutral-500">No prompt.</div>}
-            <div className="text-xs text-neutral-500">Target: {rollTarget}</div>
-          </div>
-
-          <div className="mt-4 text-xs text-neutral-500">
-            Next phase: we’ll wire the “submit roll” controls right here (manual or digital) using the same logic from
-            <code className="ml-1 rounded bg-neutral-900 px-1">/player/sessions/[id]</code>.
-          </div>
         </div>
-
-        {selected?.story_text ? (
-          <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
-            <div className="text-sm font-semibold">Story (Board)</div>
-            <div className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-neutral-200">
-              {selected.story_text}
-            </div>
-          </div>
-        ) : null}
       </div>
     </div>
   );
