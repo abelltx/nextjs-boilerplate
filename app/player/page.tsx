@@ -53,10 +53,11 @@ export default async function PlayerPage() {
   let sessionStates: Record<string, any> = {};
 
   const { data: joins, error: joinErr } = await supabase
-    .from("session_players")
-    .select("session_id, created_at")
-    .eq("player_id", user.id)
-    .order("created_at", { ascending: false });
+  .from("session_players")
+  .select("session_id, joined_at")
+  .eq("player_id", user.id)
+  .order("joined_at", { ascending: false });
+  if (joinErr) throw new Error(`Failed to load session joins: ${joinErr.message}`);
 
   if (!joinErr && joins?.length) {
     const sessionIds = joins.map((j: any) => j.session_id).filter(Boolean);
