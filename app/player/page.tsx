@@ -117,7 +117,7 @@ export default async function PlayerPage() {
   if (logErr) throw new Error(`Failed to load game log: ${logErr.message}`);
   gameLog = logData ?? [];
 
-  
+
 const { data: curRow, error: curErr } = await supabase
   .from("character_stats_current")
   .select("stat_block_current")
@@ -127,6 +127,7 @@ const { data: curRow, error: curErr } = await supabase
 if (curErr) throw new Error(`Failed to load current stats: ${curErr.message}`);
 
 character = { ...character, stat_block: curRow?.stat_block_current ?? character.stat_block };
+console.log("PLAYER PAGE character:", character.id, character.user_id, character.name, character.stat_block?.resources);
 
   return (
     <PlayerHubClient
