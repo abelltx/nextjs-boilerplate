@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import PlayerStatusHeader from "./PlayerStatusHeader";
 import JourneyLog from "./JourneyLog";
 import JoinSessionModal from "./JoinSessionModal";
@@ -8,6 +8,15 @@ import { AbilitiesCard, SavesCard, SkillsCard, PassivesCard } from "./PlayerShee
 import RollPanel from "./RollPanel";
 
 type TabKey = "inventory" | "actions" | "traits" | "talents" | "journey" | "sessions";
+
+function isLiveState(state: any) {
+  if (!state) return false;
+  if (state.player_view === true) return true;
+  if (state.is_live === true) return true;
+  if (state.live === true) return true;
+  if (state.roll_open === true) return true; // fallback signal
+  return false;
+}
 
 export default function PlayerHubClient(props: {
   userEmail: string;
@@ -21,6 +30,9 @@ export default function PlayerHubClient(props: {
   const [tab, setTab] = useState<TabKey>("inventory");
   const [joinOpen, setJoinOpen] = useState(false);
 
+  // Prevent "tab yanking": only auto-route once.
+  const [autoRouted, setAutoRouted] = useState(false);
+
   // stat_block is optional for now. Panels will show defaults if empty.
   const stat = (props.character?.stat_block ?? {}) as any;
 
@@ -29,16 +41,17 @@ export default function PlayerHubClient(props: {
       .map((s) => ({ session: s, state: props.sessionStates?.[s.id] }))
       .filter(({ state }) => Boolean(state));
 
-    const isLive = (state: any) => {
-      if (state?.player_view === true) return true;
-      if (state?.is_live === true) return true;
-      if (state?.live === true) return true;
-      if (state?.roll_open === true) return true; // fallback signal
-      return false;
-    };
-
-    return candidates.find(({ state }) => isLive(state))?.session ?? null;
+    return candidates.find(({ state }) => isLiveState(state))?.session ?? null;
   }, [props.sessions, props.sessionStates]);
+
+  // Auto-default to Sessions tab if any session is live (once).
+  useEffect(() => {
+    if (!autoRouted && liveSession) {
+      // Only auto-switch if they haven't already navigated away.
+      setTab((t) => (t === "inventory" ? "sessions" : t));
+      setAutoRouted(true);
+    }
+  }, [liveSession, autoRouted]);
 
   const derived = stat?.derived ?? {};
   const resources = stat?.resources ?? {};
@@ -63,8 +76,26 @@ export default function PlayerHubClient(props: {
           onJoinClick={() => setJoinOpen(true)}
         />
 
+        {/* Soft "enter live" banner */}
+        {liveSession ? (
+          <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-red-100">A session is LIVE right now</div>
+                <div className="text-sm text-red-200/80">{liveSession.name}</div>
+              </div>
+              <a
+                href={`/player/sessions/${liveSession.id}`}
+                className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-black hover:bg-neutral-200"
+              >
+                Enter Live Session →
+              </a>
+            </div>
+          </div>
+        ) : null}
+
         <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-12">
-          {/* LEFT RAIL (big rock) */}
+          {/* LEFT RAIL */}
           <aside className="lg:col-span-3 space-y-4">
             <AbilitiesCard stat={stat} />
             <SavesCard stat={stat} />
@@ -75,6 +106,7 @@ export default function PlayerHubClient(props: {
               Signed in as {props.userEmail} • {props.accessLabel}
             </div>
 
+            {/* Recent Journey */}
             <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4">
               <div className="flex items-center justify-between">
                 <div className="text-sm font-semibold">Recent Journey</div>
@@ -91,9 +123,15 @@ export default function PlayerHubClient(props: {
           {/* MAIN */}
           <section className="lg:col-span-9">
             <div className="flex flex-wrap gap-2 rounded-2xl border border-neutral-800 bg-neutral-900/40 p-2">
-              <Tab active={tab === "inventory"} onClick={() => setTab("inventory")}>Inventory</Tab>
-              <Tab active={tab === "actions"} onClick={() => setTab("actions")}>Actions</Tab>
-              <Tab active={tab === "traits"} onClick={() => setTab("traits")}>Abilities & Traits</Tab>
+              <Tab active={tab === "inventory"} onClick={() => setTab("inventory")}>
+                Inventory
+              </Tab>
+              <Tab active={tab === "actions"} onClick={() => setTab("actions")}>
+                Actions
+              </Tab>
+              <Tab active={tab === "traits"} onClick={() => setTab("traits")}>
+                Abilities & Traits
+              </Tab>
               <Tab
                 active={tab === "talents"}
                 onClick={() => setTab("talents")}
@@ -102,8 +140,12 @@ export default function PlayerHubClient(props: {
               >
                 Talents
               </Tab>
-              <Tab active={tab === "journey"} onClick={() => setTab("journey")}>Journey Log</Tab>
-              <Tab active={tab === "sessions"} onClick={() => setTab("sessions")}>Sessions</Tab>
+              <Tab active={tab === "journey"} onClick={() => setTab("journey")}>
+                Journey Log
+              </Tab>
+              <Tab active={tab === "sessions"} onClick={() => setTab("sessions")}>
+                Sessions
+              </Tab>
 
               <div className="ml-auto flex items-center gap-2 pr-2 text-xs text-neutral-300">
                 {isLiveMode ? (
@@ -130,11 +172,17 @@ export default function PlayerHubClient(props: {
                   </div>
                 </div>
               ) : tab === "sessions" ? (
-                <SessionsPanel sessions={props.sessions ?? []} onJoin={() => setJoinOpen(true)} />
+                <SessionsPanel
+                  sessions={props.sessions ?? []}
+                  sessionStates={props.sessionStates ?? {}}
+                  onJoin={() => setJoinOpen(true)}
+                />
               ) : tab === "talents" ? (
                 <div className="space-y-2">
                   <div className="text-sm font-semibold">Talents</div>
-                  <div className="text-sm text-neutral-300">Scaffold only for now. Next: Elder cards + spend drawer.</div>
+                  <div className="text-sm text-neutral-300">
+                    Scaffold only for now. Next: Elder cards + spend drawer.
+                  </div>
                 </div>
               ) : tab === "traits" ? (
                 <div className="space-y-2">
@@ -144,18 +192,13 @@ export default function PlayerHubClient(props: {
                   </div>
                 </div>
               ) : (
-                    <div className="space-y-3">
-                      <div className="text-sm font-semibold">Actions</div>
-                      <RollPanel
-                        stat={stat}
-                        disabled={isLiveMode}
-                        disabledReason="Rolls are handled in Live Mode."
-                      />
-                    </div>
-                  )
-                  }
+                <div className="space-y-3">
+                  <div className="text-sm font-semibold">Actions</div>
+                  <RollPanel stat={stat} disabled={isLiveMode} disabledReason="Rolls are handled in Live Mode." />
+                </div>
+              )}
             </div>
-          </section> 
+          </section>
         </div>
       </div>
 
@@ -188,7 +231,10 @@ function InventoryPanel({ items }: { items: any[] }) {
       <div className="text-sm font-semibold">Inventory</div>
       <ul className="mt-2 space-y-1 text-sm text-neutral-200">
         {items.map((it) => (
-          <li key={it.id} className="flex items-center justify-between rounded-lg border border-neutral-800 bg-neutral-950/40 px-3 py-2">
+          <li
+            key={it.id}
+            className="flex items-center justify-between rounded-lg border border-neutral-800 bg-neutral-950/40 px-3 py-2"
+          >
             <span>{it.name}</span>
             <span className="text-neutral-400">{it.quantity > 1 ? `× ${it.quantity}` : ""}</span>
           </li>
@@ -198,7 +244,15 @@ function InventoryPanel({ items }: { items: any[] }) {
   );
 }
 
-function SessionsPanel({ sessions, onJoin }: { sessions: any[]; onJoin: () => void }) {
+function SessionsPanel({
+  sessions,
+  sessionStates,
+  onJoin,
+}: {
+  sessions: any[];
+  sessionStates: Record<string, any>;
+  onJoin: () => void;
+}) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -207,17 +261,42 @@ function SessionsPanel({ sessions, onJoin }: { sessions: any[]; onJoin: () => vo
           Join another
         </button>
       </div>
+
       {!sessions.length ? (
         <div className="text-sm text-neutral-300">You haven’t joined a session yet.</div>
       ) : (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          {sessions.map((s) => (
-            <a key={s.id} href={`/player/sessions/${s.id}`} className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4 hover:bg-neutral-900/40">
-              <div className="text-sm font-semibold">{s.name ?? "Session"}</div>
-              <div className="mt-1 text-xs text-neutral-400">{s.id}</div>
-              <div className="mt-3 text-xs text-neutral-300">Open</div>
-            </a>
-          ))}
+          {sessions.map((s) => {
+            const state = sessionStates?.[s.id];
+            const live = isLiveState(state);
+
+            return (
+              <a
+                key={s.id}
+                href={`/player/sessions/${s.id}`}
+                className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4 hover:bg-neutral-900/40"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold">{s.name ?? "Session"}</div>
+                    <div className="mt-1 text-xs text-neutral-400">{s.id}</div>
+                  </div>
+
+                  {live ? (
+                    <span className="rounded-full bg-red-500/20 px-2 py-1 text-xs text-red-200">LIVE</span>
+                  ) : (
+                    <span className="rounded-full bg-neutral-800 px-2 py-1 text-xs text-neutral-300">OFFLINE</span>
+                  )}
+                </div>
+
+                {live ? (
+                  <div className="mt-3 text-xs text-neutral-200">DM is active — open now</div>
+                ) : (
+                  <div className="mt-3 text-xs text-neutral-400">Not currently live</div>
+                )}
+              </a>
+            );
+          })}
         </div>
       )}
     </div>
