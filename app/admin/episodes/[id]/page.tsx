@@ -114,6 +114,21 @@ export default async function AdminEpisodeEditPage({
 
   const storytellerFlow =
     sceneGroups.length > 0 ? sceneGroups : [{ scene: null as any, items: (blocks ?? []) as any[] }];
+  const playerFlow = storytellerFlow
+    .map((g) => {
+      const sceneAudience = String(g.scene?.audience ?? "both");
+      const sceneVisible = sceneAudience === "players" || sceneAudience === "both";
+      const playerItems = (g.items ?? []).filter((b: any) => {
+        const a = String(b.audience ?? "both");
+        return a === "players" || a === "both";
+      });
+      if (!sceneVisible && playerItems.length === 0) return null;
+      return {
+        scene: sceneVisible ? g.scene : null,
+        items: playerItems,
+      };
+    })
+    .filter(Boolean) as Array<{ scene: any | null; items: any[] }>;
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-4">
@@ -274,54 +289,105 @@ export default async function AdminEpisodeEditPage({
           </a>
         </div>
 
-        <div className="space-y-4">
-          {storytellerFlow.map((g, gi) => (
-            <div key={g.scene?.id ?? `preview-${gi}`} className="rounded-xl border">
-              <div className="border-b bg-gray-50 px-3 py-2">
-                <div className="text-xs uppercase text-gray-500">
-                  Scene {gi + 1}
-                </div>
-                <div className="font-semibold">
-                  {g.scene?.title?.trim() ? g.scene.title : "Unscoped Scene"}
-                </div>
-                {g.scene?.body ? (
-                  <div className="mt-1 whitespace-pre-wrap text-sm text-gray-700">{g.scene.body}</div>
-                ) : (
-                  <div className="mt-1 text-sm text-amber-700">Add scene narration text here.</div>
-                )}
-              </div>
-
-              <div className="space-y-2 p-3">
-                {g.items.length === 0 ? (
-                  <div className="rounded-lg border border-dashed p-3 text-sm text-gray-600">
-                    No blocks in this scene yet. Add objectives, narrative, map, or encounter blocks.
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <div className="space-y-4">
+            <div className="text-sm font-semibold">Storyteller View</div>
+            {storytellerFlow.map((g, gi) => (
+              <div key={g.scene?.id ?? `preview-${gi}`} className="rounded-xl border">
+                <div className="border-b bg-gray-50 px-3 py-2">
+                  <div className="text-xs uppercase text-gray-500">Scene {gi + 1}</div>
+                  <div className="font-semibold">
+                    {g.scene?.title?.trim() ? g.scene.title : "Unscoped Scene"}
                   </div>
-                ) : (
-                  g.items.map((b: any, idx: number) => (
-                    <div key={b.id ?? `${gi}-${idx}`} className="rounded-lg border p-3">
-                      <div className="flex flex-wrap items-center gap-2 text-xs">
-                        <span className="rounded border bg-gray-50 px-2 py-0.5">{b.block_type}</span>
-                        <span className="rounded border bg-gray-50 px-2 py-0.5">{b.audience}</span>
-                        <span className="rounded border bg-gray-50 px-2 py-0.5">{b.mode}</span>
-                      </div>
-                      <div className="mt-2 text-sm font-semibold">{b.title || "(Untitled block)"}</div>
-                      {b.body ? (
-                        <div className="mt-1 whitespace-pre-wrap text-sm text-gray-700">{b.body}</div>
-                      ) : (
-                        <div className="mt-1 text-sm text-amber-700">Add block text.</div>
-                      )}
-                      {b.image_url ? (
-                        <div className="mt-2 overflow-hidden rounded border">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={b.image_url} alt={b.title ?? "Block image"} className="max-h-64 w-full object-cover" />
-                        </div>
-                      ) : null}
+                  {g.scene?.body ? (
+                    <div className="mt-1 whitespace-pre-wrap text-sm text-gray-700">{g.scene.body}</div>
+                  ) : (
+                    <div className="mt-1 text-sm text-amber-700">Add scene narration text here.</div>
+                  )}
+                </div>
+
+                <div className="space-y-2 p-3">
+                  {g.items.length === 0 ? (
+                    <div className="rounded-lg border border-dashed p-3 text-sm text-gray-600">
+                      No blocks in this scene yet. Add objectives, narrative, map, or encounter blocks.
                     </div>
-                  ))
-                )}
+                  ) : (
+                    g.items.map((b: any, idx: number) => (
+                      <div key={b.id ?? `${gi}-${idx}`} className="rounded-lg border p-3">
+                        <div className="flex flex-wrap items-center gap-2 text-xs">
+                          <span className="rounded border bg-gray-50 px-2 py-0.5">{b.block_type}</span>
+                          <span className="rounded border bg-gray-50 px-2 py-0.5">{b.audience}</span>
+                          <span className="rounded border bg-gray-50 px-2 py-0.5">{b.mode}</span>
+                        </div>
+                        <div className="mt-2 text-sm font-semibold">{b.title || "(Untitled block)"}</div>
+                        {b.body ? (
+                          <div className="mt-1 whitespace-pre-wrap text-sm text-gray-700">{b.body}</div>
+                        ) : (
+                          <div className="mt-1 text-sm text-amber-700">Add block text.</div>
+                        )}
+                        {b.image_url ? (
+                          <div className="mt-2 overflow-hidden rounded border">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={b.image_url} alt={b.title ?? "Block image"} className="max-h-64 w-full object-cover" />
+                          </div>
+                        ) : null}
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
+
+          <div className="space-y-4">
+            <div className="text-sm font-semibold">Player Stage Preview</div>
+            {playerFlow.length === 0 ? (
+              <div className="rounded-xl border border-dashed p-3 text-sm text-gray-600">
+                No player-visible blocks yet. Set block audience to <b>players</b> or <b>both</b>.
+              </div>
+            ) : (
+              playerFlow.map((g, gi) => (
+                <div key={g.scene?.id ?? `player-preview-${gi}`} className="rounded-xl border border-neutral-800 bg-neutral-950 text-neutral-100">
+                  <div className="border-b border-neutral-800 bg-neutral-900/50 px-3 py-2">
+                    <div className="text-xs uppercase tracking-wide text-neutral-400">Stage Scene {gi + 1}</div>
+                    <div className="font-semibold">{g.scene?.title?.trim() ? g.scene.title : "Current Stage"}</div>
+                    {g.scene?.body ? (
+                      <div className="mt-1 whitespace-pre-wrap text-sm text-neutral-300">{g.scene.body}</div>
+                    ) : null}
+                  </div>
+
+                  <div className="space-y-2 p-3">
+                    {g.items.length === 0 ? (
+                      <div className="rounded-lg border border-neutral-800 p-3 text-sm text-neutral-400">
+                        No player-visible blocks in this scene.
+                      </div>
+                    ) : (
+                      g.items.map((b: any, idx: number) => (
+                        <div key={b.id ?? `${gi}-${idx}`} className="rounded-lg border border-neutral-800 bg-neutral-900/30 p-3">
+                          <div className="mb-1 flex flex-wrap items-center gap-2 text-[11px] text-neutral-400">
+                            <span className="rounded border border-neutral-700 px-2 py-0.5">{b.block_type}</span>
+                            <span className="rounded border border-neutral-700 px-2 py-0.5">{b.mode}</span>
+                          </div>
+                          <div className="text-sm font-semibold text-neutral-100">{b.title || "(Untitled block)"}</div>
+                          {b.body ? (
+                            <div className="mt-1 whitespace-pre-wrap text-sm text-neutral-300">{b.body}</div>
+                          ) : (
+                            <div className="mt-1 text-sm text-amber-300">Add player-facing text.</div>
+                          )}
+                          {b.image_url ? (
+                            <div className="mt-2 overflow-hidden rounded border border-neutral-800">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={b.image_url} alt={b.title ?? "Stage image"} className="max-h-64 w-full object-cover" />
+                            </div>
+                          ) : null}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </div>
 
