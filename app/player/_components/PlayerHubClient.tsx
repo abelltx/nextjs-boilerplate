@@ -11,7 +11,7 @@ import { leaveSessionAction, submitRollResultAction } from "../actions";
 import PlayerInventoryPanel from "./PlayerInventoryPanel";
 
 
-type TabKey = "inventory" | "actions" | "skills" | "traits" | "talents" | "journey" | "sessions";
+type TabKey = "inventory" | "actions" | "traits" | "talents" | "journey" | "sessions";
 
 function isLiveState(state: any) {
   if (!state) return false;
@@ -191,7 +191,6 @@ export default function PlayerHubClient(props: {
           <aside className="lg:col-span-3 space-y-4">
             <AbilitiesCard stat={stat} />
             <SavesCard stat={stat} />
-            <SkillsCard stat={stat} />
             <PassivesCard stat={stat} />
 
             <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4 text-xs text-neutral-400">
@@ -219,11 +218,10 @@ export default function PlayerHubClient(props: {
             </div>
           </aside>
 
-          <section className="lg:col-span-9">
+          <section className="lg:col-span-6">
             <div className="flex flex-wrap gap-2 rounded-2xl border border-neutral-800 bg-neutral-900/40 p-2">
               <Tab active={tab === "inventory"} onClick={() => setTab("inventory")}>Inventory</Tab>
               <Tab active={tab === "actions"} onClick={() => setTab("actions")}>Actions</Tab>
-              <Tab active={tab === "skills"} onClick={() => setTab("skills")}>Skills</Tab>
               <Tab active={tab === "traits"} onClick={() => setTab("traits")}>Abilities & Traits</Tab>
               <Tab
                 active={tab === "talents"}
@@ -262,11 +260,6 @@ export default function PlayerHubClient(props: {
             <div className="mt-4 rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4">
               {tab === "inventory" ? (
                 <PlayerInventoryPanel characterId={props.character.id} />
-              ) : tab === "skills" ? (
-                <div className="space-y-3">
-                  <div className="text-sm font-semibold">Skills</div>
-                  <SkillsCard stat={stat} />
-                </div>
               ) : tab === "journey" ? (
                 <div>
                   <div className="text-sm font-semibold">Journey Log</div>
@@ -372,6 +365,12 @@ export default function PlayerHubClient(props: {
               )}
             </div>
           </section>
+
+          <aside className="lg:col-span-3 space-y-4">
+            <div className="lg:sticky lg:top-4">
+              <SkillsCard stat={stat} />
+            </div>
+          </aside>
         </div>
       </div>
 
