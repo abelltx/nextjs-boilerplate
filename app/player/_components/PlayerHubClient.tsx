@@ -1,17 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import PlayerStatusHeader from "./PlayerStatusHeader";
 import JourneyLog from "./JourneyLog";
 import JoinSessionModal from "./JoinSessionModal";
 import { AbilitiesCard, SavesCard, SkillsCard, PassivesCard } from "./PlayerSheetPanels";
 import RollPanel from "./RollPanel";
-import { leaveSessionAction, submitRollResultAction } from "../actions";
 import PlayerInventoryPanel from "./PlayerInventoryPanel";
 
-
-type TabKey = "inventory" | "actions" | "traits" | "talents" | "journey" | "sessions";
+type TabKey = "inventory" | "actions" | "talents" | "journey";
 
 function isLiveState(state: any) {
   if (!state) return false;
@@ -20,16 +17,6 @@ function isLiveState(state: any) {
   if (state.live === true) return true;
   if (state.roll_open === true) return true;
   return false;
-}
-
-function parseDieSides(die: string) {
-  const m = String(die || "").match(/d(\d+)/i);
-  return m ? Number(m[1]) : 20;
-}
-
-function rollDie(die: string) {
-  const sides = parseDieSides(die);
-  return Math.floor(Math.random() * sides) + 1;
 }
 
 export default function PlayerHubClient(props: {
@@ -45,8 +32,6 @@ export default function PlayerHubClient(props: {
   const [tab, setTab] = useState<TabKey>("inventory");
   const [joinOpen, setJoinOpen] = useState(false);
 
-  const router = useRouter();
-
   const stat = (props.character?.stat_block ?? {}) as any;
   const derived = stat?.derived ?? {};
   const resources = stat?.resources ?? {};
@@ -61,9 +46,7 @@ export default function PlayerHubClient(props: {
 
   const isLiveMode = Boolean(liveSession);
 
-  // Selected session for the Sessions tab (default: live, else first)
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
-
   useEffect(() => {
     if (!selectedSessionId) {
       if (liveSession?.id) setSelectedSessionId(liveSession.id);
@@ -71,7 +54,6 @@ export default function PlayerHubClient(props: {
     }
   }, [selectedSessionId, liveSession, props.sessions]);
 
-  // Live/polled stage payload
   const [stage, setStage] = useState<{
     ok: boolean;
     session?: any;
@@ -82,7 +64,6 @@ export default function PlayerHubClient(props: {
 
   const selectedSession = props.sessions.find((s) => s.id === selectedSessionId) ?? null;
 
-  // Poll selected session stage continuously while a session is selected
   useEffect(() => {
     if (!selectedSessionId) return;
 
@@ -114,51 +95,7 @@ export default function PlayerHubClient(props: {
   const stageBlock = stage?.block ?? null;
 
   const rollOpen = Boolean(stageState?.roll_open);
-  const rollDieStr = String(stageState?.roll_die ?? "d20");
   const rollPrompt = String(stageState?.roll_prompt ?? "");
-  const rollTarget = String(stageState?.roll_target ?? "all");
-  const rollModes = (stageState?.roll_modes ?? {}) as Record<string, any>;
-  const rollResults = (stageState?.roll_results ?? {}) as Record<string, any>;
-
-  const players = stage?.players ?? [];
-
-  // DM roll entry UI state
-  const [dmTargetPlayer, setDmTargetPlayer] = useState<string>("");
-  const [dmManual, setDmManual] = useState<string>("");
-
-  useEffect(() => {
-    if (!dmTargetPlayer && players.length) setDmTargetPlayer(players[0]);
-  }, [dmTargetPlayer, players]);
-
-  async function submitFor(playerId: string, value: number, source: "manual" | "digital") {
-    const res = await submitRollResultAction({
-      sessionId: selectedSessionId!,
-      playerId,
-      rollValue: value,
-      source,
-    });
-    if (!res.ok) alert(res.error ?? "Failed to submit roll.");
-    router.refresh(); // refresh server props too (nice to keep list state consistent)
-  }
-
-  async function handleLeave() {
-    if (!selectedSessionId) return;
-
-    const ok = window.confirm(
-      "Leave this session?\n\nWARNING: If you leave, your current participation/progress for this session may be lost and you’ll need a new join code to re-enter."
-    );
-    if (!ok) return;
-
-    const res = await leaveSessionAction(selectedSessionId);
-    if (!res.ok) {
-      alert(res.error ?? "Failed to leave session.");
-      return;
-    }
-
-    setStage(null);
-    setSelectedSessionId(null);
-    router.refresh();
-  }
 
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100">
@@ -201,25 +138,7 @@ export default function PlayerHubClient(props: {
 
           <section className="lg:col-span-6">
             <div className="mb-4 rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="text-sm font-semibold">Sessions</div>
-                <div className="flex items-center gap-2">
-                  <button
-                    className="rounded-full border border-neutral-700 bg-neutral-950 px-3 py-1 text-xs hover:bg-neutral-900"
-                    onClick={() => setJoinOpen(true)}
-                  >
-                    Join Session
-                  </button>
-                  {selectedSessionId ? (
-                    <button
-                      className="rounded-full border border-red-500/40 bg-red-500/10 px-3 py-1 text-xs text-red-200 hover:bg-red-500/15"
-                      onClick={handleLeave}
-                    >
-                      Leave Session
-                    </button>
-                  ) : null}
-                </div>
-              </div>
+              <div className="text-sm font-semibold">Sessions</div>
 
               <div className="mt-3">
                 <select
@@ -227,42 +146,22 @@ export default function PlayerHubClient(props: {
                   onChange={(e) => setSelectedSessionId(e.target.value)}
                   className="w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm text-white"
                 >
-                  {(props.sessions ?? []).map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name ?? s.id.slice(0, 8)}
-                    </option>
-                  ))}
+                  {(props.sessions ?? []).length ? (
+                    (props.sessions ?? []).map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name ?? s.id.slice(0, 8)}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="">No joined sessions</option>
+                  )}
                 </select>
               </div>
 
               <div className="mt-4 space-y-4">
                 <StagePanel block={stageBlock} />
 
-                <RollRequestPanel
-                  open={rollOpen}
-                  die={rollDieStr}
-                  prompt={rollPrompt}
-                  target={rollTarget}
-                  players={players}
-                  rollModes={rollModes}
-                  rollResults={rollResults}
-                  dmTargetPlayer={dmTargetPlayer}
-                  setDmTargetPlayer={setDmTargetPlayer}
-                  dmManual={dmManual}
-                  setDmManual={setDmManual}
-                  onSubmitManual={async () => {
-                    if (!dmTargetPlayer) return;
-                    const n = Number(dmManual);
-                    if (!Number.isFinite(n)) return alert("Enter a number.");
-                    await submitFor(dmTargetPlayer, n, "manual");
-                    setDmManual("");
-                  }}
-                  onSubmitDigital={async () => {
-                    if (!dmTargetPlayer) return;
-                    const val = rollDie(rollDieStr);
-                    await submitFor(dmTargetPlayer, val, "digital");
-                  }}
-                />
+                {rollOpen ? <RollRequestPanel prompt={rollPrompt} /> : null}
 
                 {selectedSession?.story_text ? (
                   <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
@@ -290,7 +189,7 @@ export default function PlayerHubClient(props: {
 
               <div className="ml-auto flex items-center gap-2 pr-2 text-xs text-neutral-300">
                 {isLiveMode ? (
-                  <span className="rounded-full bg-red-500/20 px-2 py-1 text-red-200">LIVE • {liveSession?.name}</span>
+                  <span className="rounded-full bg-red-500/20 px-2 py-1 text-red-200">LIVE � {liveSession?.name}</span>
                 ) : null}
               </div>
             </div>
@@ -305,97 +204,12 @@ export default function PlayerHubClient(props: {
                     <JourneyLog items={props.gameLog ?? []} />
                   </div>
                 </div>
-              ) : tab === "sessions" ? (
-                <div className="space-y-4">
-                  {/* session selector (keeps full-width stage) */}
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="text-sm font-semibold">Session</div>
-
-                    <select
-                      value={selectedSessionId ?? ""}
-                      onChange={(e) => setSelectedSessionId(e.target.value)}
-                      className="rounded-xl border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm text-white"
-                    >
-                      {(props.sessions ?? []).map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name ?? s.id.slice(0, 8)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <StagePanel block={stageBlock} />
-
-                  <RollRequestPanel
-                    open={rollOpen}
-                    die={rollDieStr}
-                    prompt={rollPrompt}
-                    target={rollTarget}
-                    players={players}
-                    rollModes={rollModes}
-                    rollResults={rollResults}
-                    dmTargetPlayer={dmTargetPlayer}
-                    setDmTargetPlayer={setDmTargetPlayer}
-                    dmManual={dmManual}
-                    setDmManual={setDmManual}
-                    onSubmitManual={async () => {
-                      if (!dmTargetPlayer) return;
-                      const n = Number(dmManual);
-                      if (!Number.isFinite(n)) return alert("Enter a number.");
-                      await submitFor(dmTargetPlayer, n, "manual");
-                      setDmManual("");
-                    }}
-                    onSubmitDigital={async () => {
-                      if (!dmTargetPlayer) return;
-                      const val = rollDie(rollDieStr);
-                      await submitFor(dmTargetPlayer, val, "digital");
-                    }}
-                  />
-
-                  {selectedSession?.story_text ? (
-                    <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
-                      <div className="text-sm font-semibold">Story (Board)</div>
-                      <div className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-neutral-200">
-                        {selectedSession.story_text}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
               ) : tab === "talents" ? (
                 <div className="space-y-2">
                   <div className="text-sm font-semibold">Talents</div>
                   <div className="text-sm text-neutral-300">Scaffold only for now.</div>
                 </div>
-              ) : tab === "traits" ? (
-                  <div className="space-y-4">
-                    <div className="text-sm font-semibold">Abilities & Traits</div>
-
-                    {/* Core sheet panels (read from computed stat_block) */}
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <AbilitiesCard stat={stat} />
-                      <SavesCard stat={stat} />
-                      <SkillsCard stat={stat} />
-                      <PassivesCard stat={stat} />
-                    </div>
-
-                    {/* Quick resource peek (since you now have resources.stamina, etc.) */}
-                    <div className="rounded-2xl border border-neutral-800 bg-neutral-950 p-4">
-                      <div className="text-sm font-semibold">Resources</div>
-                      <div className="mt-2 grid grid-cols-2 gap-3 text-sm">
-                        <div className="opacity-80">Stamina</div>
-                        <div className="text-right font-semibold">
-                          {resources?.stamina ?? 0}
-                        </div>
-
-                        <div className="opacity-80">Faith</div>
-                        <div className="text-right font-semibold">
-                          {resources?.faith_available ?? 0} / {resources?.faith_cap ?? 0}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-
+              ) : (
                 <div className="space-y-3">
                   <div className="text-sm font-semibold">Actions</div>
                   <RollPanel stat={stat} disabled={isLiveMode} disabledReason="Rolls are handled in Live Mode." />
@@ -440,26 +254,6 @@ function Tab(props: {
   );
 }
 
-function InventoryPanel({ items }: { items: any[] }) {
-  if (!items?.length) return <div className="text-sm text-neutral-300">No items yet.</div>;
-  return (
-    <div className="space-y-2">
-      <div className="text-sm font-semibold">Inventory</div>
-      <ul className="mt-2 space-y-1 text-sm text-neutral-200">
-        {items.map((it) => (
-          <li
-            key={it.id}
-            className="flex items-center justify-between rounded-lg border border-neutral-800 bg-neutral-950/40 px-3 py-2"
-          >
-            <span>{it.name}</span>
-            <span className="text-neutral-400">{it.quantity > 1 ? `× ${it.quantity}` : ""}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
 function StagePanel({ block }: { block: any }) {
   return (
     <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
@@ -493,107 +287,14 @@ function StagePanel({ block }: { block: any }) {
   );
 }
 
-function RollRequestPanel(props: {
-  open: boolean;
-  die: string;
-  prompt: string;
-  target: string;
-  players: string[];
-  rollModes: Record<string, any>;
-  rollResults: Record<string, any>;
-  dmTargetPlayer: string;
-  setDmTargetPlayer: (v: string) => void;
-  dmManual: string;
-  setDmManual: (v: string) => void;
-  onSubmitManual: () => void;
-  onSubmitDigital: () => void;
-}) {
+function RollRequestPanel({ prompt }: { prompt: string }) {
   return (
     <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
-      <div className="flex items-center justify-between">
-        <div className="text-sm font-semibold">Roll Request</div>
-        {props.open ? (
-          <span className="rounded-full bg-red-500/20 px-2 py-1 text-xs text-red-200">OPEN</span>
-        ) : (
-          <span className="rounded-full bg-neutral-800 px-2 py-1 text-xs text-neutral-300">CLOSED</span>
-        )}
-      </div>
-
-      <div className="mt-3 space-y-2 text-sm text-neutral-200">
-        <div>
-          Die: <span className="font-bold text-white">{props.die || "d20"}</span>
-        </div>
-        {props.prompt ? <div className="text-neutral-300">{props.prompt}</div> : <div className="text-neutral-500">No prompt.</div>}
-        <div className="text-xs text-neutral-500">Target: {props.target}</div>
-      </div>
-
-      {/* DM roll entry controls */}
-      <div className="mt-4 rounded-xl border border-neutral-800 bg-neutral-950/60 p-3">
-        <div className="text-xs font-semibold text-neutral-200">DM Roll Entry</div>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <select
-            value={props.dmTargetPlayer}
-            onChange={(e) => props.setDmTargetPlayer(e.target.value)}
-            className="rounded-xl border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm text-white"
-          >
-            {props.players.length ? (
-              props.players.map((pid) => (
-                <option key={pid} value={pid}>
-                  {pid.slice(0, 8)} ({props.rollModes?.[pid] ?? "dm"})
-                </option>
-              ))
-            ) : (
-              <option value="">No players</option>
-            )}
-          </select>
-
-          <input
-            value={props.dmManual}
-            onChange={(e) => props.setDmManual(e.target.value)}
-            placeholder="Manual value…"
-            className="w-40 rounded-xl border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm text-white"
-          />
-
-          <button
-            className="rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200 hover:bg-neutral-900"
-            onClick={props.onSubmitManual}
-            disabled={!props.open || !props.dmTargetPlayer}
-            title={!props.open ? "Roll is closed" : ""}
-          >
-            Submit Manual
-          </button>
-
-          <button
-            className="rounded-xl bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-neutral-200"
-            onClick={props.onSubmitDigital}
-            disabled={!props.open || !props.dmTargetPlayer}
-            title={!props.open ? "Roll is closed" : ""}
-          >
-            Roll & Submit
-          </button>
-        </div>
-
-        {/* Results snapshot */}
-        <div className="mt-3 text-xs text-neutral-400">
-          Latest results:
-          <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
-            {Object.keys(props.rollResults ?? {}).length ? (
-              Object.entries(props.rollResults ?? {}).map(([pid, r]: any) => (
-                <div key={pid} className="rounded-lg border border-neutral-800 bg-neutral-950/40 p-2">
-                  <div className="text-neutral-200">
-                    {pid.slice(0, 8)}: <span className="font-semibold text-white">{String(r?.roll_value ?? "")}</span>
-                  </div>
-                  <div className="text-neutral-500">source: {String(r?.source ?? "")}</div>
-                </div>
-              ))
-            ) : (
-              <div className="text-neutral-500">No results yet.</div>
-            )}
-          </div>
-        </div>
+      <div className="text-sm font-semibold">Roll Request</div>
+      <div className="mt-3 text-sm text-neutral-200">{prompt || "Follow the storyteller's roll instruction."}</div>
+      <div className="mt-2 text-xs text-neutral-400">
+        Example: Click <span className="text-neutral-200">Perception</span> in your Skills panel, then report your result.
       </div>
     </div>
   );
 }
-
-
