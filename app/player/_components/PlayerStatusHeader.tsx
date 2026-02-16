@@ -107,20 +107,24 @@ function SessionPill(props: {
   const liveLabel = props.liveSessionName ?? "Current session";
   return (
     <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 px-3 py-2">
-      <div className="text-[11px] uppercase tracking-wide text-neutral-400">Session</div>
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-[11px] uppercase tracking-wide text-neutral-400">Session</div>
+        {live ? (
+          <button
+            type="button"
+            className="text-[11px] uppercase tracking-wide text-neutral-300 underline underline-offset-2 hover:text-white"
+            onClick={props.onLeaveClick}
+          >
+            Leave
+          </button>
+        ) : null}
+      </div>
       {live ? (
         <div className="mt-1 flex items-center gap-2">
           <div className="inline-flex items-center gap-2 rounded-full bg-red-500/20 px-2 py-1 text-xs text-red-200">
             <span className="h-2 w-2 rounded-full bg-red-400" />
             LIVE - {liveLabel}
           </div>
-          <button
-            type="button"
-            className="text-xs text-neutral-300 underline underline-offset-2 hover:text-white"
-            onClick={props.onLeaveClick}
-          >
-            Leave
-          </button>
         </div>
       ) : (
         <button

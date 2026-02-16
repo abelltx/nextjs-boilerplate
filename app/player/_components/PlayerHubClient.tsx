@@ -101,13 +101,14 @@ export default function PlayerHubClient(props: {
 
   const stageState = stage?.state ?? (selectedSessionId ? props.sessionStates?.[selectedSessionId] : null);
   const stageBlock = stage?.block ?? null;
+  const stageIsLive = isLiveState(stageState);
   const liveSessionNameForHeader =
     stage?.session?.name ??
     selectedSession?.name ??
     optimisticLiveSessionName ??
     liveSession?.name ??
     (selectedSessionId ? "Current session" : null);
-  const isSessionLive = Boolean(stage?.session?.id || selectedSessionId || liveSession?.id || optimisticLiveSession?.id);
+  const isSessionLive = Boolean(optimisticLiveSession?.id || liveSession?.id || (selectedSessionId && stageIsLive));
   const isLiveMode = isSessionLive;
 
   const rollOpen = Boolean(stageState?.roll_open);
@@ -115,7 +116,7 @@ export default function PlayerHubClient(props: {
   const stageStoryText = String(stage?.session?.story_text ?? selectedSession?.story_text ?? "");
 
   async function handleLeaveFromHeader() {
-    const sid = liveSession?.id ?? selectedSessionId;
+    const sid = optimisticLiveSession?.id ?? liveSession?.id ?? selectedSessionId;
     if (!sid) return;
 
     const ok = window.confirm(
