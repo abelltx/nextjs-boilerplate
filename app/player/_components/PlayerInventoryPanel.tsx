@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -172,6 +172,16 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
 
 
   async function dropOne(row: ItemRow) {
+    const name = safeName(row);
+    const qtyHint =
+      row.quantity > 1 && safeStackable(row)
+        ? "This will sell 1 unit from the stack."
+        : "This will sell this item.";
+    const typed = window.prompt(
+      `Sell item: ${name}\n${qtyHint}\n\nType SELL to confirm.`
+    );
+    if (typed !== "SELL") return;
+
     setBusyId(row.id);
     setErr(null);
     let hadError = false;
@@ -219,7 +229,6 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search by name…"
               className="w-full sm:w-72 rounded-md border px-3 py-2 bg-background"
             />
           </div>
@@ -241,7 +250,7 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
         </div>
 
         <div className="text-sm opacity-80">
-          {loading ? "Loading…" : `${filtered.length} item${filtered.length === 1 ? "" : "s"}`}
+          {loading ? "Loadingâ€¦" : `${filtered.length} item${filtered.length === 1 ? "" : "s"}`}
         </div>
       </div>
 
@@ -261,7 +270,7 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
         </div>
 
         {loading ? (
-          <div className="px-3 py-6 text-sm opacity-70">Loading inventory…</div>
+          <div className="px-3 py-6 text-sm opacity-70">Loading inventoryâ€¦</div>
         ) : filtered.length === 0 ? (
           <div className="px-3 py-6 text-sm opacity-70">No items found.</div>
         ) : (
@@ -305,7 +314,7 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
                 <div className="col-span-1 text-center text-sm">{r.quantity}</div>
 
                 <div className="col-span-1 text-center text-sm">
-                  {r.equipped ? "✓" : "—"}
+                  {r.equipped ? "âœ“" : "â€”"}
                 </div>
 
                 <div className="col-span-3 flex justify-end gap-2">
@@ -353,7 +362,7 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
                     }}
                     disabled={busy}
                   >
-                    Drop
+                    Sell
                   </button>
                 </div>
               </div>
@@ -404,7 +413,7 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
                 </div>
                 <div>
                   <div className="text-xs opacity-70">Slot</div>
-                  <div className="text-sm">{selected.equipped_slot ?? "—"}</div>
+                  <div className="text-sm">{selected.equipped_slot ?? "â€”"}</div>
                 </div>
               </div>
 
@@ -436,7 +445,7 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
                   className="rounded-md border border-red-300 bg-red-50 hover:bg-red-100 px-3 py-2 text-sm font-medium text-red-700"
                   onClick={() => dropOne(selected)}
                 >
-                  Drop
+                  Sell
                 </button>
               </div>
 
@@ -450,3 +459,4 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
     </div>
   );
 }
+
