@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import PlayerStatusHeader from "./PlayerStatusHeader";
 import JourneyLog from "./JourneyLog";
 import JoinSessionModal from "./JoinSessionModal";
@@ -32,6 +33,7 @@ export default function PlayerHubClient(props: {
 }) {
   const [tab, setTab] = useState<TabKey>("inventory");
   const [joinOpen, setJoinOpen] = useState(false);
+  const router = useRouter();
 
   const stat = (props.character?.stat_block ?? {}) as any;
   const derived = stat?.derived ?? {};
@@ -44,8 +46,6 @@ export default function PlayerHubClient(props: {
       .filter(({ state }) => Boolean(state));
     return candidates.find(({ state }) => isLiveState(state))?.session ?? null;
   }, [props.sessions, props.sessionStates]);
-
-  const isLiveMode = Boolean(liveSession);
 
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   useEffect(() => {
@@ -94,6 +94,11 @@ export default function PlayerHubClient(props: {
 
   const stageState = stage?.state ?? (selectedSessionId ? props.sessionStates?.[selectedSessionId] : null);
   const stageBlock = stage?.block ?? null;
+  const selectedSessionIsLive = isLiveState(stageState);
+  const liveSessionNameForHeader = selectedSessionIsLive
+    ? (stage?.session?.name ?? selectedSession?.name ?? liveSession?.name ?? null)
+    : (liveSession?.name ?? null);
+  const isLiveMode = Boolean(liveSessionNameForHeader);
 
   const rollOpen = Boolean(stageState?.roll_open);
   const rollPrompt = String(stageState?.roll_prompt ?? "");
@@ -116,6 +121,7 @@ export default function PlayerHubClient(props: {
 
     setStage(null);
     setSelectedSessionId(null);
+    router.refresh();
   }
 
   return (
@@ -142,7 +148,7 @@ export default function PlayerHubClient(props: {
           faithAvailable={Number(resources.faith_available ?? 0)}
           faithCap={Number(resources.faith_cap ?? 100)}
           effects={effects}
-          liveSessionName={liveSession?.name ?? null}
+          liveSessionName={liveSessionNameForHeader}
           onJoinClick={() => setJoinOpen(true)}
           onLeaveClick={handleLeaveFromHeader}
         />
@@ -211,7 +217,9 @@ export default function PlayerHubClient(props: {
 
               <div className="ml-auto flex items-center gap-2 pr-2 text-xs text-neutral-300">
                 {isLiveMode ? (
-                  <span className="rounded-full bg-red-500/20 px-2 py-1 text-red-200">LIVE • {liveSession?.name}</span>
+                  <span className="rounded-full bg-red-500/20 px-2 py-1 text-red-200">
+                    LIVE • {liveSessionNameForHeader}
+                  </span>
                 ) : null}
               </div>
             </div>
