@@ -287,6 +287,7 @@ function Tab(props: {
 }
 
 function StagePanel({ block }: { block: any }) {
+  const markers = Array.isArray(block?.meta?.markers) ? block.meta.markers : [];
   return (
     <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
       <div className="text-sm font-semibold">Stage</div>
@@ -295,7 +296,9 @@ function StagePanel({ block }: { block: any }) {
         <div className="mt-3 space-y-3">
           <div className="text-lg font-extrabold">{block.title ?? block.block_type ?? "Presented"}</div>
 
-          {block.image_url ? <StageImagePreview src={block.image_url} alt={block.title ?? "Presented"} /> : null}
+          {block.image_url ? (
+            <StageImagePreview src={block.image_url} alt={block.title ?? "Presented"} markers={markers} />
+          ) : null}
 
           {block.body ? (
             <div className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-200">{block.body}</div>
@@ -312,7 +315,15 @@ function StagePanel({ block }: { block: any }) {
   );
 }
 
-function StageImagePreview({ src, alt }: { src: string; alt: string }) {
+function StageImagePreview({
+  src,
+  alt,
+  markers,
+}: {
+  src: string;
+  alt: string;
+  markers?: Array<{ x?: number; y?: number; label?: string }>;
+}) {
   const [hover, setHover] = useState(false);
   const [zoom, setZoom] = useState(2);
   const [pos, setPos] = useState({ x: 50, y: 50 });
@@ -337,6 +348,27 @@ function StageImagePreview({ src, alt }: { src: string; alt: string }) {
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={src} alt={alt} className="w-full" />
+
+        {Array.isArray(markers)
+          ? markers.map((m, i) => {
+              const x = Number(m?.x ?? 0);
+              const y = Number(m?.y ?? 0);
+              if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+              return (
+                <div
+                  key={`${i}-${x}-${y}`}
+                  className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-white bg-black/80 px-2 py-0.5 text-[10px] font-semibold text-white"
+                  style={{
+                    left: `${Math.max(0, Math.min(100, x))}%`,
+                    top: `${Math.max(0, Math.min(100, y))}%`,
+                  }}
+                  title={String(m?.label ?? `Marker ${i + 1}`)}
+                >
+                  {i + 1}
+                </div>
+              );
+            })
+          : null}
 
         {hover ? (
           <div

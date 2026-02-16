@@ -43,6 +43,19 @@ function isPresentable(b: Block) {
   return b.audience !== "storyteller";
 }
 
+function getMapMarkers(meta: any): Array<{ id: string; label: string; x: number; y: number; target_block_id: string | null }> {
+  const list = Array.isArray(meta?.markers) ? meta.markers : [];
+  return list
+    .map((m: any, i: number) => ({
+      id: String(m?.id ?? `m-${i + 1}`),
+      label: String(m?.label ?? `Marker ${i + 1}`),
+      x: Number(m?.x ?? 50),
+      y: Number(m?.y ?? 50),
+      target_block_id: m?.target_block_id ? String(m.target_block_id) : null,
+    }))
+    .filter((m: any) => Number.isFinite(m.x) && Number.isFinite(m.y));
+}
+
 export default async function DmScreenPage({
   params,
 }: {
@@ -134,6 +147,8 @@ export default async function DmScreenPage({
 
   // roll mode map
   const rollModes = (((state as any).roll_modes ?? {}) as Record<string, string>) || {};
+  const blockById = new Map<string, Block>();
+  for (const b of ordered) blockById.set(b.id, b);
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-4">
@@ -441,8 +456,59 @@ export default async function DmScreenPage({
 
                               {b.image_url ? (
                                 <div className="rounded border overflow-hidden">
-                                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  <img src={b.image_url} alt="Block" className="w-full h-auto" />
+                                  <div className="relative">
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img src={b.image_url} alt="Block" className="w-full h-auto" />
+                                    {String(b.block_type).toLowerCase() === "map"
+                                      ? getMapMarkers(b.meta).map((m, i) => (
+                                          <div
+                                            key={m.id}
+                                            className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-white bg-black/80 px-2 py-0.5 text-[10px] font-semibold text-white"
+                                            style={{
+                                              left: `${Math.max(0, Math.min(100, m.x))}%`,
+                                              top: `${Math.max(0, Math.min(100, m.y))}%`,
+                                            }}
+                                            title={m.label}
+                                          >
+                                            {i + 1}
+                                          </div>
+                                        ))
+                                      : null}
+                                  </div>
+                                </div>
+                              ) : null}
+
+                              {String(b.block_type).toLowerCase() === "map" ? (
+                                <div className="rounded border p-2 bg-gray-50 space-y-2">
+                                  <div className="text-xs uppercase text-gray-500">Map Markers</div>
+                                  {getMapMarkers(b.meta).length === 0 ? (
+                                    <div className="text-sm text-gray-600">No markers linked yet.</div>
+                                  ) : (
+                                    <div className="flex flex-wrap gap-2">
+                                      {getMapMarkers(b.meta).map((m, i) => {
+                                        const target = m.target_block_id ? blockById.get(m.target_block_id) : null;
+                                        return (
+                                          <form
+                                            key={m.id}
+                                            action={async () => {
+                                              "use server";
+                                              if (!m.target_block_id) return;
+                                              await presentBlockToPlayersAction(session.id, m.target_block_id);
+                                              redirect(`/storyteller/sessions/${session.id}`);
+                                            }}
+                                          >
+                                            <button
+                                              className="rounded border px-2 py-1 text-xs"
+                                              disabled={!m.target_block_id}
+                                              title={m.target_block_id ? `Reveal ${target?.title ?? "linked block"}` : "No linked block"}
+                                            >
+                                              Reveal {i + 1}: {m.label}
+                                            </button>
+                                          </form>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
                                 </div>
                               ) : null}
 

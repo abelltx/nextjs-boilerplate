@@ -8,6 +8,7 @@ import {
   deleteEpisodeBlockAction,
   moveEpisodeBlockAction,
 } from "@/app/actions/episodeBlocksAdmin";
+import MapMarkerEditorClient from "./MapMarkerEditorClient";
 
 async function requireAdminServer() {
   const supabase = await createClient();
@@ -1092,13 +1093,25 @@ export default async function AdminEpisodeEditPage({
                             placeholder="Image URL"
                           />
                           <input name="image_file" type="file" accept="image/*" className="w-full border rounded p-2" />
-
-                          <textarea
-                            name="meta_json"
-                            className="w-full border rounded p-2 h-28 font-mono text-[12px]"
-                            defaultValue={b.meta ? safeJsonStringify(b.meta) : ""}
-                            placeholder="Meta JSON (optional)"
-                          />
+                          {String(b.block_type).toLowerCase() === "map" && (b.image_url ?? "").trim() ? (
+                            <MapMarkerEditorClient
+                              imageUrl={b.image_url as string}
+                              initialMeta={b.meta ?? {}}
+                              revealCandidates={(blocks ?? [])
+                                .filter((x: any) => x.id !== b.id && x.block_type !== "scene")
+                                .map((x: any) => ({
+                                  id: x.id,
+                                  title: `${x.block_type}${x.title ? ` - ${x.title}` : ""}`,
+                                }))}
+                            />
+                          ) : (
+                            <textarea
+                              name="meta_json"
+                              className="w-full border rounded p-2 h-28 font-mono text-[12px]"
+                              defaultValue={b.meta ? safeJsonStringify(b.meta) : ""}
+                              placeholder="Meta JSON (optional)"
+                            />
+                          )}
 
                           <button className="px-3 py-2 rounded border">Save Block</button>
                         </form>
