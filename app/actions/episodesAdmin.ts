@@ -125,6 +125,21 @@ export async function createEpisodeAction(fd: FormData) {
   if (!fullErr) {
     data = fullData as { id: string };
   } else {
+    const isDuplicateEpisodeCode =
+      (fullErr as any)?.code === "23505" &&
+      String((fullErr as any)?.message ?? "").includes("episodes_episode_code_unique_ci");
+    if (isDuplicateEpisodeCode && episode_code) {
+      const { data: existing } = await supabase
+        .from("episodes")
+        .select("id")
+        .ilike("episode_code", episode_code)
+        .limit(1)
+        .maybeSingle();
+      if (existing?.id) {
+        redirect(`/admin/episodes/${existing.id}`);
+      }
+    }
+
     // Fallback for schema variations across environments.
     const fallbackPayload: EpisodeUpsert = {
       title,
