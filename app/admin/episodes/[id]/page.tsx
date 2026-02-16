@@ -464,7 +464,7 @@ export default async function AdminEpisodeEditPage({
                 body:
                   "[FILL: what players should notice in this image]\n\n" +
                   "Checklist:\n" +
-                  "- Add image URL\n" +
+                  "- Upload image file or add image URL\n" +
                   "- Present to players on Stage",
                 image_url: null,
               },
@@ -518,6 +518,7 @@ export default async function AdminEpisodeEditPage({
         {/* GLOBAL Add Block (still useful) */}
         <form
           className="border rounded-lg p-3 space-y-2"
+          encType="multipart/form-data"
           action={async (fd) => {
             "use server";
             await addEpisodeBlockAction(episode.id, fd);
@@ -569,6 +570,7 @@ export default async function AdminEpisodeEditPage({
           <input name="title" placeholder="Block title (optional)" className="w-full border rounded p-2" />
           <textarea name="body" placeholder="Body text (optional)" className="w-full border rounded p-2 h-24" />
           <input name="image_url" placeholder="Image URL (optional)" className="w-full border rounded p-2" />
+          <input name="image_file" type="file" accept="image/*" className="w-full border rounded p-2" />
           <textarea
             name="meta_json"
             placeholder={`Meta JSON (optional)\nExample:\n{\n  "attire_required": ["Shepherd cloak"],\n  "loot_potential": ["Olives"]\n}`}
@@ -600,6 +602,7 @@ export default async function AdminEpisodeEditPage({
                     {/* Save Scene form */}
                     <form
                       className="mt-2 space-y-2"
+                      encType="multipart/form-data"
                       action={async (fd) => {
                         "use server";
                         await updateEpisodeBlockAction(g.scene.id, episode.id, fd);
@@ -632,6 +635,7 @@ export default async function AdminEpisodeEditPage({
                         defaultValue={g.scene.image_url ?? ""}
                         placeholder="Scene image URL (optional)"
                       />
+                      <input name="image_file" type="file" accept="image/*" className="w-full border rounded p-2" />
 
                       <textarea
                         name="meta_json"
@@ -674,6 +678,7 @@ export default async function AdminEpisodeEditPage({
                     <div className="p-3 border-t space-y-2">
                       <form
                         className="space-y-2"
+                        encType="multipart/form-data"
                         action={async (fd) => {
                           "use server";
                           await addEpisodeBlockAction(episode.id, fd);
@@ -727,7 +732,8 @@ export default async function AdminEpisodeEditPage({
                           placeholder="Map title (optional)"
                           defaultValue="Map"
                         />
-                        <input name="image_url" className="w-full border rounded p-2" placeholder="Image URL (required for now)" />
+                        <input name="image_url" className="w-full border rounded p-2" placeholder="Image URL (optional)" />
+                        <input name="image_file" type="file" accept="image/*" className="w-full border rounded p-2" />
                         <textarea
                           name="body"
                           className="w-full border rounded p-2 h-20"
@@ -1003,6 +1009,7 @@ export default async function AdminEpisodeEditPage({
 
                         <form
                           className="mt-3 space-y-2"
+                          encType="multipart/form-data"
                           action={async (fd) => {
                             "use server";
                             await updateEpisodeBlockAction(b.id, episode.id, fd);
@@ -1035,6 +1042,7 @@ export default async function AdminEpisodeEditPage({
                             defaultValue={b.image_url ?? ""}
                             placeholder="Image URL"
                           />
+                          <input name="image_file" type="file" accept="image/*" className="w-full border rounded p-2" />
 
                           <textarea
                             name="meta_json"

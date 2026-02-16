@@ -3,9 +3,37 @@
 import { createClient } from "@/utils/supabase/server";
 import { revalidatePath } from "next/cache";
 
+const EPISODE_ASSETS_BUCKET = "episode-assets";
+
 function requireUuid(id: string, label: string) {
   const ok = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
   if (!ok) throw new Error(`Invalid ${label}`);
+}
+
+async function maybeUploadBlockImage(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  episodeId: string,
+  fd: FormData
+): Promise<string | null> {
+  const fileValue = fd.get("image_file");
+  if (!fileValue || typeof fileValue !== "object" || !("arrayBuffer" in fileValue)) return null;
+
+  const file = fileValue as File;
+  if (!file.size || file.size <= 0) return null;
+
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const path = `episode-blocks/${episodeId}/${Date.now()}-${safeName}`;
+
+  const { error: upErr } = await supabase.storage
+    .from(EPISODE_ASSETS_BUCKET)
+    .upload(path, file, {
+      upsert: true,
+      contentType: file.type || "application/octet-stream",
+    });
+  if (upErr) throw new Error(upErr.message);
+
+  const { data: pub } = supabase.storage.from(EPISODE_ASSETS_BUCKET).getPublicUrl(path);
+  return pub?.publicUrl ?? null;
 }
 
 function parseMetaJson(raw: FormDataEntryValue | null): any {
@@ -31,6 +59,8 @@ export async function addEpisodeBlockAction(episodeId: string, fd: FormData) {
   const title = String(fd.get("title") ?? "").trim() || null;
   const body = String(fd.get("body") ?? "").trim() || null;
   const image_url = String(fd.get("image_url") ?? "").trim() || null;
+  const uploadedImageUrl = await maybeUploadBlockImage(supabase, episodeId, fd);
+  const finalImageUrl = uploadedImageUrl ?? image_url;
   const meta = parseMetaJson(fd.get("meta_json"));
 
   // Next sort_order = max + 10 (gives room for later inserts without reshuffling)
@@ -52,7 +82,7 @@ export async function addEpisodeBlockAction(episodeId: string, fd: FormData) {
     mode,
     title,
     body,
-    image_url,
+    image_url: finalImageUrl,
     meta,
   });
 
@@ -74,6 +104,10 @@ export async function updateEpisodeBlockAction(blockId: string, episodeId: strin
     body: String(fd.get("body") ?? "").trim() || null,
     image_url: String(fd.get("image_url") ?? "").trim() || null,
   };
+  const uploadedImageUrl = await maybeUploadBlockImage(supabase, episodeId, fd);
+  if (uploadedImageUrl) {
+    patch.image_url = uploadedImageUrl;
+  }
 
   // Only update meta if the field is present (prevents wiping meta accidentally)
   if (fd.has("meta_json")) {
