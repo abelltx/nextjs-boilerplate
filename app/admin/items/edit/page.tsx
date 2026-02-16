@@ -248,7 +248,7 @@ function EffectsAddForm({ itemId }: { itemId: string }) {
   );
 }
 
-type SP = { saved?: string; img?: string; err?: string };
+type SP = { saved?: string; img?: string; err?: string; id?: string };
 
 export default async function ItemEditPage({
   searchParams,
@@ -259,15 +259,19 @@ export default async function ItemEditPage({
   const saved = (sp.saved ?? "").trim();
   const img = (sp.img ?? "").trim();
   const err = (sp.err ?? "").trim();
+  const idFromQuery = String(sp.id ?? "").trim();
 
   const c = await cookies();
-  const itemId = c.get(COOKIE_KEY)?.value ?? "";
+  const itemIdFromCookie = c.get(COOKIE_KEY)?.value ?? "";
+  const itemId = isUuid(idFromQuery) ? idFromQuery : itemIdFromCookie;
 
   if (!isUuid(itemId)) {
     return (
       <div className="p-6">
         <h1 className="text-xl font-semibold">Edit Item</h1>
-        <p className="mt-2 text-sm text-muted-foreground">No item selected. Go back to the library and open an item.</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          No item selected. Open from the library, or use /admin/items/edit?id=&lt;item_uuid&gt;.
+        </p>
         <div className="mt-4">
           <Link className="rounded-lg border px-3 py-2 text-sm hover:bg-muted" href="/admin/items">
             ← Back to Items
