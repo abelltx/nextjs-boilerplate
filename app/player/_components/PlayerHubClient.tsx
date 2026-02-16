@@ -7,6 +7,7 @@ import JoinSessionModal from "./JoinSessionModal";
 import { AbilitiesCard, SavesCard, SkillsCard, PassivesCard } from "./PlayerSheetPanels";
 import RollPanel from "./RollPanel";
 import PlayerInventoryPanel from "./PlayerInventoryPanel";
+import { leaveSessionAction } from "../actions";
 
 type TabKey = "inventory" | "actions" | "talents" | "journey";
 
@@ -96,6 +97,26 @@ export default function PlayerHubClient(props: {
 
   const rollOpen = Boolean(stageState?.roll_open);
   const rollPrompt = String(stageState?.roll_prompt ?? "");
+  const stageStoryText = String(stage?.session?.story_text ?? selectedSession?.story_text ?? "");
+
+  async function handleLeaveFromHeader() {
+    const sid = liveSession?.id ?? selectedSessionId;
+    if (!sid) return;
+
+    const ok = window.confirm(
+      "Leave this session?\n\nYou may need a join code to re-enter."
+    );
+    if (!ok) return;
+
+    const res = await leaveSessionAction(sid);
+    if (!res.ok) {
+      alert(res.error ?? "Failed to leave session.");
+      return;
+    }
+
+    setStage(null);
+    setSelectedSessionId(null);
+  }
 
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100">
@@ -123,6 +144,7 @@ export default function PlayerHubClient(props: {
           effects={effects}
           liveSessionName={liveSession?.name ?? null}
           onJoinClick={() => setJoinOpen(true)}
+          onLeaveClick={handleLeaveFromHeader}
         />
 
         <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-12">
@@ -138,7 +160,7 @@ export default function PlayerHubClient(props: {
 
           <section className="lg:col-span-6">
             <div className="mb-4 rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4">
-              <div className="text-sm font-semibold">Sessions</div>
+              <div className="text-sm font-semibold">Stage</div>
 
               <div className="mt-3">
                 <select
@@ -163,11 +185,11 @@ export default function PlayerHubClient(props: {
 
                 {rollOpen ? <RollRequestPanel prompt={rollPrompt} /> : null}
 
-                {selectedSession?.story_text ? (
+                {stageStoryText ? (
                   <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
                     <div className="text-sm font-semibold">Story (Board)</div>
                     <div className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-neutral-200">
-                      {selectedSession.story_text}
+                      {stageStoryText}
                     </div>
                   </div>
                 ) : null}

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 export default function PlayerStatusHeader(props: {
   characterName: string;
@@ -9,20 +9,21 @@ export default function PlayerStatusHeader(props: {
   defense: number | null;
   speed: number | null;
 
-  faithAvailable: number; // ALWAYS visible
+  faithAvailable: number;
   faithCap: number;
 
   effects: Array<{ name: string; kind?: "buff" | "debuff"; note?: string }>;
 
   liveSessionName: string | null;
   onJoinClick: () => void;
+  onLeaveClick: () => void;
 }) {
   const hc = props.healthCurrent;
   const hm = props.healthMax;
 
-  const healthText = hc != null && hm != null ? `${hc} / ${hm}` : "—";
-  const defenseText = props.defense != null ? String(props.defense) : "—";
-  const speedText = props.speed != null ? `${props.speed} ft` : "—";
+  const healthText = hc != null && hm != null ? `${hc} / ${hm}` : "-";
+  const defenseText = props.defense != null ? String(props.defense) : "-";
+  const speedText = props.speed != null ? `${props.speed} ft` : "-";
 
   const faithText = `${props.faithAvailable} / ${props.faithCap}`;
 
@@ -44,7 +45,11 @@ export default function PlayerStatusHeader(props: {
           <StatPill label="Speed" value={speedText} />
           <StatPill label="Faith" value={faithText} dim={props.faithAvailable === 0} />
           <EffectsPill shown={shown} extra={extra} />
-          <SessionPill liveSessionName={props.liveSessionName} onJoinClick={props.onJoinClick} />
+          <SessionPill
+            liveSessionName={props.liveSessionName}
+            onJoinClick={props.onJoinClick}
+            onLeaveClick={props.onLeaveClick}
+          />
         </div>
       </div>
     </div>
@@ -66,7 +71,7 @@ function EffectsPill(props: { shown: Array<{ name: string; kind?: string }>; ext
       <div className="text-[11px] uppercase tracking-wide text-neutral-400">Effects</div>
       <div className="mt-1 flex flex-wrap gap-1">
         {props.shown.length === 0 ? (
-          <span className="text-sm text-neutral-400">—</span>
+          <span className="text-sm text-neutral-400">-</span>
         ) : (
           <>
             {props.shown.map((e, idx) => (
@@ -90,22 +95,35 @@ function EffectsPill(props: { shown: Array<{ name: string; kind?: string }>; ext
   );
 }
 
-function SessionPill(props: { liveSessionName: string | null; onJoinClick: () => void }) {
+function SessionPill(props: {
+  liveSessionName: string | null;
+  onJoinClick: () => void;
+  onLeaveClick: () => void;
+}) {
   const live = props.liveSessionName;
   return (
     <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 px-3 py-2">
       <div className="text-[11px] uppercase tracking-wide text-neutral-400">Session</div>
       {live ? (
-        <div className="mt-1 inline-flex items-center gap-2 rounded-full bg-red-500/20 px-2 py-1 text-xs text-red-200">
-          <span className="h-2 w-2 rounded-full bg-red-400" />
-          LIVE • {live}
+        <div className="mt-1 flex items-center gap-2">
+          <div className="inline-flex items-center gap-2 rounded-full bg-red-500/20 px-2 py-1 text-xs text-red-200">
+            <span className="h-2 w-2 rounded-full bg-red-400" />
+            LIVE - {live}
+          </div>
+          <button
+            type="button"
+            className="text-xs text-neutral-300 underline underline-offset-2 hover:text-white"
+            onClick={props.onLeaveClick}
+          >
+            Leave
+          </button>
         </div>
       ) : (
         <button
           className="mt-1 rounded-full border border-neutral-700 bg-neutral-950 px-3 py-1 text-xs text-neutral-200 hover:bg-neutral-900"
           onClick={props.onJoinClick}
         >
-          Offline • Join
+          Offline - Join
         </button>
       )}
     </div>
