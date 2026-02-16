@@ -183,6 +183,9 @@ export default function PlayerHubClient(props: {
           liveSessionName={liveSession?.name ?? null}
           onJoinClick={() => setJoinOpen(true)}
         />
+<div className="text-xs opacity-70">
+  DEBUG stamina: {String(props.character?.stat_block?.resources?.stamina ?? "(missing)")}
+</div>
 
         <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-12">
           <aside className="lg:col-span-3 space-y-4">
