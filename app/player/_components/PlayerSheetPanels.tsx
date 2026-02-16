@@ -94,19 +94,68 @@ export function SavesCard({ stat }: { stat: StatBlock }) {
 
 export function SkillsCard({ stat }: { stat: StatBlock }) {
   const skills = stat.skills ?? {};
-  const entries = Object.entries(skills);
+  const a = stat.abilities ?? { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
+
+  const skillDefs: Array<{ key: string; label: string; ability: AbilityKey }> = [
+    { key: "acrobatics", label: "Acrobatics", ability: "dex" },
+    { key: "animal_handling", label: "Animal Handling", ability: "wis" },
+    { key: "arcana", label: "Arcana", ability: "int" },
+    { key: "athletics", label: "Athletics", ability: "str" },
+    { key: "deception", label: "Deception", ability: "cha" },
+    { key: "history", label: "History", ability: "int" },
+    { key: "insight", label: "Insight", ability: "wis" },
+    { key: "intimidation", label: "Intimidation", ability: "cha" },
+    { key: "investigation", label: "Investigation", ability: "int" },
+    { key: "medicine", label: "Medicine", ability: "wis" },
+    { key: "nature", label: "Nature", ability: "int" },
+    { key: "perception", label: "Perception", ability: "wis" },
+    { key: "performance", label: "Performance", ability: "cha" },
+    { key: "persuasion", label: "Persuasion", ability: "cha" },
+    { key: "religion", label: "Religion", ability: "int" },
+    { key: "sleight_of_hand", label: "Sleight of Hand", ability: "dex" },
+    { key: "stealth", label: "Stealth", ability: "dex" },
+    { key: "survival", label: "Survival", ability: "wis" },
+  ];
 
   return (
     <Card title="Skills">
-      {entries.length === 0 ? (
-        <div className="text-sm text-neutral-400">No skills set yet.</div>
-      ) : (
-        <div className="space-y-1">
-          {entries
-            .sort((a, b) => a[0].localeCompare(b[0]))
-            .map(([name, bonus]) => <Row key={name} left={name} right={fmt(Number(bonus ?? 0))} />)}
+      <div className="space-y-1">
+        <div className="grid grid-cols-[40px_56px_1fr_64px] items-center rounded-lg border border-neutral-800 bg-neutral-950/40 px-3 py-2 text-[11px] uppercase tracking-wide text-neutral-400">
+          <div>Prof</div>
+          <div>Mod</div>
+          <div>Skill</div>
+          <div className="text-right">Bonus</div>
         </div>
-      )}
+        {skillDefs.map((s) => {
+          const abilityMod = mod(a[s.ability]);
+          const hasOverride = Object.prototype.hasOwnProperty.call(skills, s.key);
+          const totalBonus = hasOverride ? Number(skills[s.key] ?? 0) : abilityMod;
+          const proficient = totalBonus > abilityMod;
+
+          return (
+            <div
+              key={s.key}
+              className="grid grid-cols-[40px_56px_1fr_64px] items-center rounded-lg border border-neutral-800 bg-neutral-950/40 px-3 py-2"
+            >
+              <div>
+                <span
+                  className={[
+                    "inline-block h-2.5 w-2.5 rounded-full border",
+                    proficient ? "border-emerald-400 bg-emerald-400" : "border-neutral-500",
+                  ].join(" ")}
+                  title={proficient ? "Proficient" : "Not proficient"}
+                />
+              </div>
+              <div className="text-sm text-neutral-200">{fmt(abilityMod)}</div>
+              <div className="text-sm text-neutral-200">
+                <span className="mr-2 text-[11px] uppercase text-neutral-400">{s.ability.toUpperCase()}</span>
+                <span>{s.label}</span>
+              </div>
+              <div className="text-right text-sm font-semibold text-white">{fmt(totalBonus)}</div>
+            </div>
+          );
+        })}
+      </div>
     </Card>
   );
 }
