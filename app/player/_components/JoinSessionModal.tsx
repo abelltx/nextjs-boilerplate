@@ -1,10 +1,14 @@
-"use client";
+﻿"use client";
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { joinSessionAction } from "../actions";
 
-export default function JoinSessionModal(props: { open: boolean; onClose: () => void }) {
+export default function JoinSessionModal(props: {
+  open: boolean;
+  onClose: () => void;
+  onJoined?: (sessionId: string, sessionName?: string) => void;
+}) {
   const [code, setCode] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -27,7 +31,7 @@ export default function JoinSessionModal(props: { open: boolean; onClose: () => 
         <input
           value={code}
           onChange={(e) => setCode(e.target.value)}
-          placeholder="Join code…"
+          placeholder="Join code..."
           className="mt-3 w-full rounded-xl border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm text-white outline-none focus:border-neutral-600"
         />
 
@@ -54,6 +58,7 @@ export default function JoinSessionModal(props: { open: boolean; onClose: () => 
                 try {
                   const res = await joinSessionAction(code.trim());
                   if (res?.ok) {
+                    if (res.sessionId) props.onJoined?.(res.sessionId, res.sessionName);
                     props.onClose();
                     router.refresh(); // refresh hub data
                   } else {
@@ -65,7 +70,7 @@ export default function JoinSessionModal(props: { open: boolean; onClose: () => 
               });
             }}
           >
-            {isPending ? "Joining…" : "Join"}
+            {isPending ? "Joining..." : "Join"}
           </button>
         </div>
       </div>

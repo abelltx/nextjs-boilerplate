@@ -15,6 +15,7 @@ export default function PlayerStatusHeader(props: {
   effects: Array<{ name: string; kind?: "buff" | "debuff"; note?: string }>;
 
   liveSessionName: string | null;
+  isSessionLive: boolean;
   onJoinClick: () => void;
   onLeaveClick: () => void;
 }) {
@@ -47,6 +48,7 @@ export default function PlayerStatusHeader(props: {
           <EffectsPill shown={shown} extra={extra} />
           <SessionPill
             liveSessionName={props.liveSessionName}
+            isSessionLive={props.isSessionLive}
             onJoinClick={props.onJoinClick}
             onLeaveClick={props.onLeaveClick}
           />
@@ -97,10 +99,12 @@ function EffectsPill(props: { shown: Array<{ name: string; kind?: string }>; ext
 
 function SessionPill(props: {
   liveSessionName: string | null;
+  isSessionLive: boolean;
   onJoinClick: () => void;
   onLeaveClick: () => void;
 }) {
-  const live = props.liveSessionName;
+  const live = props.isSessionLive;
+  const liveLabel = props.liveSessionName ?? "Current session";
   return (
     <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 px-3 py-2">
       <div className="text-[11px] uppercase tracking-wide text-neutral-400">Session</div>
@@ -108,7 +112,7 @@ function SessionPill(props: {
         <div className="mt-1 flex items-center gap-2">
           <div className="inline-flex items-center gap-2 rounded-full bg-red-500/20 px-2 py-1 text-xs text-red-200">
             <span className="h-2 w-2 rounded-full bg-red-400" />
-            LIVE - {live}
+            LIVE - {liveLabel}
           </div>
           <button
             type="button"

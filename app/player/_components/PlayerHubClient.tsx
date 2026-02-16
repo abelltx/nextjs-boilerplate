@@ -33,6 +33,7 @@ export default function PlayerHubClient(props: {
 }) {
   const [tab, setTab] = useState<TabKey>("inventory");
   const [joinOpen, setJoinOpen] = useState(false);
+  const [optimisticLiveSession, setOptimisticLiveSession] = useState<{ id: string; name?: string | null } | null>(null);
   const router = useRouter();
 
   const stat = (props.character?.stat_block ?? {}) as any;
@@ -64,6 +65,12 @@ export default function PlayerHubClient(props: {
   } | null>(null);
 
   const selectedSession = props.sessions.find((s) => s.id === selectedSessionId) ?? null;
+  const optimisticLiveSessionName =
+    (optimisticLiveSession?.id
+      ? props.sessions.find((s) => s.id === optimisticLiveSession.id)?.name
+      : null) ??
+    optimisticLiveSession?.name ??
+    null;
 
   useEffect(() => {
     if (!selectedSessionId) return;
@@ -94,11 +101,14 @@ export default function PlayerHubClient(props: {
 
   const stageState = stage?.state ?? (selectedSessionId ? props.sessionStates?.[selectedSessionId] : null);
   const stageBlock = stage?.block ?? null;
-  const selectedSessionIsLive = isLiveState(stageState);
-  const liveSessionNameForHeader = selectedSessionIsLive
-    ? (stage?.session?.name ?? selectedSession?.name ?? liveSession?.name ?? null)
-    : (liveSession?.name ?? null);
-  const isLiveMode = Boolean(liveSessionNameForHeader);
+  const liveSessionNameForHeader =
+    stage?.session?.name ??
+    selectedSession?.name ??
+    optimisticLiveSessionName ??
+    liveSession?.name ??
+    (selectedSessionId ? "Current session" : null);
+  const isSessionLive = Boolean(stage?.session?.id || selectedSessionId || liveSession?.id || optimisticLiveSession?.id);
+  const isLiveMode = isSessionLive;
 
   const rollOpen = Boolean(stageState?.roll_open);
   const rollPrompt = String(stageState?.roll_prompt ?? "");
@@ -121,6 +131,7 @@ export default function PlayerHubClient(props: {
 
     setStage(null);
     setSelectedSessionId(null);
+    setOptimisticLiveSession(null);
     router.refresh();
   }
 
@@ -149,6 +160,7 @@ export default function PlayerHubClient(props: {
           faithCap={Number(resources.faith_cap ?? 100)}
           effects={effects}
           liveSessionName={liveSessionNameForHeader}
+          isSessionLive={isSessionLive}
           onJoinClick={() => setJoinOpen(true)}
           onLeaveClick={handleLeaveFromHeader}
         />
@@ -167,24 +179,6 @@ export default function PlayerHubClient(props: {
           <section className="lg:col-span-6">
             <div className="mb-4 rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4">
               <div className="text-sm font-semibold">Stage</div>
-
-              <div className="mt-3">
-                <select
-                  value={selectedSessionId ?? ""}
-                  onChange={(e) => setSelectedSessionId(e.target.value)}
-                  className="w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm text-white"
-                >
-                  {(props.sessions ?? []).length ? (
-                    (props.sessions ?? []).map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name ?? s.id.slice(0, 8)}
-                      </option>
-                    ))
-                  ) : (
-                    <option value="">No joined sessions</option>
-                  )}
-                </select>
-              </div>
 
               <div className="mt-4 space-y-4">
                 <StagePanel block={stageBlock} />
@@ -256,7 +250,14 @@ export default function PlayerHubClient(props: {
         </div>
       </div>
 
-      <JoinSessionModal open={joinOpen} onClose={() => setJoinOpen(false)} />
+      <JoinSessionModal
+        open={joinOpen}
+        onClose={() => setJoinOpen(false)}
+        onJoined={(sessionId, sessionName) => {
+          setSelectedSessionId(sessionId);
+          setOptimisticLiveSession({ id: sessionId, name: sessionName });
+        }}
+      />
     </main>
   );
 }

@@ -1,4 +1,4 @@
-"use server";
+﻿"use server";
 
 import { supabaseServer } from "@/lib/supabase/server";
 import { getProfile } from "@/lib/auth/getProfile";
@@ -8,7 +8,9 @@ function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
 }
 
-export async function joinSessionAction(joinCodeOrId: string): Promise<{ ok: boolean; sessionId?: string; error?: string }> {
+export async function joinSessionAction(
+  joinCodeOrId: string
+): Promise<{ ok: boolean; sessionId?: string; sessionName?: string; error?: string }> {
   const { user } = await getProfile();
   if (!user) return { ok: false, error: "Not signed in." };
 
@@ -16,30 +18,35 @@ export async function joinSessionAction(joinCodeOrId: string): Promise<{ ok: boo
   const token = joinCodeOrId.trim();
 
   // 1) Resolve session by join_code (preferred)
-  // Assumes sessions.join_code exists. If it doesn’t, this query will fail; we catch and fallback.
+  // Assumes sessions.join_code exists. If it doesn't, this query will fail; we catch and fallback.
   let sessionId: string | null = null;
+  let sessionName: string | null = null;
 
   const tryJoinCode = async () => {
     const { data, error } = await supabase
       .from("sessions")
-      .select("id")
+      .select("id,name")
       .eq("join_code", token)
       .maybeSingle();
 
     if (error) return null;
-    return data?.id ?? null;
+    if (!data?.id) return null;
+    sessionName = (data as any)?.name ?? null;
+    return data.id;
   };
 
   const tryId = async () => {
     if (!isUuid(token)) return null;
     const { data, error } = await supabase
       .from("sessions")
-      .select("id")
+      .select("id,name")
       .eq("id", token)
       .maybeSingle();
 
     if (error) return null;
-    return data?.id ?? null;
+    if (!data?.id) return null;
+    sessionName = (data as any)?.name ?? null;
+    return data.id;
   };
 
   sessionId = (await tryJoinCode()) ?? (await tryId());
@@ -58,12 +65,12 @@ export async function joinSessionAction(joinCodeOrId: string): Promise<{ ok: boo
     // If it's a duplicate row error, treat as success.
     const msg = insErr.message?.toLowerCase() ?? "";
     if (msg.includes("duplicate") || msg.includes("unique")) {
-      return { ok: true, sessionId };
+      return { ok: true, sessionId, sessionName: sessionName ?? undefined };
     }
     return { ok: false, error: `Failed to join: ${insErr.message}` };
   }
 
-  return { ok: true, sessionId };
+  return { ok: true, sessionId, sessionName: sessionName ?? undefined };
 }
 
 export async function leaveSessionAction(sessionId: string): Promise<{ ok: boolean; error?: string }> {
@@ -122,4 +129,3 @@ export async function submitRollResultAction(input: {
   if (upErr) return { ok: false, error: upErr.message };
   return { ok: true };
 }
-
