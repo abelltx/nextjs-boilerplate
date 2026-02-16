@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { createClient } from "@/utils/supabase/server";
 
 type Counts = {
@@ -23,6 +25,7 @@ type Card = {
 };
 
 type WorkflowStep = {
+  id: string;
   label: string;
   description: string;
   href?: string;
@@ -35,6 +38,8 @@ type WorkflowPhase = {
   objective: string;
   steps: WorkflowStep[];
 };
+
+const WORKFLOW_DONE_COOKIE = "gm_workflow_done";
 
 async function safeCount(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -158,16 +163,31 @@ function pct(current: number, target: number) {
   return Math.max(0, Math.min(100, Math.round((current / target) * 100)));
 }
 
-function stepDone(step: WorkflowStep) {
+function parseManualDone(raw: string | undefined): Set<string> {
+  if (!raw) return new Set<string>();
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set<string>();
+    return new Set(parsed.filter((v) => typeof v === "string"));
+  } catch {
+    return new Set<string>();
+  }
+}
+
+function stepAutoDone(step: WorkflowStep) {
   return step.current >= step.target;
 }
 
-function phaseDone(phase: WorkflowPhase) {
-  return phase.steps.every(stepDone);
+function stepDone(step: WorkflowStep, manualDone: Set<string>) {
+  return stepAutoDone(step) || manualDone.has(step.id);
 }
 
-function phaseProgress(phase: WorkflowPhase) {
-  const done = phase.steps.filter(stepDone).length;
+function phaseDone(phase: WorkflowPhase, manualDone: Set<string>) {
+  return phase.steps.every((s) => stepDone(s, manualDone));
+}
+
+function phaseProgress(phase: WorkflowPhase, manualDone: Set<string>) {
+  const done = phase.steps.filter((s) => stepDone(s, manualDone)).length;
   return pct(done, phase.steps.length);
 }
 
@@ -178,6 +198,7 @@ function workflowFromCounts(counts: Counts): WorkflowPhase[] {
       objective: "Establish your core content libraries and build baseline.",
       steps: [
         {
+          id: "p1_episode_shell",
           label: "Create episode shell",
           description: "At least 1 episode ready for story blocks.",
           href: "/admin/episodes",
@@ -185,6 +206,7 @@ function workflowFromCounts(counts: Counts): WorkflowPhase[] {
           target: 1,
         },
         {
+          id: "p1_npc_roster",
           label: "Create NPC roster",
           description: "At least 3 NPCs available for encounters.",
           href: "/admin/designer",
@@ -192,6 +214,7 @@ function workflowFromCounts(counts: Counts): WorkflowPhase[] {
           target: 3,
         },
         {
+          id: "p1_actions_library",
           label: "Create actions library",
           description: "At least 8 actions across attack and utility.",
           href: "/admin/actions",
@@ -199,6 +222,7 @@ function workflowFromCounts(counts: Counts): WorkflowPhase[] {
           target: 8,
         },
         {
+          id: "p1_traits_library",
           label: "Create trait library",
           description: "At least 8 traits for player and NPC variation.",
           href: "/admin/traits",
@@ -206,6 +230,7 @@ function workflowFromCounts(counts: Counts): WorkflowPhase[] {
           target: 8,
         },
         {
+          id: "p1_item_library",
           label: "Create item library",
           description: "At least 10 items for rewards and gear testing.",
           href: "/admin/items",
@@ -219,6 +244,7 @@ function workflowFromCounts(counts: Counts): WorkflowPhase[] {
       objective: "Run one complete session loop from stage prompt to reward.",
       steps: [
         {
+          id: "p2_storyboard_blocks",
           label: "Build storyboard blocks",
           description: "At least 6 blocks available for presenting to players.",
           href: "/admin/episodes",
@@ -226,6 +252,7 @@ function workflowFromCounts(counts: Counts): WorkflowPhase[] {
           target: 6,
         },
         {
+          id: "p2_test_sessions",
           label: "Create test sessions",
           description: "At least 2 sessions for playtesting iterations.",
           href: "/storyteller/sessions",
@@ -233,6 +260,7 @@ function workflowFromCounts(counts: Counts): WorkflowPhase[] {
           target: 2,
         },
         {
+          id: "p2_player_joins",
           label: "Get player joins",
           description: "At least 2 joined player records for live tests.",
           href: "/storyteller/sessions",
@@ -246,6 +274,7 @@ function workflowFromCounts(counts: Counts): WorkflowPhase[] {
       objective: "Scale quality, reliability, and operations before content burst.",
       steps: [
         {
+          id: "p3_expand_episodes",
           label: "Expand episode catalog",
           description: "Reach 3 episodes to validate repeatable content flow.",
           href: "/admin/episodes",
@@ -253,6 +282,7 @@ function workflowFromCounts(counts: Counts): WorkflowPhase[] {
           target: 3,
         },
         {
+          id: "p3_expand_items",
           label: "Expand item catalog",
           description: "Reach 30 items to stress inventory and effects.",
           href: "/admin/items",
@@ -260,6 +290,7 @@ function workflowFromCounts(counts: Counts): WorkflowPhase[] {
           target: 30,
         },
         {
+          id: "p3_expand_sessions",
           label: "Expand live session activity",
           description: "Reach 8 sessions to prove operating cadence.",
           href: "/storyteller/sessions",
@@ -271,10 +302,20 @@ function workflowFromCounts(counts: Counts): WorkflowPhase[] {
   ];
 }
 
-function WorkflowBoard({ phases }: { phases: WorkflowPhase[] }) {
+function WorkflowBoard({
+  phases,
+  manualDone,
+  onToggleManualDone,
+  onResetManualDone,
+}: {
+  phases: WorkflowPhase[];
+  manualDone: Set<string>;
+  onToggleManualDone: (formData: FormData) => Promise<void>;
+  onResetManualDone: () => Promise<void>;
+}) {
   const totalSteps = phases.reduce((n, p) => n + p.steps.length, 0);
   const doneSteps = phases.reduce(
-    (n, p) => n + p.steps.filter(stepDone).length,
+    (n, p) => n + p.steps.filter((s) => stepDone(s, manualDone)).length,
     0
   );
   const overall = pct(doneSteps, totalSteps);
@@ -283,7 +324,7 @@ function WorkflowBoard({ phases }: { phases: WorkflowPhase[] }) {
     phases
       .flatMap((phase) =>
         phase.steps
-          .filter((step) => !stepDone(step))
+          .filter((step) => !stepDone(step, manualDone))
           .map((step) => ({ phase: phase.title, step }))
       )
       .at(0) ?? null;
@@ -308,6 +349,16 @@ function WorkflowBoard({ phases }: { phases: WorkflowPhase[] }) {
           </div>
         </div>
       </div>
+      <div className="mt-3">
+        <form action={onResetManualDone}>
+          <button
+            type="submit"
+            className="rounded-md border bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
+          >
+            Reset manual checks
+          </button>
+        </form>
+      </div>
 
       {nextStep ? (
         <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
@@ -330,8 +381,8 @@ function WorkflowBoard({ phases }: { phases: WorkflowPhase[] }) {
 
       <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-3">
         {phases.map((phase) => {
-          const done = phaseDone(phase);
-          const p = phaseProgress(phase);
+          const done = phaseDone(phase, manualDone);
+          const p = phaseProgress(phase, manualDone);
           return (
             <div key={phase.title} className="rounded-xl border bg-slate-50/40 p-4">
               <div className="flex items-start justify-between gap-2">
@@ -359,7 +410,9 @@ function WorkflowBoard({ phases }: { phases: WorkflowPhase[] }) {
 
               <div className="mt-3 space-y-2">
                 {phase.steps.map((step) => {
-                  const doneStep = stepDone(step);
+                  const auto = stepAutoDone(step);
+                  const manual = manualDone.has(step.id);
+                  const doneStep = stepDone(step, manualDone);
                   return (
                     <div key={step.label} className="rounded-md border bg-white px-2 py-2 text-xs">
                       <div className="flex items-start justify-between gap-2">
@@ -374,11 +427,35 @@ function WorkflowBoard({ phases }: { phases: WorkflowPhase[] }) {
                           {step.current}/{step.target}
                         </div>
                       </div>
+                      <div className="mt-1 flex items-center gap-2">
+                        {auto ? (
+                          <span className="rounded-full border border-green-200 bg-green-100 px-2 py-0.5 text-[11px] text-green-800">
+                            Auto complete
+                          </span>
+                        ) : manual ? (
+                          <span className="rounded-full border border-blue-200 bg-blue-100 px-2 py-0.5 text-[11px] text-blue-800">
+                            Manually complete
+                          </span>
+                        ) : null}
+                      </div>
                       {step.href ? (
                         <div className="mt-1">
                           <Link href={step.href} className="text-[11px] underline">
                             Open
                           </Link>
+                        </div>
+                      ) : null}
+                      {!auto ? (
+                        <div className="mt-1">
+                          <form action={onToggleManualDone}>
+                            <input type="hidden" name="step_id" value={step.id} />
+                            <button
+                              type="submit"
+                              className="rounded-md border bg-white px-2 py-1 text-[11px] hover:bg-slate-50"
+                            >
+                              {manual ? "Unmark" : "Mark done"}
+                            </button>
+                          </form>
                         </div>
                       ) : null}
                     </div>
@@ -396,6 +473,36 @@ function WorkflowBoard({ phases }: { phases: WorkflowPhase[] }) {
 export default async function GMHubPage() {
   const counts = await getCounts();
   const phases = workflowFromCounts(counts);
+  const cookieStore = await cookies();
+  const manualDone = parseManualDone(cookieStore.get(WORKFLOW_DONE_COOKIE)?.value);
+
+  async function toggleManualDone(formData: FormData) {
+    "use server";
+    const stepId = String(formData.get("step_id") ?? "").trim();
+    if (!stepId) return;
+
+    const store = await cookies();
+    const currentSet = parseManualDone(store.get(WORKFLOW_DONE_COOKIE)?.value);
+
+    if (currentSet.has(stepId)) currentSet.delete(stepId);
+    else currentSet.add(stepId);
+
+    const list = JSON.stringify(Array.from(currentSet.values()).sort());
+    store.set(WORKFLOW_DONE_COOKIE, list, {
+      path: "/",
+      sameSite: "lax",
+      httpOnly: true,
+      maxAge: 60 * 60 * 24 * 180,
+    });
+    revalidatePath("/admin/gm");
+  }
+
+  async function resetManualDone() {
+    "use server";
+    const store = await cookies();
+    store.delete(WORKFLOW_DONE_COOKIE);
+    revalidatePath("/admin/gm");
+  }
 
   const cards: Card[] = [
     {
@@ -463,7 +570,12 @@ export default async function GMHubPage() {
         ))}
       </div>
 
-      <WorkflowBoard phases={phases} />
+      <WorkflowBoard
+        phases={phases}
+        manualDone={manualDone}
+        onToggleManualDone={toggleManualDone}
+        onResetManualDone={resetManualDone}
+      />
 
       <div className="mt-6 rounded-xl border bg-slate-50/50 p-4 text-xs text-muted-foreground">
         <div className="font-semibold text-slate-700">Quick setup notes</div>
@@ -480,6 +592,7 @@ export default async function GMHubPage() {
           <li>
             Workflow targets are editable in <span className="font-mono">app/admin/gm/page.tsx</span>.
           </li>
+          <li>Use Mark done for development milestones that are complete but not count-driven.</li>
         </ul>
       </div>
     </div>
