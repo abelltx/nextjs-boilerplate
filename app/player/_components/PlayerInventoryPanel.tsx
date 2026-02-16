@@ -206,7 +206,7 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
     <div className="w-full">
       <div className="flex justify-end">
         <div className="text-sm opacity-80">
-          {loading ? "Loadingâ€¦" : `${filtered.length} item${filtered.length === 1 ? "" : "s"}`}
+          {loading ? "Loading..." : `${filtered.length} item${filtered.length === 1 ? "" : "s"}`}
         </div>
       </div>
 
@@ -226,7 +226,7 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
         </div>
 
         {loading ? (
-          <div className="px-3 py-6 text-sm opacity-70">Loading inventoryâ€¦</div>
+          <div className="px-3 py-6 text-sm opacity-70">Loading inventory...</div>
         ) : filtered.length === 0 ? (
           <div className="px-3 py-6 text-sm opacity-70">No items found.</div>
         ) : (
@@ -270,7 +270,7 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
                 <div className="col-span-1 text-center text-sm">{r.quantity}</div>
 
                 <div className="col-span-1 text-center text-sm">
-                  {r.equipped ? "âœ“" : "â€”"}
+                  {r.equipped ? "Yes" : "-"}
                 </div>
 
                 <div className="col-span-3 flex justify-end gap-2">
@@ -369,7 +369,7 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
                 </div>
                 <div>
                   <div className="text-xs opacity-70">Slot</div>
-                  <div className="text-sm">{selected.equipped_slot ?? "â€”"}</div>
+                  <div className="text-sm">{selected.equipped_slot ?? "-"}</div>
                 </div>
               </div>
 
