@@ -48,8 +48,7 @@ export function AbilitiesCard({ stat }: { stat: StatBlock }) {
                 const gear = Number(info?.gear ?? 0);
                 const final = Number(info?.final ?? a[r.k] ?? 10);
                 const gearText = gear >= 0 ? `+${gear}` : `${gear}`;
-                const title =
-                  gear !== 0 ? `Base ${base} + Gear ${gearText} = ${final}` : `Base ${base} (no gear bonus)`;
+                const title = `(base ${base}, gear ${gearText})`;
                 const colorClass =
                   gear > 0 ? "text-emerald-300" : gear < 0 ? "text-red-300" : "text-white";
 
