@@ -82,10 +82,18 @@ export function SavesCard({ stat }: { stat: StatBlock }) {
 
   return (
     <Card title="Saving Throws">
-      <div className="space-y-1">
+      <div className="grid grid-cols-2 gap-1">
         {rows.map((r) => {
           const bonus = mod(a[r.k]) + Number(s[r.k] ?? 0);
-          return <Row key={r.k} left={r.label} right={fmt(bonus)} />;
+          return (
+            <div
+              key={r.k}
+              className="flex items-center justify-between rounded-lg border border-neutral-800 bg-neutral-950/40 px-2 py-1.5"
+            >
+              <div className="text-xs text-neutral-300">{r.k.toUpperCase()}</div>
+              <div className="text-sm font-semibold text-white">{fmt(bonus)}</div>
+            </div>
+          );
         })}
       </div>
     </Card>

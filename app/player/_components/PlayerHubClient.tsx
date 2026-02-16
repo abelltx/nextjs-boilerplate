@@ -82,9 +82,8 @@ export default function PlayerHubClient(props: {
 
   const selectedSession = props.sessions.find((s) => s.id === selectedSessionId) ?? null;
 
-  // Poll while Sessions tab is active
+  // Poll selected session stage continuously while a session is selected
   useEffect(() => {
-    if (tab !== "sessions") return;
     if (!selectedSessionId) return;
 
     let alive = true;
@@ -109,13 +108,7 @@ export default function PlayerHubClient(props: {
       alive = false;
       if (t) clearInterval(t);
     };
-  }, [tab, selectedSessionId]);
-
-  // Auto-focus Sessions tab if a live session exists (once per mount)
-  useEffect(() => {
-    if (liveSession) setTab("sessions");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [!!liveSession]);
+  }, [selectedSessionId]);
 
   const stageState = stage?.state ?? (selectedSessionId ? props.sessionStates?.[selectedSessionId] : null);
   const stageBlock = stage?.block ?? null;
@@ -170,6 +163,17 @@ export default function PlayerHubClient(props: {
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100">
       <div className="mx-auto max-w-6xl px-4 py-6">
+        <div className="mb-3 flex justify-end">
+          <form action="/logout" method="post">
+            <button
+              type="submit"
+              className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs font-semibold text-neutral-200 hover:bg-neutral-900"
+            >
+              Sign out
+            </button>
+          </form>
+        </div>
+
         <PlayerStatusHeader
           characterName={props.character?.name ?? "Adventurer"}
           becomingLabel={"Pilgrim (MVP)"}
@@ -183,9 +187,6 @@ export default function PlayerHubClient(props: {
           liveSessionName={liveSession?.name ?? null}
           onJoinClick={() => setJoinOpen(true)}
         />
-<div className="text-xs opacity-70">
-  DEBUG stamina: {String(props.character?.stat_block?.resources?.stamina ?? "(missing)")}
-</div>
 
         <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-12">
           <aside className="lg:col-span-3 space-y-4">
@@ -195,34 +196,88 @@ export default function PlayerHubClient(props: {
 
             <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4 text-xs text-neutral-400">
               Signed in as {props.userEmail} - {props.accessLabel}
-              <form action="/logout" method="post" className="mt-3">
-                <button
-                  type="submit"
-                  className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs font-semibold text-neutral-200 hover:bg-neutral-900"
-                >
-                  Sign out
-                </button>
-              </form>
-            </div>
-
-            <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4">
-              <div className="flex items-center justify-between">
-                <div className="text-sm font-semibold">Recent Journey</div>
-                <button className="text-xs text-neutral-300 hover:text-white" onClick={() => setTab("journey")}>
-                  View all
-                </button>
-              </div>
-              <div className="mt-3">
-                <JourneyLog items={(props.gameLog ?? []).slice(0, 5)} compact />
-              </div>
             </div>
           </aside>
 
           <section className="lg:col-span-6">
+            <div className="mb-4 rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-sm font-semibold">Sessions</div>
+                <div className="flex items-center gap-2">
+                  <button
+                    className="rounded-full border border-neutral-700 bg-neutral-950 px-3 py-1 text-xs hover:bg-neutral-900"
+                    onClick={() => setJoinOpen(true)}
+                  >
+                    Join Session
+                  </button>
+                  {selectedSessionId ? (
+                    <button
+                      className="rounded-full border border-red-500/40 bg-red-500/10 px-3 py-1 text-xs text-red-200 hover:bg-red-500/15"
+                      onClick={handleLeave}
+                    >
+                      Leave Session
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="mt-3">
+                <select
+                  value={selectedSessionId ?? ""}
+                  onChange={(e) => setSelectedSessionId(e.target.value)}
+                  className="w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm text-white"
+                >
+                  {(props.sessions ?? []).map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name ?? s.id.slice(0, 8)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="mt-4 space-y-4">
+                <StagePanel block={stageBlock} />
+
+                <RollRequestPanel
+                  open={rollOpen}
+                  die={rollDieStr}
+                  prompt={rollPrompt}
+                  target={rollTarget}
+                  players={players}
+                  rollModes={rollModes}
+                  rollResults={rollResults}
+                  dmTargetPlayer={dmTargetPlayer}
+                  setDmTargetPlayer={setDmTargetPlayer}
+                  dmManual={dmManual}
+                  setDmManual={setDmManual}
+                  onSubmitManual={async () => {
+                    if (!dmTargetPlayer) return;
+                    const n = Number(dmManual);
+                    if (!Number.isFinite(n)) return alert("Enter a number.");
+                    await submitFor(dmTargetPlayer, n, "manual");
+                    setDmManual("");
+                  }}
+                  onSubmitDigital={async () => {
+                    if (!dmTargetPlayer) return;
+                    const val = rollDie(rollDieStr);
+                    await submitFor(dmTargetPlayer, val, "digital");
+                  }}
+                />
+
+                {selectedSession?.story_text ? (
+                  <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
+                    <div className="text-sm font-semibold">Story (Board)</div>
+                    <div className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-neutral-200">
+                      {selectedSession.story_text}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
             <div className="flex flex-wrap gap-2 rounded-2xl border border-neutral-800 bg-neutral-900/40 p-2">
               <Tab active={tab === "inventory"} onClick={() => setTab("inventory")}>Inventory</Tab>
               <Tab active={tab === "actions"} onClick={() => setTab("actions")}>Actions</Tab>
-              <Tab active={tab === "traits"} onClick={() => setTab("traits")}>Abilities & Traits</Tab>
               <Tab
                 active={tab === "talents"}
                 onClick={() => setTab("talents")}
@@ -231,28 +286,11 @@ export default function PlayerHubClient(props: {
               >
                 Talents
               </Tab>
-              <Tab active={tab === "journey"} onClick={() => setTab("journey")}>Journey Log</Tab>
-              <Tab active={tab === "sessions"} onClick={() => setTab("sessions")}>Sessions</Tab>
+              <Tab active={tab === "journey"} onClick={() => setTab("journey")}>Journal</Tab>
 
               <div className="ml-auto flex items-center gap-2 pr-2 text-xs text-neutral-300">
                 {isLiveMode ? (
                   <span className="rounded-full bg-red-500/20 px-2 py-1 text-red-200">LIVE • {liveSession?.name}</span>
-                ) : null}
-
-                <button
-                  className="rounded-full border border-neutral-700 bg-neutral-950 px-3 py-1 hover:bg-neutral-900"
-                  onClick={() => setJoinOpen(true)}
-                >
-                  Join Session
-                </button>
-
-                {selectedSessionId ? (
-                  <button
-                    className="rounded-full border border-red-500/40 bg-red-500/10 px-3 py-1 text-red-200 hover:bg-red-500/15"
-                    onClick={handleLeave}
-                  >
-                    Leave Session
-                  </button>
                 ) : null}
               </div>
             </div>
@@ -262,7 +300,7 @@ export default function PlayerHubClient(props: {
                 <PlayerInventoryPanel characterId={props.character.id} />
               ) : tab === "journey" ? (
                 <div>
-                  <div className="text-sm font-semibold">Journey Log</div>
+                  <div className="text-sm font-semibold">Journal</div>
                   <div className="mt-3">
                     <JourneyLog items={props.gameLog ?? []} />
                   </div>
