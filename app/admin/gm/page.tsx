@@ -6,8 +6,34 @@ type Counts = {
   npcs: number;
   traits: number;
   actions: number;
-  items: number; // ✅ new
+  items: number;
   users: number;
+  sessions: number;
+  sessionPlayers: number;
+  episodeBlocks: number;
+};
+
+type Card = {
+  title: string;
+  description: string;
+  href?: string;
+  count: number;
+  status?: "live" | "coming";
+  tone: "orange" | "blue" | "green" | "purple" | "red" | "slate" | "amber";
+};
+
+type WorkflowStep = {
+  label: string;
+  description: string;
+  href?: string;
+  current: number;
+  target: number;
+};
+
+type WorkflowPhase = {
+  title: string;
+  objective: string;
+  steps: WorkflowStep[];
 };
 
 async function safeCount(
@@ -18,7 +44,6 @@ async function safeCount(
     .from(table as any)
     .select("*", { count: "exact", head: true });
 
-  // If table missing or RLS blocks, don't crash the hub
   if (error) return 0;
   return count ?? 0;
 }
@@ -26,26 +51,40 @@ async function safeCount(
 async function getCounts(): Promise<Counts> {
   const supabase = await createClient();
 
-  const [episodes, npcs, traits, actions, items, users] = await Promise.all([
+  const [
+    episodes,
+    npcs,
+    traits,
+    actions,
+    items,
+    users,
+    sessions,
+    sessionPlayers,
+    episodeBlocks,
+  ] = await Promise.all([
     safeCount(supabase, "episodes"),
     safeCount(supabase, "npcs"),
     safeCount(supabase, "traits"),
     safeCount(supabase, "actions"),
-    safeCount(supabase, "items"), // ✅ Items dashboard count
+    safeCount(supabase, "items"),
     safeCount(supabase, "profiles"),
+    safeCount(supabase, "sessions"),
+    safeCount(supabase, "session_players"),
+    safeCount(supabase, "episode_blocks"),
   ]);
 
-  return { episodes, npcs, traits, actions, items, users };
+  return {
+    episodes,
+    npcs,
+    traits,
+    actions,
+    items,
+    users,
+    sessions,
+    sessionPlayers,
+    episodeBlocks,
+  };
 }
-
-type Card = {
-  title: string;
-  description: string;
-  href?: string;
-  count: number;
-  status?: "live" | "coming";
-  tone: "orange" | "blue" | "green" | "purple" | "red" | "slate" | "amber";
-};
 
 function toneClasses(tone: Card["tone"]) {
   switch (tone) {
@@ -93,12 +132,10 @@ function CardTile({ c }: { c: Card }) {
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="text-sm font-semibold leading-tight">{c.title}</div>
-          <div className="mt-1 text-xs text-muted-foreground leading-snug">
-            {c.description}
-          </div>
+          <div className="mt-1 text-xs leading-snug text-muted-foreground">{c.description}</div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex shrink-0 items-center gap-2">
           <CountBadge n={c.count} />
           {c.status ? <StatusPill status={c.status} /> : null}
         </div>
@@ -107,7 +144,7 @@ function CardTile({ c }: { c: Card }) {
       <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
         <span className="font-mono">{c.href ? c.href : "Not wired yet"}</span>
         <span className="inline-flex items-center rounded-md border bg-white/70 px-2 py-1 text-xs">
-          {c.href ? "Open →" : "Soon"}
+          {c.href ? "Open ->" : "Soon"}
         </span>
       </div>
     </div>
@@ -116,8 +153,249 @@ function CardTile({ c }: { c: Card }) {
   return c.href ? <Link href={c.href}>{content}</Link> : content;
 }
 
+function pct(current: number, target: number) {
+  if (target <= 0) return 100;
+  return Math.max(0, Math.min(100, Math.round((current / target) * 100)));
+}
+
+function stepDone(step: WorkflowStep) {
+  return step.current >= step.target;
+}
+
+function phaseDone(phase: WorkflowPhase) {
+  return phase.steps.every(stepDone);
+}
+
+function phaseProgress(phase: WorkflowPhase) {
+  const done = phase.steps.filter(stepDone).length;
+  return pct(done, phase.steps.length);
+}
+
+function workflowFromCounts(counts: Counts): WorkflowPhase[] {
+  return [
+    {
+      title: "Phase 1: Foundation",
+      objective: "Establish your core content libraries and build baseline.",
+      steps: [
+        {
+          label: "Create episode shell",
+          description: "At least 1 episode ready for story blocks.",
+          href: "/admin/episodes",
+          current: counts.episodes,
+          target: 1,
+        },
+        {
+          label: "Create NPC roster",
+          description: "At least 3 NPCs available for encounters.",
+          href: "/admin/designer",
+          current: counts.npcs,
+          target: 3,
+        },
+        {
+          label: "Create actions library",
+          description: "At least 8 actions across attack and utility.",
+          href: "/admin/actions",
+          current: counts.actions,
+          target: 8,
+        },
+        {
+          label: "Create trait library",
+          description: "At least 8 traits for player and NPC variation.",
+          href: "/admin/traits",
+          current: counts.traits,
+          target: 8,
+        },
+        {
+          label: "Create item library",
+          description: "At least 10 items for rewards and gear testing.",
+          href: "/admin/items",
+          current: counts.items,
+          target: 10,
+        },
+      ],
+    },
+    {
+      title: "Phase 2: Playable Loop",
+      objective: "Run one complete session loop from stage prompt to reward.",
+      steps: [
+        {
+          label: "Build storyboard blocks",
+          description: "At least 6 blocks available for presenting to players.",
+          href: "/admin/episodes",
+          current: counts.episodeBlocks,
+          target: 6,
+        },
+        {
+          label: "Create test sessions",
+          description: "At least 2 sessions for playtesting iterations.",
+          href: "/storyteller/sessions",
+          current: counts.sessions,
+          target: 2,
+        },
+        {
+          label: "Get player joins",
+          description: "At least 2 joined player records for live tests.",
+          href: "/storyteller/sessions",
+          current: counts.sessionPlayers,
+          target: 2,
+        },
+      ],
+    },
+    {
+      title: "Phase 3: Production Ready",
+      objective: "Scale quality, reliability, and operations before content burst.",
+      steps: [
+        {
+          label: "Expand episode catalog",
+          description: "Reach 3 episodes to validate repeatable content flow.",
+          href: "/admin/episodes",
+          current: counts.episodes,
+          target: 3,
+        },
+        {
+          label: "Expand item catalog",
+          description: "Reach 30 items to stress inventory and effects.",
+          href: "/admin/items",
+          current: counts.items,
+          target: 30,
+        },
+        {
+          label: "Expand live session activity",
+          description: "Reach 8 sessions to prove operating cadence.",
+          href: "/storyteller/sessions",
+          current: counts.sessions,
+          target: 8,
+        },
+      ],
+    },
+  ];
+}
+
+function WorkflowBoard({ phases }: { phases: WorkflowPhase[] }) {
+  const totalSteps = phases.reduce((n, p) => n + p.steps.length, 0);
+  const doneSteps = phases.reduce(
+    (n, p) => n + p.steps.filter(stepDone).length,
+    0
+  );
+  const overall = pct(doneSteps, totalSteps);
+
+  const nextStep =
+    phases
+      .flatMap((phase) =>
+        phase.steps
+          .filter((step) => !stepDone(step))
+          .map((step) => ({ phase: phase.title, step }))
+      )
+      .at(0) ?? null;
+
+  return (
+    <div className="mt-8 rounded-xl border bg-white p-5">
+      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <div>
+          <h2 className="text-base font-semibold">Build Workflow</h2>
+          <p className="text-sm text-muted-foreground">
+            Track progress across foundations, playable loop, and production readiness.
+          </p>
+        </div>
+
+        <div className="w-full md:w-80">
+          <div className="mb-1 flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Overall Progress</span>
+            <span className="font-medium">{doneSteps}/{totalSteps} steps</span>
+          </div>
+          <div className="h-2 w-full rounded-full bg-slate-200">
+            <div className="h-2 rounded-full bg-slate-700" style={{ width: `${overall}%` }} />
+          </div>
+        </div>
+      </div>
+
+      {nextStep ? (
+        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
+          <span className="font-semibold">Next up:</span>{" "}
+          {nextStep.phase} - {nextStep.step.label}
+          {nextStep.step.href ? (
+            <>
+              {" "}
+              <Link href={nextStep.step.href} className="underline">
+                Open
+              </Link>
+            </>
+          ) : null}
+        </div>
+      ) : (
+        <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-3 text-sm">
+          All workflow steps are complete. You can tighten balancing and expand content safely.
+        </div>
+      )}
+
+      <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-3">
+        {phases.map((phase) => {
+          const done = phaseDone(phase);
+          const p = phaseProgress(phase);
+          return (
+            <div key={phase.title} className="rounded-xl border bg-slate-50/40 p-4">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <div className="text-sm font-semibold">{phase.title}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">{phase.objective}</div>
+                </div>
+                <span
+                  className={[
+                    "rounded-full border px-2 py-0.5 text-[11px]",
+                    done
+                      ? "border-green-200 bg-green-100 text-green-800"
+                      : p > 0
+                      ? "border-blue-200 bg-blue-100 text-blue-800"
+                      : "border-slate-200 bg-slate-100 text-slate-700",
+                  ].join(" ")}
+                >
+                  {done ? "Done" : p > 0 ? "In progress" : "Not started"}
+                </span>
+              </div>
+
+              <div className="mt-3 h-2 w-full rounded-full bg-slate-200">
+                <div className="h-2 rounded-full bg-slate-700" style={{ width: `${p}%` }} />
+              </div>
+
+              <div className="mt-3 space-y-2">
+                {phase.steps.map((step) => {
+                  const doneStep = stepDone(step);
+                  return (
+                    <div key={step.label} className="rounded-md border bg-white px-2 py-2 text-xs">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="font-medium">
+                            {doneStep ? "[x] " : "[ ] "}
+                            {step.label}
+                          </div>
+                          <div className="mt-0.5 text-muted-foreground">{step.description}</div>
+                        </div>
+                        <div className="shrink-0 rounded-full border bg-slate-50 px-2 py-0.5 font-mono">
+                          {step.current}/{step.target}
+                        </div>
+                      </div>
+                      {step.href ? (
+                        <div className="mt-1">
+                          <Link href={step.href} className="text-[11px] underline">
+                            Open
+                          </Link>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default async function GMHubPage() {
   const counts = await getCounts();
+  const phases = workflowFromCounts(counts);
 
   const cards: Card[] = [
     {
@@ -152,8 +430,6 @@ export default async function GMHubPage() {
       status: "live",
       tone: "green",
     },
-
-    // ✅ This is the “inventory box working” right now: link to Items Designer
     {
       title: "Inventory Designer",
       description: "Items, loot tables, equipment cards, and rewards.",
@@ -162,7 +438,6 @@ export default async function GMHubPage() {
       status: "live",
       tone: "amber",
     },
-
     {
       title: "User Manager",
       description: "Manage Storytellers, players, roles, and access.",
@@ -174,7 +449,7 @@ export default async function GMHubPage() {
   ];
 
   return (
-    <div className="mx-auto max-w-5xl p-6">
+    <div className="mx-auto max-w-6xl p-6">
       <div className="text-center">
         <h1 className="text-lg font-semibold">GameMaster Hub</h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -188,12 +463,23 @@ export default async function GMHubPage() {
         ))}
       </div>
 
+      <WorkflowBoard phases={phases} />
+
       <div className="mt-6 rounded-xl border bg-slate-50/50 p-4 text-xs text-muted-foreground">
         <div className="font-semibold text-slate-700">Quick setup notes</div>
         <ul className="mt-2 list-disc space-y-1 pl-5">
-          <li>This page is at <span className="font-mono">/admin/gm</span>.</li>
-          <li>Counts use <span className="font-mono">head: true</span> so it’s fast.</li>
-          <li>Missing tables show as <span className="font-mono">0</span> instead of crashing.</li>
+          <li>
+            This page is at <span className="font-mono">/admin/gm</span>.
+          </li>
+          <li>
+            Counts use <span className="font-mono">head: true</span> so it is fast.
+          </li>
+          <li>
+            Missing tables show as <span className="font-mono">0</span> instead of crashing.
+          </li>
+          <li>
+            Workflow targets are editable in <span className="font-mono">app/admin/gm/page.tsx</span>.
+          </li>
         </ul>
       </div>
     </div>
