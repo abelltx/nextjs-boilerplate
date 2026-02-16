@@ -4,6 +4,9 @@ export type AbilityKey = "str" | "dex" | "con" | "int" | "wis" | "cha";
 
 export type StatBlock = {
   abilities?: Record<AbilityKey, number>;
+  _breakdown?: {
+    abilities?: Partial<Record<AbilityKey, { base?: number; gear?: number; final?: number }>>;
+  };
   saves?: Partial<Record<AbilityKey, number>>;
   skills?: Record<string, number>;
   passives?: Record<string, number>;
@@ -39,7 +42,23 @@ export function AbilitiesCard({ stat }: { stat: StatBlock }) {
           <div key={r.k} className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-2">
             <div className="text-[11px] text-neutral-400">{r.label}</div>
             <div className="flex items-baseline justify-between">
-              <div className="text-sm font-semibold text-white">{a[r.k]}</div>
+              {(() => {
+                const info = stat._breakdown?.abilities?.[r.k];
+                const base = Number(info?.base ?? a[r.k] ?? 10);
+                const gear = Number(info?.gear ?? 0);
+                const final = Number(info?.final ?? a[r.k] ?? 10);
+                const gearText = gear >= 0 ? `+${gear}` : `${gear}`;
+                const title =
+                  gear !== 0 ? `Base ${base} + Gear ${gearText} = ${final}` : `Base ${base} (no gear bonus)`;
+                const colorClass =
+                  gear > 0 ? "text-emerald-300" : gear < 0 ? "text-red-300" : "text-white";
+
+                return (
+                  <div className={`text-sm font-semibold ${colorClass}`} title={title}>
+                    {final}
+                  </div>
+                );
+              })()}
               <div className="text-sm text-neutral-200">{fmt(mod(a[r.k]))}</div>
             </div>
           </div>

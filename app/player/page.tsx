@@ -30,6 +30,7 @@ function toSaveKey(raw: string): AbilityKey | null {
 function applyItemEffects(baseStat: any, effects: ItemEffectRow[]) {
   const stat = { ...(baseStat ?? {}) } as any;
   const abilities = { ...(stat.abilities ?? {}) } as Record<string, number>;
+  const baseAbilities = { ...abilities } as Record<string, number>;
   const saves = { ...(stat.saves ?? {}) } as Record<string, number>;
   const skills = { ...(stat.skills ?? {}) } as Record<string, number>;
   const derived = { ...(stat.derived ?? {}) } as Record<string, number>;
@@ -96,6 +97,41 @@ function applyItemEffects(baseStat: any, effects: ItemEffectRow[]) {
   stat.skills = skills;
   stat.derived = derived;
   stat.effects = statusEffects;
+  stat._breakdown = {
+    ...(stat._breakdown ?? {}),
+    abilities: {
+      str: {
+        base: n(baseAbilities.str, 10),
+        gear: n(abilities.str, 10) - n(baseAbilities.str, 10),
+        final: n(abilities.str, 10),
+      },
+      dex: {
+        base: n(baseAbilities.dex, 10),
+        gear: n(abilities.dex, 10) - n(baseAbilities.dex, 10),
+        final: n(abilities.dex, 10),
+      },
+      con: {
+        base: n(baseAbilities.con, 10),
+        gear: n(abilities.con, 10) - n(baseAbilities.con, 10),
+        final: n(abilities.con, 10),
+      },
+      int: {
+        base: n(baseAbilities.int, 10),
+        gear: n(abilities.int, 10) - n(baseAbilities.int, 10),
+        final: n(abilities.int, 10),
+      },
+      wis: {
+        base: n(baseAbilities.wis, 10),
+        gear: n(abilities.wis, 10) - n(baseAbilities.wis, 10),
+        final: n(abilities.wis, 10),
+      },
+      cha: {
+        base: n(baseAbilities.cha, 10),
+        gear: n(abilities.cha, 10) - n(baseAbilities.cha, 10),
+        final: n(abilities.cha, 10),
+      },
+    },
+  };
   return stat;
 }
 

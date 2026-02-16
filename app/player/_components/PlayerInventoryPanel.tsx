@@ -20,6 +20,8 @@ type ItemRow = {
     type: string | null;
     description: string | null;
     stackable: boolean;
+    image_url: string | null;
+    image_base_path: string | null;
   };
 
   // Fallback legacy column if you kept it (safe)
@@ -38,11 +40,16 @@ function safeDesc(row: ItemRow) {
 function safeStackable(row: ItemRow) {
   return row.item?.stackable ?? true;
 }
+function safeImageUrl(row: ItemRow) {
+  const v = row.item?.image_url;
+  return typeof v === "string" && v.trim().length > 0 ? v : null;
+}
 
 export default function PlayerInventoryPanel({ characterId }: { characterId: string }) {
   const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
   const [rows, setRows] = useState<ItemRow[]>([]);
+  const [thumbUrls, setThumbUrls] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
@@ -73,7 +80,9 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
           name,
           type,
           description,
-          stackable
+          stackable,
+          image_url,
+          image_base_path
         )
       `
       )
@@ -83,8 +92,34 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
     if (error) {
       setErr(error.message);
       setRows([]);
+      setThumbUrls({});
     } else {
-      setRows((data as any) ?? []);
+      const nextRows = (data as any) ?? [];
+      setRows(nextRows);
+
+      const rowsWithBase = nextRows.filter((r: ItemRow) => {
+        const base = r.item?.image_base_path;
+        return typeof base === "string" && base.trim().length > 0;
+      });
+
+      if (!rowsWithBase.length) {
+        setThumbUrls({});
+      } else {
+        const pairs = await Promise.all(
+          rowsWithBase.map(async (r: ItemRow) => {
+            const base = String(r.item?.image_base_path ?? "");
+            const path = base.endsWith("/") ? `${base}thumb.webp` : `${base}/thumb.webp`;
+            const { data: signed } = await supabase.storage.from("item-images").createSignedUrl(path, 60 * 30);
+            return [r.id, signed?.signedUrl ?? ""] as const;
+          })
+        );
+
+        const nextThumbs: Record<string, string> = {};
+        for (const [rowId, url] of pairs) {
+          if (url) nextThumbs[rowId] = url;
+        }
+        setThumbUrls(nextThumbs);
+      }
     }
 
     setLoading(false);
@@ -243,9 +278,25 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
                 onClick={() => setSelected(r)}
               >
                 <div className="col-span-5">
-                  <div className="font-medium">{name}</div>
-                  <div className="text-xs opacity-70">
-                    {stackable ? "Stackable" : "Not stackable"}
+                  <div className="flex items-center gap-3">
+                    {(thumbUrls[r.id] || safeImageUrl(r)) ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={thumbUrls[r.id] || (safeImageUrl(r) as string)}
+                        alt={name}
+                        className="h-9 w-9 rounded-md border border-neutral-700 object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-9 w-9 items-center justify-center rounded-md border border-neutral-700 bg-neutral-900 text-xs font-semibold text-neutral-300">
+                        {name.slice(0, 1).toUpperCase()}
+                      </div>
+                    )}
+                    <div>
+                      <div className="font-medium">{name}</div>
+                      <div className="text-xs opacity-70">
+                        {stackable ? "Stackable" : "Not stackable"}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
