@@ -193,8 +193,16 @@ const dieSides = parseDieSides(rollDieCode);
               href="/player"
               className="rounded-xl border border-neutral-800 bg-neutral-950/40 px-3 py-2 text-sm hover:bg-neutral-900/50"
             >
-              ← Back to Hub
+              Back to Hub
             </a>
+            <form action="/logout" method="post">
+              <button
+                type="submit"
+                className="rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200 hover:bg-neutral-900"
+              >
+                Sign out
+              </button>
+            </form>
             {!isJoined ? (
               <a
                 href="/player"
@@ -441,3 +449,5 @@ const dieSides = parseDieSides(rollDieCode);
     </main>
   );
 }
+
+

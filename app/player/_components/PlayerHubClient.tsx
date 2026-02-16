@@ -195,7 +195,15 @@ export default function PlayerHubClient(props: {
             <PassivesCard stat={stat} />
 
             <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4 text-xs text-neutral-400">
-              Signed in as {props.userEmail} • {props.accessLabel}
+              Signed in as {props.userEmail} - {props.accessLabel}
+              <form action="/logout" method="post" className="mt-3">
+                <button
+                  type="submit"
+                  className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs font-semibold text-neutral-200 hover:bg-neutral-900"
+                >
+                  Sign out
+                </button>
+              </form>
             </div>
 
             <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4">
@@ -544,3 +552,5 @@ function RollRequestPanel(props: {
     </div>
   );
 }
+
+
