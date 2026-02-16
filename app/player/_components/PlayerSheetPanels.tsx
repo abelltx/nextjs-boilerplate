@@ -150,9 +150,8 @@ export function SkillsCard({ stat }: { stat: StatBlock }) {
                   title={proficient ? "Proficient" : "Not proficient"}
                 />
               </div>
-              <div className="text-sm text-neutral-200">{fmt(abilityMod)}</div>
+              <div className="text-sm uppercase text-neutral-300">{s.ability.toUpperCase()}</div>
               <div className="min-w-0 text-sm text-neutral-200">
-                <span className="mr-2 text-[11px] uppercase text-neutral-400">{s.ability.toUpperCase()}</span>
                 <span className="inline-block max-w-full truncate align-middle">{s.label}</span>
               </div>
               <div className="justify-self-end text-right text-sm font-semibold text-white">{fmt(totalBonus)}</div>
