@@ -276,7 +276,8 @@ export default async function AdminEpisodeEditPage({
         </div>
       </div>
 
-      <div id="storyteller-preview" className="border rounded-xl p-4 space-y-3">
+      <details id="storyteller-preview" className="border rounded-xl p-4 space-y-3">
+        <summary className="cursor-pointer text-sm font-semibold">Open Previews (Storyteller + Player)</summary>
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="text-lg font-semibold">Storyteller Preview</div>
@@ -389,7 +390,7 @@ export default async function AdminEpisodeEditPage({
             )}
           </div>
         </div>
-      </div>
+      </details>
 
       {/* STORYBOARD */}
       <div id="storyboard" className="border rounded-xl p-4 space-y-3">
@@ -666,8 +667,55 @@ export default async function AdminEpisodeEditPage({
 
               {/* Scene Content */}
               <div className="p-3 space-y-4">
-                {/* Tree of options for this scene */}
-                <div className="rounded-xl border p-3 space-y-2 bg-white">
+                {/* Quick add (sequence-first) */}
+                <form
+                  className="rounded-xl border bg-slate-50 p-3 space-y-2"
+                  encType="multipart/form-data"
+                  action={async (fd) => {
+                    "use server";
+                    await addEpisodeBlockAction(episode.id, fd);
+                    redirect(`/admin/episodes/${episode.id}`);
+                  }}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-sm font-semibold">Quick Add Step</div>
+                    <div className="text-xs text-gray-600">Use this for sequence building, then refine in block edit.</div>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
+                    <select name="block_type" className="border rounded p-2 text-sm" defaultValue="objective">
+                      <option value="objective">Objective (players can see)</option>
+                      <option value="map">Map (players can see)</option>
+                      <option value="narrative">Narrative (storyteller read)</option>
+                      <option value="note">Note (storyteller awareness)</option>
+                      <option value="hex_crawl">Hex Crawl (placeholder)</option>
+                      <option value="encounter">Encounter (battle/loot/monsters)</option>
+                      <option value="npc">NPC (important popup)</option>
+                    </select>
+                    <select name="audience" className="border rounded p-2 text-sm" defaultValue="players">
+                      <option value="players">players</option>
+                      <option value="both">both</option>
+                      <option value="storyteller">storyteller</option>
+                    </select>
+                    <select name="mode" className="border rounded p-2 text-sm" defaultValue="display">
+                      <option value="display">display</option>
+                      <option value="read">read</option>
+                      <option value="prompt">prompt</option>
+                      <option value="encounter">encounter</option>
+                    </select>
+                    <button className="rounded bg-black px-3 py-2 text-sm font-semibold text-white">Add Step</button>
+                  </div>
+                  <input name="title" className="w-full border rounded p-2 text-sm" placeholder="Step title" />
+                  <textarea name="body" className="w-full border rounded p-2 h-20 text-sm" placeholder="Step text (what happens here)" />
+                  <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                    <input name="image_url" className="w-full border rounded p-2 text-sm" placeholder="Image URL (optional)" />
+                    <input name="image_file" type="file" accept="image/*" className="w-full border rounded p-2 text-sm" />
+                  </div>
+                </form>
+
+                {/* Advanced templates */}
+                <details className="rounded-xl border bg-white">
+                  <summary className="cursor-pointer px-3 py-2 text-sm font-semibold">Advanced block templates</summary>
+                  <div className="p-3 space-y-2">
                   <div className="text-xs uppercase text-gray-500">Add to this scene</div>
 
                   {/* Objective */}
@@ -950,7 +998,8 @@ export default async function AdminEpisodeEditPage({
                       </form>
                     </div>
                   </details>
-                </div>
+                  </div>
+                </details>
 
                 {/* Existing blocks under scene */}
                 <div className="space-y-3">
