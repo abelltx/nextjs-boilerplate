@@ -11,9 +11,11 @@ type EpisodeUpsert = {
   episode_code?: string | null;
   story_text: string;
   default_duration_seconds: number;
+  default_encounter_total?: number;
   summary?: string | null;
   map_image_url?: string | null;
   npc_image_url?: string | null;
+  tags?: string[] | null;
 };
 
 async function requireAdmin() {
@@ -43,6 +45,21 @@ function minutesToSeconds(minsRaw: unknown): number {
   const mins = Number(minsRaw ?? 0);
   if (!Number.isFinite(mins) || mins < 0) return 0;
   return Math.round(mins * 60);
+}
+
+function parseEncounterTotal(raw: unknown): number {
+  const n = Number(raw ?? 0);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.round(n);
+}
+
+function parseTags(raw: unknown): string[] | null {
+  const s = String(raw ?? "").trim();
+  if (!s) return null;
+  return s
+    .split(",")
+    .map((v) => v.trim())
+    .filter(Boolean);
 }
 
 async function maybeUploadAsset(
@@ -88,30 +105,65 @@ export async function createEpisodeAction(fd: FormData) {
 
   // Use minutes input if present, otherwise default to 45 minutes
   const default_duration_seconds = minutesToSeconds(fd.get("default_duration_minutes") ?? 45);
+  const default_encounter_total = parseEncounterTotal(fd.get("default_encounter_total") ?? 5);
+  const tags = parseTags(fd.get("tags"));
 
   const payload: EpisodeUpsert = {
     title,
     episode_code,
     story_text,
     default_duration_seconds,
+    default_encounter_total,
     summary,
     map_image_url: String(fd.get("map_image_url") ?? "").trim() || null,
     npc_image_url: String(fd.get("npc_image_url") ?? "").trim() || null,
+    tags,
   };
 
-  const { data, error } = await supabase.from("episodes").insert(payload).select("id").single();
-  if (error) throw new Error(error.message);
+  let data: { id: string } | null = null;
+  const { data: fullData, error: fullErr } = await supabase.from("episodes").insert(payload).select("id").single();
+  if (!fullErr) {
+    data = fullData as { id: string };
+  } else {
+    // Fallback for schema variations across environments.
+    const fallbackPayload: EpisodeUpsert = {
+      title,
+      episode_code,
+      story_text,
+      default_duration_seconds,
+      summary,
+      map_image_url: payload.map_image_url ?? null,
+    };
+    const { data: fbData, error: fbErr } = await supabase
+      .from("episodes")
+      .insert(fallbackPayload as any)
+      .select("id")
+      .single();
+    if (fbErr) throw new Error(fbErr.message || fullErr.message);
+    data = fbData as { id: string };
+  }
 
   // Optional map upload at creation time
-  const mapUrl = await maybeUploadAsset(supabase, data.id, fd, "map_file", "episode-maps");
-  const npcUrl = await maybeUploadAsset(supabase, data.id, fd, "npc_file", "episode-npcs");
+  let mapUrl: string | null = null;
+  let npcUrl: string | null = null;
+  try {
+    mapUrl = await maybeUploadAsset(supabase, data.id, fd, "map_file", "episode-maps");
+  } catch (e) {
+    console.error("createEpisodeAction map upload failed:", e);
+  }
+  try {
+    npcUrl = await maybeUploadAsset(supabase, data.id, fd, "npc_file", "episode-npcs");
+  } catch (e) {
+    console.error("createEpisodeAction npc upload failed:", e);
+  }
   if (mapUrl) {
     const { error: upErr } = await supabase.from("episodes").update({ map_image_url: mapUrl }).eq("id", data.id);
     if (upErr) throw new Error(upErr.message);
   }
   if (npcUrl) {
-    const { error: upErr } = await supabase.from("episodes").update({ npc_image_url: npcUrl }).eq("id", data.id);
-    if (upErr) throw new Error(upErr.message);
+    const { error: upErr } = await supabase.from("episodes").update({ npc_image_url: npcUrl } as any).eq("id", data.id);
+    // Don't block creation if this column doesn't exist in current env.
+    if (upErr && upErr.code !== "42703") throw new Error(upErr.message);
   }
 
   revalidatePath("/admin/episodes");
@@ -129,6 +181,8 @@ export async function updateEpisodeAction(episodeId: string, fd: FormData) {
 
   // minutes -> seconds (DB column stays default_duration_seconds)
   const default_duration_seconds = minutesToSeconds(fd.get("default_duration_minutes"));
+  const default_encounter_total = parseEncounterTotal(fd.get("default_encounter_total") ?? 5);
+  const tags = parseTags(fd.get("tags"));
 
   // Announcement board
   const story_text = String(fd.get("story_text") ?? "");
@@ -143,8 +197,10 @@ export async function updateEpisodeAction(episodeId: string, fd: FormData) {
     summary,
     story_text,
     default_duration_seconds,
+    default_encounter_total,
     map_image_url: String(fd.get("map_image_url") ?? "").trim() || null,
     npc_image_url: String(fd.get("npc_image_url") ?? "").trim() || null,
+    tags,
   };
 
   // File uploads override URL fields when present
@@ -152,7 +208,18 @@ export async function updateEpisodeAction(episodeId: string, fd: FormData) {
   if (npc_image_url) payload.npc_image_url = npc_image_url;
 
   const { error } = await supabase.from("episodes").update(payload).eq("id", episodeId);
-  if (error) throw new Error(error.message);
+  if (error) {
+    const fallback = {
+      title,
+      episode_code,
+      summary,
+      story_text,
+      default_duration_seconds,
+      map_image_url: payload.map_image_url ?? null,
+    };
+    const { error: fbErr } = await supabase.from("episodes").update(fallback as any).eq("id", episodeId);
+    if (fbErr) throw new Error(fbErr.message || error.message);
+  }
 
   revalidatePath(`/admin/episodes/${episodeId}`);
   revalidatePath("/admin/episodes");
