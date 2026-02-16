@@ -264,6 +264,95 @@ export default async function AdminEpisodeEditPage({
           </div>
         </div>
 
+        <form
+          className="rounded-lg border border-amber-300 bg-amber-50 p-3"
+          action={async () => {
+            "use server";
+            const supabase = await requireAdminServer();
+
+            const { data: last } = await supabase
+              .from("episode_blocks")
+              .select("sort_order")
+              .eq("episode_id", episode.id)
+              .order("sort_order", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            const start = (last?.sort_order ?? 0) + 10;
+            const seed = [
+              {
+                block_type: "scene",
+                audience: "both",
+                mode: "display",
+                title: "Scene 1: Discovering Your Class",
+                body: "Players explore The Upper Room Church yard sale, meet class mentors, and choose a class.",
+                image_url: null,
+              },
+              {
+                block_type: "objective",
+                audience: "players",
+                mode: "display",
+                title: "Objective",
+                body: "Speak with mentors and decide your class.",
+                image_url: null,
+              },
+              {
+                block_type: "scene",
+                audience: "both",
+                mode: "display",
+                title: "Scene 2: Entering The Upper Room Church",
+                body: "Players solve entry challenge and begin inside exploration.",
+                image_url: null,
+              },
+              {
+                block_type: "map",
+                audience: "players",
+                mode: "display",
+                title: "Church Entry",
+                body: "Add your scene image URL and present this block to players.",
+                image_url: null,
+              },
+              {
+                block_type: "scene",
+                audience: "both",
+                mode: "display",
+                title: "Scene 3: The Call to Restore the Torah",
+                body: "Players return with relics, receive commissioning, and complete onboarding.",
+                image_url: null,
+              },
+            ];
+
+            const rows = seed.map((b, i) => ({
+              episode_id: episode.id,
+              sort_order: start + i * 10,
+              block_type: b.block_type,
+              audience: b.audience,
+              mode: b.mode,
+              title: b.title,
+              body: b.body,
+              image_url: b.image_url,
+              meta: {},
+            }));
+
+            const { error } = await supabase.from("episode_blocks").insert(rows);
+            if (error) throw new Error(error.message);
+
+            redirect(`/admin/episodes/${episode.id}`);
+          }}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold">Episode Zero Starter Blocks</div>
+              <div className="text-xs text-gray-700">
+                Generates Scene 1-3 scaffolding for The Upper Room Church so you can quickly add your real copy and images.
+              </div>
+            </div>
+            <button className="rounded bg-black px-3 py-2 text-xs font-semibold text-white hover:bg-neutral-800">
+              Add Starter Blocks
+            </button>
+          </div>
+        </form>
+
         {/* GLOBAL Add Block (still useful) */}
         <form
           className="border rounded-lg p-3 space-y-2"

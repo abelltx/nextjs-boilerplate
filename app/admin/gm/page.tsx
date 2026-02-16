@@ -194,6 +194,52 @@ function phaseProgress(phase: WorkflowPhase, manualDone: Set<string>) {
 function workflowFromCounts(counts: Counts): WorkflowPhase[] {
   return [
     {
+      title: "Phase 0: Episode Zero Launch",
+      objective: "Ship the onboarding mission at The Upper Room Church.",
+      steps: [
+        {
+          id: "p0_create_episode_zero",
+          label: "Create Episode Zero shell",
+          description: "Create the episode record for The Upper Room Church.",
+          href: "/admin/episodes/new?title=Episode%20Zero%20-%20The%20Upper%20Room%20Church&episode_code=ZERO-001&duration_mins=90&encounters=3&summary=Onboarding%20mission%20at%20The%20Upper%20Room%20Church",
+          current: counts.episodes,
+          target: 1,
+        },
+        {
+          id: "p0_scene_class_discovery",
+          label: "Build Scene 1: Discovering Your Class",
+          description: "Add player-facing blocks for class discovery and NPC mentors.",
+          href: "/admin/episodes",
+          current: 0,
+          target: 1,
+        },
+        {
+          id: "p0_scene_sanctuary_entry",
+          label: "Build Scene 2: Sanctuary Entry",
+          description: "Add door challenge checks, fallback paths, and success outcomes.",
+          href: "/admin/episodes",
+          current: 0,
+          target: 1,
+        },
+        {
+          id: "p0_scene_restore_torah",
+          label: "Build Scene 3: Restore the Torah",
+          description: "Add return, handoff, and final commissioning beats.",
+          href: "/admin/episodes",
+          current: 0,
+          target: 1,
+        },
+        {
+          id: "p0_zero_mission_playtest",
+          label: "Run 1 full playtest",
+          description: "Complete one end-to-end test with at least one player.",
+          href: "/storyteller/sessions",
+          current: counts.sessions,
+          target: 1,
+        },
+      ],
+    },
+    {
       title: "Phase 1: Foundation",
       objective: "Establish your core content libraries and build baseline.",
       steps: [
@@ -568,6 +614,23 @@ export default async function GMHubPage() {
         {cards.map((c) => (
           <CardTile key={c.title} c={c} />
         ))}
+      </div>
+
+      <div className="mt-6 rounded-xl border bg-amber-50/50 p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <div className="text-sm font-semibold">Episode Zero Launch</div>
+            <div className="text-xs text-muted-foreground">
+              The first launch mission is The Upper Room Church. Future episodes can stay lighter.
+            </div>
+          </div>
+          <Link
+            href="/admin/episodes/new?title=Episode%20Zero%20-%20The%20Upper%20Room%20Church&episode_code=ZERO-001&duration_mins=90&encounters=3&summary=Onboarding%20mission%20at%20The%20Upper%20Room%20Church"
+            className="inline-flex items-center rounded-md border bg-white px-3 py-2 text-xs font-semibold hover:bg-slate-50"
+          >
+            Create Episode Zero Template
+          </Link>
+        </div>
       </div>
 
       <WorkflowBoard

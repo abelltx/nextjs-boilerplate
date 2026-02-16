@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createEpisodeAction } from "@/app/actions/episodesAdmin";
 import { createClient } from "@/utils/supabase/server";
@@ -20,8 +20,29 @@ async function requireAdminServer() {
   return supabase;
 }
 
-export default async function AdminEpisodeNewPage() {
+export default async function AdminEpisodeNewPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
   await requireAdminServer();
+
+  const sp = (await Promise.resolve(searchParams ?? {})) as Record<
+    string,
+    string | string[] | undefined
+  >;
+  const one = (k: string, fallback = "") => {
+    const v = sp[k];
+    if (Array.isArray(v)) return v[0] ?? fallback;
+    return v ?? fallback;
+  };
+
+  const initialTitle = one("title", "");
+  const initialCode = one("episode_code", "");
+  const initialSummary = one("summary", "");
+  const initialStory = one("story_text", "");
+  const initialDurationMins = one("duration_mins", "45");
+  const initialEncounters = one("encounters", "5");
 
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-4">
@@ -42,29 +63,46 @@ export default async function AdminEpisodeNewPage() {
         <div className="grid grid-cols-2 gap-3">
           <label className="space-y-1">
             <div className="text-xs uppercase text-gray-500">Title</div>
-            <input name="title" className="w-full border rounded-lg p-2" required />
+            <input name="title" className="w-full border rounded-lg p-2" required defaultValue={initialTitle} />
           </label>
 
           <label className="space-y-1">
             <div className="text-xs uppercase text-gray-500">Episode Code</div>
-            <input name="episode_code" className="w-full border rounded-lg p-2" placeholder="GEN-007" />
+            <input
+              name="episode_code"
+              className="w-full border rounded-lg p-2"
+              placeholder="GEN-007"
+              defaultValue={initialCode}
+            />
           </label>
 
           <label className="space-y-1">
-            <div className="text-xs uppercase text-gray-500">Default Duration (seconds)</div>
-            <input name="default_duration_seconds" type="number" className="w-full border rounded-lg p-2" defaultValue={2700} min={0} />
+            <div className="text-xs uppercase text-gray-500">Default Duration (minutes)</div>
+            <input
+              name="default_duration_minutes"
+              type="number"
+              className="w-full border rounded-lg p-2"
+              defaultValue={initialDurationMins}
+              min={0}
+            />
           </label>
 
           <label className="space-y-1">
             <div className="text-xs uppercase text-gray-500">Default Encounters</div>
-            <input name="default_encounter_total" type="number" className="w-full border rounded-lg p-2" defaultValue={5} min={0} />
+            <input
+              name="default_encounter_total"
+              type="number"
+              className="w-full border rounded-lg p-2"
+              defaultValue={initialEncounters}
+              min={0}
+            />
           </label>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <label className="space-y-1">
             <div className="text-xs uppercase text-gray-500">Summary</div>
-            <textarea name="summary" className="w-full border rounded-lg p-2 h-20" />
+            <textarea name="summary" className="w-full border rounded-lg p-2 h-20" defaultValue={initialSummary} />
           </label>
 
           <label className="space-y-1">
@@ -85,14 +123,14 @@ export default async function AdminEpisodeNewPage() {
 
         <label className="space-y-1 block">
           <div className="text-xs uppercase text-gray-500">Story Text (fallback)</div>
-          <textarea name="story_text" className="w-full border rounded-lg p-3 h-56 font-serif" />
+          <textarea name="story_text" className="w-full border rounded-lg p-3 h-56 font-serif" defaultValue={initialStory} />
         </label>
 
         <button className="px-4 py-2 rounded bg-black text-white">Create Episode</button>
       </form>
 
       <div className="text-xs text-gray-600">
-        Next: scenes / storyteller notes / player-read text will live in <b>episode blocks</b> (we’ll add that editor next).
+        Next: scenes / storyteller notes / player-read text will live in <b>episode blocks</b>.
       </div>
     </div>
   );
