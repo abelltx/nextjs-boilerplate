@@ -112,6 +112,9 @@ export default async function AdminEpisodeEditPage({
     .join("\n")
     .trim();
 
+  const storytellerFlow =
+    sceneGroups.length > 0 ? sceneGroups : [{ scene: null as any, items: (blocks ?? []) as any[] }];
+
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-4">
       {/* HEADER */}
@@ -124,6 +127,9 @@ export default async function AdminEpisodeEditPage({
         </div>
 
         <div className="flex gap-2">
+          <a href="#storyteller-preview" className="px-4 py-2 rounded border">
+            Preview Storyteller View
+          </a>
           <Link href="/admin/episodes" className="px-4 py-2 rounded border">
             Back
           </Link>
@@ -255,8 +261,72 @@ export default async function AdminEpisodeEditPage({
         </div>
       </div>
 
+      <div id="storyteller-preview" className="border rounded-xl p-4 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-lg font-semibold">Storyteller Preview</div>
+            <div className="text-xs text-gray-600">
+              This is a read-through preview of what the storyteller flow will look like during play.
+            </div>
+          </div>
+          <a href="#storyboard" className="px-3 py-2 rounded border text-xs">
+            Jump to Storyboard Editor
+          </a>
+        </div>
+
+        <div className="space-y-4">
+          {storytellerFlow.map((g, gi) => (
+            <div key={g.scene?.id ?? `preview-${gi}`} className="rounded-xl border">
+              <div className="border-b bg-gray-50 px-3 py-2">
+                <div className="text-xs uppercase text-gray-500">
+                  Scene {gi + 1}
+                </div>
+                <div className="font-semibold">
+                  {g.scene?.title?.trim() ? g.scene.title : "Unscoped Scene"}
+                </div>
+                {g.scene?.body ? (
+                  <div className="mt-1 whitespace-pre-wrap text-sm text-gray-700">{g.scene.body}</div>
+                ) : (
+                  <div className="mt-1 text-sm text-amber-700">Add scene narration text here.</div>
+                )}
+              </div>
+
+              <div className="space-y-2 p-3">
+                {g.items.length === 0 ? (
+                  <div className="rounded-lg border border-dashed p-3 text-sm text-gray-600">
+                    No blocks in this scene yet. Add objectives, narrative, map, or encounter blocks.
+                  </div>
+                ) : (
+                  g.items.map((b: any, idx: number) => (
+                    <div key={b.id ?? `${gi}-${idx}`} className="rounded-lg border p-3">
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <span className="rounded border bg-gray-50 px-2 py-0.5">{b.block_type}</span>
+                        <span className="rounded border bg-gray-50 px-2 py-0.5">{b.audience}</span>
+                        <span className="rounded border bg-gray-50 px-2 py-0.5">{b.mode}</span>
+                      </div>
+                      <div className="mt-2 text-sm font-semibold">{b.title || "(Untitled block)"}</div>
+                      {b.body ? (
+                        <div className="mt-1 whitespace-pre-wrap text-sm text-gray-700">{b.body}</div>
+                      ) : (
+                        <div className="mt-1 text-sm text-amber-700">Add block text.</div>
+                      )}
+                      {b.image_url ? (
+                        <div className="mt-2 overflow-hidden rounded border">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={b.image_url} alt={b.title ?? "Block image"} className="max-h-64 w-full object-cover" />
+                        </div>
+                      ) : null}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* STORYBOARD */}
-      <div className="border rounded-xl p-4 space-y-3">
+      <div id="storyboard" className="border rounded-xl p-4 space-y-3">
         <div>
           <div className="text-lg font-semibold">Storyboard</div>
           <div className="text-xs text-gray-600">
