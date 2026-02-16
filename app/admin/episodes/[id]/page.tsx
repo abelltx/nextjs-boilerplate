@@ -285,15 +285,24 @@ export default async function AdminEpisodeEditPage({
                 audience: "both",
                 mode: "display",
                 title: "Scene 1: Discovering Your Class",
-                body: "Players explore The Upper Room Church yard sale, meet class mentors, and choose a class.",
+                body:
+                  "[FILL: Opening narration for The Upper Room Church yard sale]\n\n" +
+                  "Storyteller goals:\n" +
+                  "- Introduce Gabriel\n" +
+                  "- Let players meet class mentors\n" +
+                  "- End with each player choosing a class",
                 image_url: null,
               },
               {
                 block_type: "objective",
                 audience: "players",
                 mode: "display",
-                title: "Objective",
-                body: "Speak with mentors and decide your class.",
+                title: "Objective - Choose Your Class",
+                body:
+                  "Player objective:\n" +
+                  "- Speak with the mentors\n" +
+                  "- Choose your class\n\n" +
+                  "[FILL: 1-2 sentence player-facing prompt]",
                 image_url: null,
               },
               {
@@ -301,7 +310,14 @@ export default async function AdminEpisodeEditPage({
                 audience: "both",
                 mode: "display",
                 title: "Scene 2: Entering The Upper Room Church",
-                body: "Players solve entry challenge and begin inside exploration.",
+                body:
+                  "[FILL: Door setup narration]\n\n" +
+                  "Challenge options:\n" +
+                  "- Wisdom (Prayer) DC [FILL]\n" +
+                  "- Dexterity (Tools) DC [FILL]\n" +
+                  "- Strength DC [FILL]\n\n" +
+                  "Fail-forward note:\n" +
+                  "[FILL: what happens on a failed attempt]",
                 image_url: null,
               },
               {
@@ -309,7 +325,11 @@ export default async function AdminEpisodeEditPage({
                 audience: "players",
                 mode: "display",
                 title: "Church Entry",
-                body: "Add your scene image URL and present this block to players.",
+                body:
+                  "[FILL: what players should notice in this image]\n\n" +
+                  "Checklist:\n" +
+                  "- Add image URL\n" +
+                  "- Present to players on Stage",
                 image_url: null,
               },
               {
@@ -317,7 +337,13 @@ export default async function AdminEpisodeEditPage({
                 audience: "both",
                 mode: "display",
                 title: "Scene 3: The Call to Restore the Torah",
-                body: "Players return with relics, receive commissioning, and complete onboarding.",
+                body:
+                  "[FILL: Gabriel return speech]\n\n" +
+                  "Closeout:\n" +
+                  "- Players return relics\n" +
+                  "- Hand out class gear\n" +
+                  "- Explain next mission hook\n" +
+                  "- Mark Episode Zero complete",
                 image_url: null,
               },
             ];
@@ -344,7 +370,7 @@ export default async function AdminEpisodeEditPage({
             <div>
               <div className="text-sm font-semibold">Episode Zero Starter Blocks</div>
               <div className="text-xs text-gray-700">
-                Generates Scene 1-3 scaffolding for The Upper Room Church so you can quickly add your real copy and images.
+                Generates Scene 1-3 scaffolding for The Upper Room Church with [FILL] prompts in each block body.
               </div>
             </div>
             <button className="rounded bg-black px-3 py-2 text-xs font-semibold text-white hover:bg-neutral-800">
