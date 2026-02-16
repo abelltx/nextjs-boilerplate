@@ -55,6 +55,7 @@ export default async function AdminEpisodeNewPage({
 
       <form
         className="border rounded-xl p-4 space-y-4"
+        encType="multipart/form-data"
         action={async (fd) => {
           "use server";
           await createEpisodeAction(fd);
@@ -111,12 +112,24 @@ export default async function AdminEpisodeNewPage({
           </label>
 
           <label className="space-y-1">
-            <div className="text-xs uppercase text-gray-500">Map Image URL</div>
+            <div className="text-xs uppercase text-gray-500">Map Image File</div>
+            <input name="map_file" type="file" accept="image/*" className="w-full border rounded-lg p-2" />
+            <div className="text-[11px] text-gray-500">Upload from your PC, or paste a URL below.</div>
+          </label>
+
+          <label className="space-y-1">
+            <div className="text-xs uppercase text-gray-500">NPC Image File</div>
+            <input name="npc_file" type="file" accept="image/*" className="w-full border rounded-lg p-2" />
+            <div className="text-[11px] text-gray-500">Upload from your PC, or paste a URL below.</div>
+          </label>
+
+          <label className="space-y-1">
+            <div className="text-xs uppercase text-gray-500">Map Image URL (optional)</div>
             <input name="map_image_url" className="w-full border rounded-lg p-2" placeholder="https://..." />
           </label>
 
           <label className="space-y-1">
-            <div className="text-xs uppercase text-gray-500">NPC Image URL</div>
+            <div className="text-xs uppercase text-gray-500">NPC Image URL (optional)</div>
             <input name="npc_image_url" className="w-full border rounded-lg p-2" placeholder="https://..." />
           </label>
         </div>

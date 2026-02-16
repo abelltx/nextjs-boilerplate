@@ -13,6 +13,7 @@ type EpisodeUpsert = {
   default_duration_seconds: number;
   summary?: string | null;
   map_image_url?: string | null;
+  npc_image_url?: string | null;
 };
 
 async function requireAdmin() {
@@ -44,21 +45,23 @@ function minutesToSeconds(minsRaw: unknown): number {
   return Math.round(mins * 60);
 }
 
-async function maybeUploadMap(
+async function maybeUploadAsset(
   supabase: Awaited<ReturnType<typeof requireAdmin>>,
   episodeId: string,
-  fd: FormData
+  fd: FormData,
+  fieldName: "map_file" | "npc_file",
+  folderName: "episode-maps" | "episode-npcs"
 ): Promise<string | null> {
-  const mapFile = fd.get("map_file");
-  if (!mapFile || typeof mapFile !== "object" || !("arrayBuffer" in mapFile)) return null;
+  const fileValue = fd.get(fieldName);
+  if (!fileValue || typeof fileValue !== "object" || !("arrayBuffer" in fileValue)) return null;
 
-  const file = mapFile as File;
+  const file = fileValue as File;
 
   // Some browsers send a 0-byte File when nothing was chosen
   if (!file.size || file.size <= 0) return null;
 
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const path = `episode-maps/${episodeId}/${Date.now()}-${safeName}`;
+  const path = `${folderName}/${episodeId}/${Date.now()}-${safeName}`;
 
   const { error: upErr } = await supabase.storage
     .from(EPISODE_ASSETS_BUCKET)
@@ -92,15 +95,22 @@ export async function createEpisodeAction(fd: FormData) {
     story_text,
     default_duration_seconds,
     summary,
+    map_image_url: String(fd.get("map_image_url") ?? "").trim() || null,
+    npc_image_url: String(fd.get("npc_image_url") ?? "").trim() || null,
   };
 
   const { data, error } = await supabase.from("episodes").insert(payload).select("id").single();
   if (error) throw new Error(error.message);
 
   // Optional map upload at creation time
-  const mapUrl = await maybeUploadMap(supabase, data.id, fd);
+  const mapUrl = await maybeUploadAsset(supabase, data.id, fd, "map_file", "episode-maps");
+  const npcUrl = await maybeUploadAsset(supabase, data.id, fd, "npc_file", "episode-npcs");
   if (mapUrl) {
     const { error: upErr } = await supabase.from("episodes").update({ map_image_url: mapUrl }).eq("id", data.id);
+    if (upErr) throw new Error(upErr.message);
+  }
+  if (npcUrl) {
+    const { error: upErr } = await supabase.from("episodes").update({ npc_image_url: npcUrl }).eq("id", data.id);
     if (upErr) throw new Error(upErr.message);
   }
 
@@ -124,7 +134,8 @@ export async function updateEpisodeAction(episodeId: string, fd: FormData) {
   const story_text = String(fd.get("story_text") ?? "");
 
   // Optional map file upload
-  const map_image_url = await maybeUploadMap(supabase, episodeId, fd);
+  const map_image_url = await maybeUploadAsset(supabase, episodeId, fd, "map_file", "episode-maps");
+  const npc_image_url = await maybeUploadAsset(supabase, episodeId, fd, "npc_file", "episode-npcs");
 
   const payload: any = {
     title,
@@ -132,10 +143,13 @@ export async function updateEpisodeAction(episodeId: string, fd: FormData) {
     summary,
     story_text,
     default_duration_seconds,
+    map_image_url: String(fd.get("map_image_url") ?? "").trim() || null,
+    npc_image_url: String(fd.get("npc_image_url") ?? "").trim() || null,
   };
 
-  // Only overwrite map_image_url if a new file uploaded
+  // File uploads override URL fields when present
   if (map_image_url) payload.map_image_url = map_image_url;
+  if (npc_image_url) payload.npc_image_url = npc_image_url;
 
   const { error } = await supabase.from("episodes").update(payload).eq("id", episodeId);
   if (error) throw new Error(error.message);
