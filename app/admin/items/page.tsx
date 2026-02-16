@@ -336,7 +336,7 @@ export default async function ItemsLibraryPage({
                       </div>
                     </div>
                     <span className="rounded-lg border px-3 py-2 text-sm hover:bg-muted">
-                      Edit ->
+                      Edit -&gt;
                     </span>
                   </div>
 
@@ -366,4 +366,5 @@ export default async function ItemsLibraryPage({
     </div>
   );
 }
+
 
