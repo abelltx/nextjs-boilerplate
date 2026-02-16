@@ -297,8 +297,9 @@ export default async function ItemsLibraryPage({
           const thumbSrc = it.__img?.thumbUrl ?? it.image_url ?? null;
 
           return (
-            <div
+            <Link
               key={it.id}
+              href={`/admin/items/edit?id=${it.id}`}
               className="rounded-2xl border p-3 shadow-sm hover:shadow"
             >
               <div className="flex gap-3">
@@ -334,13 +335,9 @@ export default async function ItemsLibraryPage({
                         ) : null}
                       </div>
                     </div>
-
-                    <Link
-                      href="/admin/items/edit"
-                      className="rounded-lg border px-3 py-2 text-sm hover:bg-muted"
-                    >
-                      Edit →
-                    </Link>
+                    <span className="rounded-lg border px-3 py-2 text-sm hover:bg-muted">
+                      Edit ->
+                    </span>
                   </div>
 
                   <div className="mt-2 text-sm text-muted-foreground">
@@ -362,10 +359,11 @@ export default async function ItemsLibraryPage({
                   </div>
                 </div>
               </div>
-            </div>
+            </Link>
           );
         })}
       </div>
     </div>
   );
 }
+
