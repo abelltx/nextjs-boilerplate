@@ -218,11 +218,11 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
 
       <div className="mt-4 rounded-xl border overflow-hidden">
         <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs opacity-70 border-b">
-          <div className="col-span-5">Item</div>
+          <div className="col-span-4">Item</div>
           <div className="col-span-2">Type</div>
           <div className="col-span-1 text-center">Qty</div>
           <div className="col-span-1 text-center">Eq</div>
-          <div className="col-span-3 text-right">Actions</div>
+          <div className="col-span-4 text-right">Actions</div>
         </div>
 
         {loading ? (
@@ -242,7 +242,7 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
                 className="grid grid-cols-12 gap-2 px-3 py-3 border-b last:border-b-0 hover:bg-muted/40 cursor-pointer"
                 onClick={() => setSelected(r)}
               >
-                <div className="col-span-5">
+                <div className="col-span-4">
                   <div className="flex items-center gap-3">
                     {(thumbUrls[r.id] || safeImageUrl(r)) ? (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -265,7 +265,7 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
                   </div>
                 </div>
 
-                <div className="col-span-2 text-sm">{t}</div>
+                <div className="col-span-2 truncate text-sm" title={t}>{t}</div>
 
                 <div className="col-span-1 text-center text-sm">{r.quantity}</div>
 
@@ -273,9 +273,9 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
                   {r.equipped ? "Yes" : "-"}
                 </div>
 
-                <div className="col-span-3 flex justify-end gap-2">
+                <div className="col-span-4 flex flex-nowrap justify-end gap-1">
                   <button
-                    className="rounded-md border px-2 py-1 text-xs"
+                    className="whitespace-nowrap rounded-md border px-2 py-1 text-xs"
                     onClick={(e) => {
                       e.stopPropagation();
                       useItem(r);
@@ -288,7 +288,7 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
 
                   {r.equipped ? (
                     <button
-                      className="rounded-md border px-2 py-1 text-xs"
+                      className="whitespace-nowrap rounded-md border px-2 py-1 text-xs"
                       onClick={(e) => {
                         e.stopPropagation();
                         setEquipped(r, false);
@@ -299,7 +299,7 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
                     </button>
                   ) : (
                     <button
-                      className="rounded-md border px-2 py-1 text-xs"
+                      className="whitespace-nowrap rounded-md border px-2 py-1 text-xs"
                       onClick={(e) => {
                         e.stopPropagation();
                         setEquipped(r, true);
@@ -311,7 +311,7 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
                   )}
 
                   <button
-                    className="rounded-md border px-2 py-1 text-xs"
+                    className="whitespace-nowrap rounded-md border px-2 py-1 text-xs"
                     onClick={(e) => {
                       e.stopPropagation();
                       dropOne(r);
