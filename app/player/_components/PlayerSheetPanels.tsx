@@ -120,7 +120,7 @@ export function SkillsCard({ stat }: { stat: StatBlock }) {
   return (
     <Card title="Skills">
       <div className="space-y-1">
-        <div className="grid grid-cols-[40px_56px_1fr_64px] items-center rounded-lg border border-neutral-800 bg-neutral-950/40 px-3 py-2 text-[11px] uppercase tracking-wide text-neutral-400">
+        <div className="grid grid-cols-[40px_56px_minmax(0,1fr)_72px] items-center rounded-lg border border-neutral-800 bg-neutral-950/40 px-3 py-2 text-[11px] uppercase tracking-wide text-neutral-400">
           <div>Prof</div>
           <div>Mod</div>
           <div>Skill</div>
@@ -135,7 +135,7 @@ export function SkillsCard({ stat }: { stat: StatBlock }) {
           return (
             <div
               key={s.key}
-              className="grid grid-cols-[40px_56px_1fr_64px] items-center rounded-lg border border-neutral-800 bg-neutral-950/40 px-3 py-2"
+              className="grid grid-cols-[40px_56px_minmax(0,1fr)_72px] items-center rounded-lg border border-neutral-800 bg-neutral-950/40 px-3 py-2"
             >
               <div>
                 <span
@@ -147,9 +147,9 @@ export function SkillsCard({ stat }: { stat: StatBlock }) {
                 />
               </div>
               <div className="text-sm text-neutral-200">{fmt(abilityMod)}</div>
-              <div className="text-sm text-neutral-200">
+              <div className="min-w-0 text-sm text-neutral-200">
                 <span className="mr-2 text-[11px] uppercase text-neutral-400">{s.ability.toUpperCase()}</span>
-                <span>{s.label}</span>
+                <span className="truncate align-middle">{s.label}</span>
               </div>
               <div className="text-right text-sm font-semibold text-white">{fmt(totalBonus)}</div>
             </div>
