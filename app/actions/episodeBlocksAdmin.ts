@@ -24,16 +24,21 @@ async function maybeUploadBlockImage(
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
   const path = `episode-blocks/${episodeId}/${Date.now()}-${safeName}`;
 
-  const { error: upErr } = await supabase.storage
-    .from(EPISODE_ASSETS_BUCKET)
-    .upload(path, file, {
-      upsert: true,
-      contentType: file.type || "application/octet-stream",
-    });
-  if (upErr) throw new Error(upErr.message);
+  try {
+    const { error: upErr } = await supabase.storage
+      .from(EPISODE_ASSETS_BUCKET)
+      .upload(path, file, {
+        upsert: true,
+        contentType: file.type || "application/octet-stream",
+      });
+    if (upErr) throw new Error(upErr.message);
 
-  const { data: pub } = supabase.storage.from(EPISODE_ASSETS_BUCKET).getPublicUrl(path);
-  return pub?.publicUrl ?? null;
+    const { data: pub } = supabase.storage.from(EPISODE_ASSETS_BUCKET).getPublicUrl(path);
+    return pub?.publicUrl ?? null;
+  } catch (e) {
+    console.error("maybeUploadBlockImage failed:", e);
+    return null;
+  }
 }
 
 function parseMetaJson(raw: FormDataEntryValue | null): any {
