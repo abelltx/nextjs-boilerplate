@@ -53,9 +53,6 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
-  const [q, setQ] = useState("");
-  const [type, setType] = useState<string>("All");
-
   const [selected, setSelected] = useState<ItemRow | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -131,22 +128,7 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [characterId]);
 
-  const types = useMemo(() => {
-    const set = new Set<string>();
-    for (const r of rows) set.add(safeType(r));
-    return ["All", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
-  }, [rows]);
-
-  const filtered = useMemo(() => {
-    const query = q.trim().toLowerCase();
-    return rows.filter((r) => {
-      const name = safeName(r).toLowerCase();
-      const t = safeType(r);
-      const matchesQ = !query || name.includes(query);
-      const matchesType = type === "All" || t === type;
-      return matchesQ && matchesType;
-    });
-  }, [rows, q, type]);
+  const filtered = rows;
 
     async function setEquipped(row: ItemRow, equipped: boolean) {
     setBusyId(row.id);
@@ -222,33 +204,7 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
 
   return (
     <div className="w-full">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <div className="flex flex-col">
-            <label className="text-sm opacity-80">Search</label>
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              className="w-full sm:w-72 rounded-md border px-3 py-2 bg-background"
-            />
-          </div>
-
-          <div className="flex flex-col">
-            <label className="text-sm opacity-80">Type</label>
-            <select
-              value={type}
-              onChange={(e) => setType(e.target.value)}
-              className="w-full sm:w-56 rounded-md border px-3 py-2 bg-background"
-            >
-              {types.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
+      <div className="flex justify-end">
         <div className="text-sm opacity-80">
           {loading ? "Loadingâ€¦" : `${filtered.length} item${filtered.length === 1 ? "" : "s"}`}
         </div>
