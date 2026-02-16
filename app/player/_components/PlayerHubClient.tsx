@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import PlayerStatusHeader from "./PlayerStatusHeader";
@@ -189,7 +189,7 @@ export default function PlayerHubClient(props: {
 
               <div className="ml-auto flex items-center gap-2 pr-2 text-xs text-neutral-300">
                 {isLiveMode ? (
-                  <span className="rounded-full bg-red-500/20 px-2 py-1 text-red-200">LIVE � {liveSession?.name}</span>
+                  <span className="rounded-full bg-red-500/20 px-2 py-1 text-red-200">LIVE • {liveSession?.name}</span>
                 ) : null}
               </div>
             </div>
@@ -298,3 +298,4 @@ function RollRequestPanel({ prompt }: { prompt: string }) {
     </div>
   );
 }
+
