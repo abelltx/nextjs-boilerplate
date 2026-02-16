@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 
 type ItemRow = {
@@ -40,6 +41,7 @@ function safeStackable(row: ItemRow) {
 
 export default function PlayerInventoryPanel({ characterId }: { characterId: string }) {
   const supabase = useMemo(() => createClient(), []);
+  const router = useRouter();
   const [rows, setRows] = useState<ItemRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -123,6 +125,7 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
     if (error) setErr(error.message);
 
     await load();
+    if (!error) router.refresh();
 
     // keep drawer in sync (use fresh data, not stale `rows`)
     if (selected?.id === row.id) {
@@ -136,6 +139,7 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
   async function dropOne(row: ItemRow) {
     setBusyId(row.id);
     setErr(null);
+    let hadError = false;
 
     if (row.quantity > 1 && safeStackable(row)) {
       const { error } = await supabase
@@ -143,16 +147,23 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
         .update({ quantity: row.quantity - 1 })
         .eq("id", row.id);
 
-      if (error) setErr(error.message);
+      if (error) {
+        hadError = true;
+        setErr(error.message);
+      }
     } else {
       // Non-stackable items should usually have quantity 1 anyway.
       // If quantity is 1, delete row.
       const { error } = await supabase.from("inventory_items").delete().eq("id", row.id);
-      if (error) setErr(error.message);
+      if (error) {
+        hadError = true;
+        setErr(error.message);
+      }
       if (selected?.id === row.id) setSelected(null);
     }
 
     await load();
+    if (!hadError) router.refresh();
     setBusyId(null);
   }
 

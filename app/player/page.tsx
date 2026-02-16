@@ -1,11 +1,103 @@
-﻿import { redirect } from "next/navigation";
+import { redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth/getProfile";
 import { supabaseServer } from "@/lib/supabase/server";
 import PlayerHubClient from "./_components/PlayerHubClient";
 
-
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+type AbilityKey = "str" | "dex" | "con" | "int" | "wis" | "cha";
+
+type ItemEffectRow = {
+  effect_type: string | null;
+  effect_key: string | null;
+  mode: string | null;
+  value: number | null;
+  notes: string | null;
+};
+
+function n(v: unknown, fallback = 0) {
+  const num = Number(v);
+  return Number.isFinite(num) ? num : fallback;
+}
+
+function toSaveKey(raw: string): AbilityKey | null {
+  const key = raw.replace(/_save$/i, "").trim().toLowerCase();
+  if (["str", "dex", "con", "int", "wis", "cha"].includes(key)) return key as AbilityKey;
+  return null;
+}
+
+function applyItemEffects(baseStat: any, effects: ItemEffectRow[]) {
+  const stat = { ...(baseStat ?? {}) } as any;
+  const abilities = { ...(stat.abilities ?? {}) } as Record<string, number>;
+  const saves = { ...(stat.saves ?? {}) } as Record<string, number>;
+  const skills = { ...(stat.skills ?? {}) } as Record<string, number>;
+  const derived = { ...(stat.derived ?? {}) } as Record<string, number>;
+  const statusEffects = Array.isArray(stat.effects) ? [...stat.effects] : [];
+
+  for (const e of effects) {
+    const type = String(e.effect_type ?? "").trim().toLowerCase();
+    const key = String(e.effect_key ?? "").trim().toLowerCase();
+    const mode = String(e.mode ?? "").trim().toLowerCase();
+    const value = n(e.value, 0);
+
+    if (!type || !key) continue;
+
+    if (type === "ability" && ["str", "dex", "con", "int", "wis", "cha"].includes(key)) {
+      const cur = n(abilities[key], 10);
+      abilities[key] = mode === "set" ? value : cur + value;
+      continue;
+    }
+
+    if (type === "ac") {
+      const cur = n(derived.defense, 0);
+      derived.defense = mode === "set" ? value : cur + value;
+      continue;
+    }
+
+    if (type === "speed") {
+      const cur = n(derived.speed, 0);
+      derived.speed = mode === "set" ? value : cur + value;
+      continue;
+    }
+
+    if (type === "skill") {
+      const cur = n(skills[key], 0);
+      skills[key] = mode === "set" ? value : cur + value;
+      continue;
+    }
+
+    if (type === "save") {
+      const saveKey = toSaveKey(key);
+      if (!saveKey) continue;
+      const cur = n(saves[saveKey], 0);
+      saves[saveKey] = mode === "set" ? value : cur + value;
+      continue;
+    }
+
+    if (type === "resistance" || type === "immunity" || type === "advantage") {
+      statusEffects.push({
+        name: `${type}: ${key}`,
+        kind: "buff",
+      });
+      continue;
+    }
+
+    if (type === "special") {
+      statusEffects.push({
+        name: e.notes?.trim() || "special item effect",
+        kind: "buff",
+      });
+    }
+  }
+
+  stat.abilities = abilities;
+  stat.saves = saves;
+  stat.skills = skills;
+  stat.derived = derived;
+  stat.effects = statusEffects;
+  return stat;
+}
 
 export default async function PlayerPage() {
   const { user, profile } = await getProfile();
@@ -39,7 +131,6 @@ export default async function PlayerPage() {
     if (charCreateErr) throw new Error(`Failed to create character: ${charCreateErr.message}`);
     character = created;
   }
-  
 
   // ---- Inventory ----
   const { data: inventory, error: invErr } = await supabase
@@ -117,17 +208,48 @@ export default async function PlayerPage() {
   if (logErr) throw new Error(`Failed to load game log: ${logErr.message}`);
   gameLog = logData ?? [];
 
+  const { data: curRow, error: curErr } = await supabase
+    .from("character_stats_current")
+    .select("stat_block_current")
+    .eq("character_id", character.id)
+    .single();
 
-const { data: curRow, error: curErr } = await supabase
-  .from("character_stats_current")
-  .select("stat_block_current")
-  .eq("character_id", character.id)
-  .single();
+  if (curErr) throw new Error(`Failed to load current stats: ${curErr.message}`);
 
-if (curErr) throw new Error(`Failed to load current stats: ${curErr.message}`);
+  const { data: equippedRows, error: equippedErr } = await supabase
+    .from("inventory_items")
+    .select("item_id")
+    .eq("character_id", character.id)
+    .eq("equipped", true)
+    .not("item_id", "is", null);
 
-character = { ...character, stat_block: curRow?.stat_block_current ?? character.stat_block };
-console.log("PLAYER PAGE character:", character.id, character.user_id, character.name, character.stat_block?.resources);
+  if (equippedErr) throw new Error(`Failed to load equipped items: ${equippedErr.message}`);
+
+  const equippedItemIds = Array.from(
+    new Set(
+      (equippedRows ?? [])
+        .map((r: { item_id: string | null }) => r.item_id)
+        .filter((id: string | null): id is string => Boolean(id))
+    )
+  );
+
+  let itemEffects: ItemEffectRow[] = [];
+  if (equippedItemIds.length) {
+    const { data: effectsRows, error: effectsErr } = await supabase
+      .from("item_effects")
+      .select("effect_type,effect_key,mode,value,notes,sort_order,created_at")
+      .in("item_id", equippedItemIds)
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true });
+
+    if (effectsErr) throw new Error(`Failed to load item effects: ${effectsErr.message}`);
+    itemEffects = (effectsRows ?? []) as ItemEffectRow[];
+  }
+
+  const baseStatBlock = curRow?.stat_block_current ?? character.stat_block ?? {};
+  const mergedStatBlock = applyItemEffects(baseStatBlock, itemEffects);
+
+  character = { ...character, stat_block: mergedStatBlock };
 
   return (
     <PlayerHubClient
