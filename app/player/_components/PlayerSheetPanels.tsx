@@ -122,7 +122,7 @@ export function SkillsCard({ stat }: { stat: StatBlock }) {
       <div className="space-y-1">
         <div
           className="grid items-center rounded-lg border border-neutral-800 bg-neutral-950/40 px-3 py-2 text-[11px] uppercase tracking-wide text-neutral-400"
-          style={{ gridTemplateColumns: "40px 56px minmax(0, 1fr) 72px" }}
+          style={{ gridTemplateColumns: "30px 44px minmax(0, 1fr) 64px" }}
         >
           <div>Prof</div>
           <div>Mod</div>
@@ -139,7 +139,7 @@ export function SkillsCard({ stat }: { stat: StatBlock }) {
             <div
               key={s.key}
               className="grid items-center rounded-lg border border-neutral-800 bg-neutral-950/40 px-3 py-2"
-              style={{ gridTemplateColumns: "40px 56px minmax(0, 1fr) 72px" }}
+              style={{ gridTemplateColumns: "30px 44px minmax(0, 1fr) 64px" }}
             >
               <div>
                 <span
@@ -151,8 +151,8 @@ export function SkillsCard({ stat }: { stat: StatBlock }) {
                 />
               </div>
               <div className="text-sm uppercase text-neutral-300">{s.ability.toUpperCase()}</div>
-              <div className="min-w-0 text-sm text-neutral-200">
-                <span className="inline-block max-w-full truncate align-middle">{s.label}</span>
+              <div className="text-sm text-neutral-200">
+                <span>{s.label}</span>
               </div>
               <div className="justify-self-end text-right text-sm font-semibold text-white">{fmt(totalBonus)}</div>
             </div>
