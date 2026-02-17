@@ -9,6 +9,7 @@ import {
   moveEpisodeBlockAction,
 } from "@/app/actions/episodeBlocksAdmin";
 import MapMarkerEditorClient from "./MapMarkerEditorClient";
+import NpcTabsEditorClient from "./NpcTabsEditorClient";
 
 async function requireAdminServer() {
   const supabase = await createClient();
@@ -1172,6 +1173,8 @@ export default async function AdminEpisodeEditPage({
                             <div className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800">
                               Save an image URL or upload an image for this map block first, then reopen this block to place markers.
                             </div>
+                          ) : String(b.block_type).toLowerCase() === "npc" ? (
+                            <NpcTabsEditorClient initialMeta={b.meta ?? {}} fallbackInfo={b.body ?? ""} />
                           ) : (
                             <textarea
                               name="meta_json"

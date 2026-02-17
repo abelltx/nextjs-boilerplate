@@ -19,13 +19,19 @@ export default function SceneMap(props: {
   const [zoom, setZoom] = useState(2);
   const [pos, setPos] = useState({ x: 50, y: 50 });
   const [hoveringMarker, setHoveringMarker] = useState(false);
-  const [lensOn, setLensOn] = useState(() => (props.markers && props.markers.length > 0 ? false : true));
+  const [nearMarker, setNearMarker] = useState(false);
+  const [lensOn, setLensOn] = useState(true);
 
   function onMove(e: MouseEvent<HTMLDivElement>) {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * 100;
     const y = ((e.clientY - rect.top) / rect.height) * 100;
-    setPos({ x: clamp(x), y: clamp(y) });
+    const nx = clamp(x);
+    const ny = clamp(y);
+    setPos({ x: nx, y: ny });
+    const threshold = 4; // percent distance threshold around markers
+    const isNear = (props.markers ?? []).some((m) => Math.abs(nx - clamp(m.x)) <= threshold && Math.abs(ny - clamp(m.y)) <= threshold);
+    setNearMarker(isNear);
   }
 
   return (
@@ -43,7 +49,7 @@ export default function SceneMap(props: {
           <button
             key={m.id}
             type="button"
-            className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-white bg-black/80 px-2 py-0.5 text-[10px] font-semibold text-white hover:bg-black"
+            className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-white bg-black/80 px-2 py-0.5 text-[10px] font-semibold text-white hover:bg-black min-h-6 min-w-6"
             style={{ left: `${clamp(m.x)}%`, top: `${clamp(m.y)}%` }}
             title={m.label}
             onMouseEnter={() => setHoveringMarker(true)}
@@ -59,7 +65,7 @@ export default function SceneMap(props: {
           </button>
         ))}
 
-        {props.showMagnifier && lensOn && hover && !hoveringMarker ? (
+        {props.showMagnifier && lensOn && hover && !hoveringMarker && !nearMarker ? (
           <div
             className="pointer-events-none absolute h-36 w-36 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white/90 shadow-lg"
             style={{

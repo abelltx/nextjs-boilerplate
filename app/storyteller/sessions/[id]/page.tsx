@@ -12,6 +12,7 @@ import { randomUUID } from "crypto";
 import SequenceRail from "@/components/episode-runtime/SequenceRail";
 import RevealCard from "@/components/episode-runtime/RevealCard";
 import CheckPromptCard from "@/components/episode-runtime/CheckPromptCard";
+import NpcTabsCard from "@/components/episode-runtime/NpcTabsCard";
 import { buildRuntimeSequence, extractMapMarkers } from "@/lib/episodeRuntime";
 
 
@@ -554,6 +555,9 @@ export default async function DmScreenPage({
                                       <img src={b.image_url} alt={b.title ?? "Block"} className="w-full h-auto" />
                                     </div>
                                   )
+                                ) : null}
+                                {String(b.block_type).toLowerCase() === "npc" ? (
+                                  <NpcTabsCard meta={b.meta} fallbackInfo={b.body ?? ""} />
                                 ) : null}
                               </RevealCard>
                                 );

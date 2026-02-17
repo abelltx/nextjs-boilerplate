@@ -11,6 +11,7 @@ import PlayerInventoryPanel from "./PlayerInventoryPanel";
 import { leaveSessionAction, submitRollResultAction } from "../actions";
 import RevealCard from "@/components/episode-runtime/RevealCard";
 import SceneMap from "@/components/episode-runtime/SceneMap";
+import NpcTabsCard from "@/components/episode-runtime/NpcTabsCard";
 import { extractMapMarkers } from "@/lib/episodeRuntime";
 
 type TabKey = "inventory" | "actions" | "talents" | "journey";
@@ -534,6 +535,9 @@ function StagePanel({ block, linkedBlocks }: { block: any; linkedBlocks?: Record
                 }}
               />
             ) : null}
+            {String(block.block_type ?? "").toLowerCase() === "npc" ? (
+              <NpcTabsCard meta={block.meta} fallbackInfo={block.body ?? ""} />
+            ) : null}
           </RevealCard>
 
           {selectedReveal ? (
@@ -551,6 +555,9 @@ function StagePanel({ block, linkedBlocks }: { block: any; linkedBlocks?: Record
                   {selectedReveal.image_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={selectedReveal.image_url} alt={selectedReveal.title ?? "Reveal"} className="w-full rounded-lg border border-neutral-800" />
+                  ) : null}
+                  {String(selectedReveal.block_type ?? "").toLowerCase() === "npc" ? (
+                    <NpcTabsCard meta={selectedReveal.meta} fallbackInfo={selectedReveal.body ?? ""} />
                   ) : null}
                 </RevealCard>
               </div>
