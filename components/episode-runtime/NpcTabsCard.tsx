@@ -376,7 +376,7 @@ export default function NpcTabsCard(props: {
                   {props.playerShop?.onClaimTraining ? (
                     <button
                       type="button"
-                      className="rounded border border-neutral-700 px-2 py-1 text-xs hover:bg-neutral-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="rounded border border-emerald-500/60 bg-emerald-500/20 px-2 py-1 text-xs text-emerald-100 hover:bg-emerald-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
                       disabled={props.playerShop?.claimingTraitId === it.id}
                       onClick={() => props.playerShop?.onClaimTraining?.(it)}
                     >

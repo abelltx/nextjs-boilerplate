@@ -346,37 +346,47 @@ export default function PlayerHubClient(props: {
   async function handleClaimNpcGear(item: { id: string; itemId: string; name: string; faithRequired: number }) {
     if (claimingGearId) return;
     setClaimingGearId(item.id);
-    const res = await claimNpcGearItemAction({
-      characterId: String(props.character?.id ?? ""),
-      itemId: item.itemId,
-    });
-    setClaimingGearId(null);
-    if (!res.ok) {
-      alert(res.error ?? "Could not add item.");
-      return;
+    try {
+      const res = await claimNpcGearItemAction({
+        characterId: String(props.character?.id ?? ""),
+        itemId: item.itemId,
+      });
+      if (!res.ok) {
+        alert(res.error ?? "Could not add item.");
+        return;
+      }
+      window.dispatchEvent(new CustomEvent("inventory:refresh"));
+      router.refresh();
+    } catch (e: any) {
+      alert(e?.message ?? "Could not add item.");
+    } finally {
+      setClaimingGearId(null);
     }
-    window.dispatchEvent(new CustomEvent("inventory:refresh"));
-    router.refresh();
   }
   async function handleClaimNpcTraining(trait: { id: string; traitId: string; name: string; source: "trait" | "action" }) {
     if (claimingTrainingId) return;
     setClaimingTrainingId(trait.id);
-    const res =
-      trait.source === "action"
-        ? await claimNpcActionAction({
-            characterId: String(props.character?.id ?? ""),
-            actionId: trait.traitId,
-          })
-        : await claimNpcTrainingTraitAction({
-            characterId: String(props.character?.id ?? ""),
-            traitId: trait.traitId,
-          });
-    setClaimingTrainingId(null);
-    if (!res.ok) {
-      alert(res.error ?? "Could not learn.");
-      return;
+    try {
+      const res =
+        trait.source === "action"
+          ? await claimNpcActionAction({
+              characterId: String(props.character?.id ?? ""),
+              actionId: trait.traitId,
+            })
+          : await claimNpcTrainingTraitAction({
+              characterId: String(props.character?.id ?? ""),
+              traitId: trait.traitId,
+            });
+      if (!res.ok) {
+        alert(res.error ?? "Could not learn.");
+        return;
+      }
+      router.refresh();
+    } catch (e: any) {
+      alert(e?.message ?? "Could not learn.");
+    } finally {
+      setClaimingTrainingId(null);
     }
-    router.refresh();
   }
 
   return (
