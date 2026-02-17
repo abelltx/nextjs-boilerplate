@@ -27,9 +27,9 @@ type PlayerActionRow = {
   name: string;
   type: string | null;
   summary: string | null;
-  damage_dice: string | null;
-  attack_bonus_override: number | null;
-  damage_type: string | null;
+  damage_dice?: string | null;
+  attack_bonus_override?: number | null;
+  damage_type?: string | null;
 };
 
 function n(v: unknown, fallback = 0) {
@@ -329,7 +329,7 @@ export default async function PlayerPage() {
   if (learnedActionIds.length) {
     const { data: actionRows, error: learnedActionsErr } = await supabase
       .from("actions")
-      .select("id,name,type,summary,damage_dice,attack_bonus_override,damage_type")
+      .select("id,name,type,summary")
       .in("id", learnedActionIds)
       .order("name", { ascending: true });
     if (learnedActionsErr) throw new Error(`Failed to load action details: ${learnedActionsErr.message}`);
