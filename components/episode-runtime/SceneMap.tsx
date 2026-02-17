@@ -18,6 +18,8 @@ export default function SceneMap(props: {
   const [hover, setHover] = useState(false);
   const [zoom, setZoom] = useState(2);
   const [pos, setPos] = useState({ x: 50, y: 50 });
+  const [hoveringMarker, setHoveringMarker] = useState(false);
+  const [lensOn, setLensOn] = useState(() => (props.markers && props.markers.length > 0 ? false : true));
 
   function onMove(e: MouseEvent<HTMLDivElement>) {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -44,6 +46,8 @@ export default function SceneMap(props: {
             className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-white bg-black/80 px-2 py-0.5 text-[10px] font-semibold text-white hover:bg-black"
             style={{ left: `${clamp(m.x)}%`, top: `${clamp(m.y)}%` }}
             title={m.label}
+            onMouseEnter={() => setHoveringMarker(true)}
+            onMouseLeave={() => setHoveringMarker(false)}
             onClick={(e) => {
               e.stopPropagation();
               setPos({ x: clamp(m.x), y: clamp(m.y) });
@@ -55,7 +59,7 @@ export default function SceneMap(props: {
           </button>
         ))}
 
-        {props.showMagnifier && hover ? (
+        {props.showMagnifier && lensOn && hover && !hoveringMarker ? (
           <div
             className="pointer-events-none absolute h-36 w-36 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white/90 shadow-lg"
             style={{
@@ -72,6 +76,16 @@ export default function SceneMap(props: {
 
       <div className="flex items-center justify-between text-xs text-neutral-300">
         <div className="flex items-center gap-2">
+          {props.showMagnifier ? (
+            <button
+              type="button"
+              className="rounded border border-neutral-700 px-2 py-0.5 hover:bg-neutral-900"
+              onClick={() => setLensOn((v) => !v)}
+              title="Toggle magnifier lens"
+            >
+              Lens: {lensOn ? "On" : "Off"}
+            </button>
+          ) : null}
           <span>Zoom</span>
           <button
             type="button"
