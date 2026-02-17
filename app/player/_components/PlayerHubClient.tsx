@@ -125,6 +125,7 @@ export default function PlayerHubClient(props: {
     session?: any;
     state?: any;
     block?: any;
+    linkedBlocks?: Record<string, any>;
     players?: string[];
   } | null>(null);
 
@@ -345,7 +346,7 @@ export default function PlayerHubClient(props: {
               <div className="text-sm font-semibold">Stage</div>
 
               <div className="mt-4 space-y-4">
-                <StagePanel block={stageBlock} />
+                <StagePanel block={stageBlock} linkedBlocks={stage?.linkedBlocks ?? {}} />
 
                 {rollOpen ? (
                   <div ref={promptBoxRef}>
@@ -500,8 +501,16 @@ function Tab(props: {
   );
 }
 
-function StagePanel({ block }: { block: any }) {
+function StagePanel({ block, linkedBlocks }: { block: any; linkedBlocks?: Record<string, any> }) {
   const markers = extractMapMarkers(block?.meta);
+  const [selectedMarkerBlockId, setSelectedMarkerBlockId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSelectedMarkerBlockId(null);
+  }, [block?.id]);
+
+  const revealMap = (linkedBlocks ?? {}) as Record<string, any>;
+  const selectedReveal = selectedMarkerBlockId ? revealMap[selectedMarkerBlockId] ?? null : null;
   return (
     <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
       <div className="text-sm font-semibold">Stage</div>
@@ -515,9 +524,38 @@ function StagePanel({ block }: { block: any }) {
             className="border-neutral-800 bg-neutral-950/40 text-neutral-100"
           >
             {block.image_url ? (
-              <SceneMap src={block.image_url} alt={block.title ?? "Presented"} markers={markers as any} showMagnifier />
+              <SceneMap
+                src={block.image_url}
+                alt={block.title ?? "Presented"}
+                markers={markers as any}
+                showMagnifier
+                onMarkerClick={(m) => {
+                  if (m.targetBlockId) setSelectedMarkerBlockId(m.targetBlockId);
+                }}
+              />
             ) : null}
           </RevealCard>
+
+          {selectedReveal ? (
+            <details open className="rounded-xl border border-neutral-700 bg-neutral-950/60 p-3">
+              <summary className="cursor-pointer text-sm font-semibold">
+                Marker Reveal: {selectedReveal.title ?? selectedReveal.block_type ?? "Details"}
+              </summary>
+              <div className="mt-3">
+                <RevealCard
+                  kind={selectedReveal.block_type ?? "reveal"}
+                  title={selectedReveal.title ?? selectedReveal.block_type ?? "Reveal"}
+                  body={selectedReveal.body ?? ""}
+                  className="border-neutral-700 bg-neutral-950/40 text-neutral-100"
+                >
+                  {selectedReveal.image_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={selectedReveal.image_url} alt={selectedReveal.title ?? "Reveal"} className="w-full rounded-lg border border-neutral-800" />
+                  ) : null}
+                </RevealCard>
+              </div>
+            </details>
+          ) : null}
         </div>
       ) : (
         <div className="mt-3 text-sm text-neutral-300">

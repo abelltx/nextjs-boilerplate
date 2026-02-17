@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getProfile } from "@/lib/auth/getProfile";
 import { supabaseServer } from "@/lib/supabase/server";
+import { extractMapMarkers } from "@/lib/episodeRuntime";
 
 function isUuid(value: string) {
   const v = value.trim();
@@ -51,6 +52,7 @@ export async function GET(req: Request) {
 
   // Presented block
   let block = null as any;
+  let linkedBlocks: Record<string, any> = {};
   const presentedId = (state as any)?.presented_block_id;
   if (typeof presentedId === "string" && presentedId.length) {
     const { data: b } = await supabase
@@ -59,6 +61,28 @@ export async function GET(req: Request) {
       .eq("id", presentedId)
       .maybeSingle();
     block = b ?? null;
+
+    if (block && String(block.block_type ?? "").toLowerCase() === "map") {
+      const targetIds = Array.from(
+        new Set(
+          extractMapMarkers(block.meta)
+            .map((m) => m.targetBlockId)
+            .filter((id): id is string => Boolean(id))
+        )
+      );
+      if (targetIds.length) {
+        const { data: linked } = await supabase
+          .from("episode_blocks")
+          .select("id,block_type,audience,mode,title,body,image_url,meta")
+          .in("id", targetIds);
+
+        for (const row of linked ?? []) {
+          const aud = String((row as any).audience ?? "both").toLowerCase();
+          if (aud === "storyteller") continue;
+          linkedBlocks[(row as any).id] = row;
+        }
+      }
+    }
   }
 
   return NextResponse.json({
@@ -66,6 +90,7 @@ export async function GET(req: Request) {
     session,
     state,
     block,
+    linkedBlocks,
     players: (players ?? []).map((p) => p.player_id),
   });
 }
