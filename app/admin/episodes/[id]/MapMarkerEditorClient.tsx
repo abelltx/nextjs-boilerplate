@@ -23,8 +23,8 @@ function normalizeMarkers(input: any): Marker[] {
   return list.map((m: any, i: number) => ({
     id: String(m?.id ?? `m-${i + 1}`),
     label: String(m?.label ?? `Marker ${i + 1}`),
-    x: clamp(Number(m?.x ?? 50)),
-    y: clamp(Number(m?.y ?? 50)),
+    x: round3(clamp(Number(m?.x ?? 50))),
+    y: round3(clamp(Number(m?.y ?? 50))),
     target_block_id: m?.target_block_id ? String(m.target_block_id) : null,
   }));
 }
@@ -63,7 +63,15 @@ export default function MapMarkerEditorClient(props: {
 
   function updateSelected(patch: Partial<Marker>) {
     if (!selectedId) return;
-    setMarkers((prev) => prev.map((m) => (m.id === selectedId ? { ...m, ...patch } : m)));
+    setMarkers((prev) =>
+      prev.map((m) => {
+        if (m.id !== selectedId) return m;
+        const next = { ...m, ...patch };
+        next.x = round3(clamp(Number(next.x ?? 50)));
+        next.y = round3(clamp(Number(next.y ?? 50)));
+        return next;
+      })
+    );
   }
 
   function removeSelected() {
