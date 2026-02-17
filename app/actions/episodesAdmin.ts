@@ -18,6 +18,16 @@ type EpisodeUpsert = {
   tags?: string[] | null;
 };
 
+function isDuplicateEpisodeCodeError(err: any) {
+  if (!err) return false;
+  const msg = String(err?.message ?? "");
+  const details = String(err?.details ?? "");
+  return (
+    String(err?.code ?? "") === "23505" &&
+    (msg.includes("episodes_episode_code_unique_ci") || details.includes("episodes_episode_code_unique_ci"))
+  );
+}
+
 async function requireAdmin() {
   const supabase = await createClient();
 
@@ -125,10 +135,7 @@ export async function createEpisodeAction(fd: FormData) {
   if (!fullErr) {
     data = fullData as { id: string };
   } else {
-    const isDuplicateEpisodeCode =
-      (fullErr as any)?.code === "23505" &&
-      String((fullErr as any)?.message ?? "").includes("episodes_episode_code_unique_ci");
-    if (isDuplicateEpisodeCode && episode_code) {
+    if (isDuplicateEpisodeCodeError(fullErr) && episode_code) {
       const { data: existing } = await supabase
         .from("episodes")
         .select("id")
@@ -138,6 +145,15 @@ export async function createEpisodeAction(fd: FormData) {
       if (existing?.id) {
         redirect(`/admin/episodes/${existing.id}`);
       }
+      const qp = new URLSearchParams({
+        title,
+        episode_code,
+        summary: summary ?? "",
+        duration_mins: String(Math.round(default_duration_seconds / 60)),
+        encounters: String(default_encounter_total),
+        error: "duplicate_code",
+      });
+      redirect(`/admin/episodes/new?${qp.toString()}`);
     }
 
     // Fallback for schema variations across environments.
@@ -154,7 +170,27 @@ export async function createEpisodeAction(fd: FormData) {
       .insert(fallbackPayload as any)
       .select("id")
       .single();
-    if (fbErr) throw new Error(fbErr.message || fullErr.message);
+    if (fbErr) {
+      if (isDuplicateEpisodeCodeError(fbErr) && episode_code) {
+        const { data: existing } = await supabase
+          .from("episodes")
+          .select("id")
+          .ilike("episode_code", episode_code)
+          .limit(1)
+          .maybeSingle();
+        if (existing?.id) redirect(`/admin/episodes/${existing.id}`);
+        const qp = new URLSearchParams({
+          title,
+          episode_code,
+          summary: summary ?? "",
+          duration_mins: String(Math.round(default_duration_seconds / 60)),
+          encounters: String(default_encounter_total),
+          error: "duplicate_code",
+        });
+        redirect(`/admin/episodes/new?${qp.toString()}`);
+      }
+      throw new Error(fbErr.message || fullErr.message);
+    }
     data = fbData as { id: string };
   }
 
@@ -224,6 +260,10 @@ export async function updateEpisodeAction(episodeId: string, fd: FormData) {
 
   const { error } = await supabase.from("episodes").update(payload).eq("id", episodeId);
   if (error) {
+    if (isDuplicateEpisodeCodeError(error) && episode_code) {
+      const qp = new URLSearchParams({ error: "duplicate_code", code: episode_code });
+      redirect(`/admin/episodes/${episodeId}?${qp.toString()}`);
+    }
     const fallback = {
       title,
       episode_code,
@@ -233,7 +273,13 @@ export async function updateEpisodeAction(episodeId: string, fd: FormData) {
       map_image_url: payload.map_image_url ?? null,
     };
     const { error: fbErr } = await supabase.from("episodes").update(fallback as any).eq("id", episodeId);
-    if (fbErr) throw new Error(fbErr.message || error.message);
+    if (fbErr) {
+      if (isDuplicateEpisodeCodeError(fbErr) && episode_code) {
+        const qp = new URLSearchParams({ error: "duplicate_code", code: episode_code });
+        redirect(`/admin/episodes/${episodeId}?${qp.toString()}`);
+      }
+      throw new Error(fbErr.message || error.message);
+    }
   }
 
   revalidatePath(`/admin/episodes/${episodeId}`);

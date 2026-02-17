@@ -44,8 +44,10 @@ function safeJsonStringify(value: any) {
 
 export default async function AdminEpisodeEditPage({
   params,
+  searchParams,
 }: {
   params: { id?: string } | Promise<{ id?: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const resolvedParams = await Promise.resolve(params);
   const rawId = resolvedParams?.id;
@@ -55,6 +57,14 @@ export default async function AdminEpisodeEditPage({
   }
 
   const id = rawId.trim();
+  const sp = (await Promise.resolve(searchParams ?? {})) as Record<string, string | string[] | undefined>;
+  const one = (k: string, fallback = "") => {
+    const v = sp[k];
+    if (Array.isArray(v)) return v[0] ?? fallback;
+    return v ?? fallback;
+  };
+  const errorCode = one("error", "");
+  const errorDupCode = one("code", "");
   const supabase = await requireAdminServer();
 
   const { data: episode, error } = await supabase
@@ -133,6 +143,11 @@ export default async function AdminEpisodeEditPage({
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-4">
+      {errorCode === "duplicate_code" ? (
+        <div className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">
+          Episode code {errorDupCode ? <b>{errorDupCode}</b> : ""} is already in use. Choose a different code.
+        </div>
+      ) : null}
       {/* HEADER */}
       <div className="flex items-center justify-between gap-3">
         <div>

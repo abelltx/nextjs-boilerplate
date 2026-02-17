@@ -43,6 +43,7 @@ export default async function AdminEpisodeNewPage({
   const initialStory = one("story_text", "");
   const initialDurationMins = one("duration_mins", "45");
   const initialEncounters = one("encounters", "5");
+  const errorCode = one("error", "");
 
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-4">
@@ -61,6 +62,11 @@ export default async function AdminEpisodeNewPage({
           await createEpisodeAction(fd);
         }}
       >
+        {errorCode === "duplicate_code" ? (
+          <div className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">
+            Episode code already exists. Use a different code, or open the existing episode and edit it.
+          </div>
+        ) : null}
         <div className="grid grid-cols-2 gap-3">
           <label className="space-y-1">
             <div className="text-xs uppercase text-gray-500">Title</div>
