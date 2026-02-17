@@ -12,6 +12,7 @@ import { randomUUID } from "crypto";
 import SequenceRail from "@/components/episode-runtime/SequenceRail";
 import RevealCard from "@/components/episode-runtime/RevealCard";
 import CheckPromptCard from "@/components/episode-runtime/CheckPromptCard";
+import SceneMap from "@/components/episode-runtime/SceneMap";
 import { buildRuntimeSequence, extractMapMarkers } from "@/lib/episodeRuntime";
 
 
@@ -512,25 +513,14 @@ export default async function DmScreenPage({
                                 className="border-gray-200"
                               >
                                 {b.image_url ? (
-                                  <div className="relative overflow-hidden rounded border">
-                                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                                    <img src={b.image_url} alt={b.title ?? "Block"} className="w-full h-auto" />
-                                    {String(b.block_type).toLowerCase() === "map"
-                                      ? extractMapMarkers(b.meta).map((m, i) => (
-                                          <div
-                                            key={m.id}
-                                            className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-white bg-black/80 px-2 py-0.5 text-[10px] font-semibold text-white"
-                                            style={{
-                                              left: `${Math.max(0, Math.min(100, m.x))}%`,
-                                              top: `${Math.max(0, Math.min(100, m.y))}%`,
-                                            }}
-                                            title={m.label}
-                                          >
-                                            {i + 1}
-                                          </div>
-                                        ))
-                                      : null}
-                                  </div>
+                                  String(b.block_type).toLowerCase() === "map" ? (
+                                    <SceneMap src={b.image_url} alt={b.title ?? "Map"} markers={extractMapMarkers(b.meta)} />
+                                  ) : (
+                                    <div className="relative overflow-hidden rounded border">
+                                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                                      <img src={b.image_url} alt={b.title ?? "Block"} className="w-full h-auto" />
+                                    </div>
+                                  )
                                 ) : null}
                               </RevealCard>
 

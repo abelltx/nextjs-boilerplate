@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import PlayerStatusHeader from "./PlayerStatusHeader";
 import JourneyLog from "./JourneyLog";
@@ -10,6 +10,7 @@ import RollPanel from "./RollPanel";
 import PlayerInventoryPanel from "./PlayerInventoryPanel";
 import { leaveSessionAction, submitRollResultAction } from "../actions";
 import RevealCard from "@/components/episode-runtime/RevealCard";
+import SceneMap from "@/components/episode-runtime/SceneMap";
 import { extractMapMarkers } from "@/lib/episodeRuntime";
 
 type TabKey = "inventory" | "actions" | "talents" | "journey";
@@ -510,7 +511,7 @@ function StagePanel({ block }: { block: any }) {
             className="border-neutral-800 bg-neutral-950/40 text-neutral-100"
           >
             {block.image_url ? (
-              <StageImagePreview src={block.image_url} alt={block.title ?? "Presented"} markers={markers as any} />
+              <SceneMap src={block.image_url} alt={block.title ?? "Presented"} markers={markers as any} showMagnifier />
             ) : null}
           </RevealCard>
         </div>
@@ -519,109 +520,6 @@ function StagePanel({ block }: { block: any }) {
           When the storyteller clicks <span className="text-neutral-100">Present to Players</span>, it will appear here.
         </div>
       )}
-    </div>
-  );
-}
-
-function StageImagePreview({
-  src,
-  alt,
-  markers,
-}: {
-  src: string;
-  alt: string;
-  markers?: Array<{ x?: number; y?: number; label?: string }>;
-}) {
-  const [hover, setHover] = useState(false);
-  const [zoom, setZoom] = useState(2);
-  const [pos, setPos] = useState({ x: 50, y: 50 });
-
-  function onMove(e: MouseEvent<HTMLDivElement>) {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * 100;
-    const y = ((e.clientY - rect.top) / rect.height) * 100;
-    setPos({
-      x: Math.max(0, Math.min(100, x)),
-      y: Math.max(0, Math.min(100, y)),
-    });
-  }
-
-  return (
-    <div className="space-y-2">
-      <div
-        className="relative overflow-hidden rounded-xl border border-neutral-800"
-        onMouseEnter={() => setHover(true)}
-        onMouseLeave={() => setHover(false)}
-        onMouseMove={onMove}
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={src} alt={alt} className="w-full" />
-
-        {Array.isArray(markers)
-          ? markers.map((m, i) => {
-              const x = Number(m?.x ?? 0);
-              const y = Number(m?.y ?? 0);
-              if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-              return (
-                <div
-                  key={`${i}-${x}-${y}`}
-                  className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-white bg-black/80 px-2 py-0.5 text-[10px] font-semibold text-white"
-                  style={{
-                    left: `${Math.max(0, Math.min(100, x))}%`,
-                    top: `${Math.max(0, Math.min(100, y))}%`,
-                  }}
-                  title={String(m?.label ?? `Marker ${i + 1}`)}
-                >
-                  {i + 1}
-                </div>
-              );
-            })
-          : null}
-
-        {hover ? (
-          <div
-            className="pointer-events-none absolute h-36 w-36 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white/90 shadow-lg"
-            style={{
-              left: `${pos.x}%`,
-              top: `${pos.y}%`,
-              backgroundImage: `url(${src})`,
-              backgroundRepeat: "no-repeat",
-              backgroundSize: `${zoom * 100}%`,
-              backgroundPosition: `${pos.x}% ${pos.y}%`,
-            }}
-          />
-        ) : null}
-      </div>
-
-      <div className="flex items-center justify-between text-xs text-neutral-300">
-        <div className="flex items-center gap-2">
-          <span>Zoom</span>
-          <button
-            type="button"
-            className="rounded border border-neutral-700 px-2 py-0.5 hover:bg-neutral-900"
-            onClick={() => setZoom((z) => Math.max(1.5, Number((z - 0.5).toFixed(1))))}
-          >
-            -
-          </button>
-          <span>{zoom.toFixed(1)}x</span>
-          <button
-            type="button"
-            className="rounded border border-neutral-700 px-2 py-0.5 hover:bg-neutral-900"
-            onClick={() => setZoom((z) => Math.min(5, Number((z + 0.5).toFixed(1))))}
-          >
-            +
-          </button>
-        </div>
-        <a
-          href={src}
-          target="_blank"
-          rel="noreferrer"
-          className="rounded border border-neutral-700 px-2 py-0.5 hover:bg-neutral-900"
-        >
-          Open full image
-        </a>
-      </div>
-      <div className="text-[11px] text-neutral-400">Hover to preview details. Move the mouse to pan the zoom lens.</div>
     </div>
   );
 }
