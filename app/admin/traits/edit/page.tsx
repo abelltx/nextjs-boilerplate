@@ -125,7 +125,7 @@ export default async function EditTraitPage({
   const supabase = await createClient();
   const { data: trait, error } = await supabase
     .from("traits")
-    .select("id,name,type,summary,tags,is_active,updated_at")
+    .select("id,name,type,summary,trigger,mechanical_effect,narrative_signal,growth_condition,tags,is_active,updated_at")
     .eq("id", id)
     .maybeSingle();
 
@@ -225,6 +225,54 @@ export default async function EditTraitPage({
               name="summary"
               defaultValue={trait.summary ?? ""}
               rows={4}
+              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-700">
+              Trigger
+            </label>
+            <textarea
+              name="trigger"
+              defaultValue={trait.trigger ?? ""}
+              rows={3}
+              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-700">
+              Mechanical Effect
+            </label>
+            <textarea
+              name="mechanical_effect"
+              defaultValue={trait.mechanical_effect ?? ""}
+              rows={3}
+              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-700">
+              Narrative Signal
+            </label>
+            <textarea
+              name="narrative_signal"
+              defaultValue={trait.narrative_signal ?? ""}
+              rows={3}
+              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-700">
+              Growth Condition
+            </label>
+            <textarea
+              name="growth_condition"
+              defaultValue={trait.growth_condition ?? ""}
+              rows={3}
               className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
             />
           </div>

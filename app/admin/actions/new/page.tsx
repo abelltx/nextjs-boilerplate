@@ -27,29 +27,106 @@ export default async function ActionNewPage({
       ) : null}
 
       <form action={createActionAction} className="space-y-4">
-        <label className="grid gap-2">
-          <span className="text-sm font-medium">Name</span>
-          <input name="name" className="w-full rounded-md border px-3 py-2" required />
-        </label>
+        <div className="rounded-2xl border bg-card p-4 shadow-sm space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold">Core Details</h2>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" name="is_active" defaultChecked />
+              <span>Active</span>
+            </label>
+          </div>
 
-        <label className="grid gap-2">
-          <span className="text-sm font-medium">Type</span>
-          <select name="type" defaultValue="other" className="w-full rounded-md border px-3 py-2">
-            <option value="melee">melee</option>
-            <option value="ranged">ranged</option>
-            <option value="other">other</option>
-          </select>
-        </label>
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Name</span>
+              <input name="name" className="w-full rounded-md border px-3 py-2" required />
+            </label>
 
-        <label className="grid gap-2">
-          <span className="text-sm font-medium">Summary</span>
-          <input name="summary" className="w-full rounded-md border px-3 py-2" />
-        </label>
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Type</span>
+              <select name="type" defaultValue="other" className="w-full rounded-md border px-3 py-2">
+                <option value="melee">melee</option>
+                <option value="ranged">ranged</option>
+                <option value="other">other</option>
+              </select>
+            </label>
 
-        <label className="grid gap-2">
-          <span className="text-sm font-medium">Rules Text</span>
-          <textarea name="rules_text" className="min-h-[140px] w-full rounded-md border px-3 py-2" />
-        </label>
+            <label className="grid gap-2 md:col-span-2">
+              <span className="text-sm font-medium">Summary</span>
+              <input name="summary" className="w-full rounded-md border px-3 py-2" />
+            </label>
+
+            <label className="grid gap-2 md:col-span-2">
+              <span className="text-sm font-medium">Rules Text</span>
+              <textarea name="rules_text" className="min-h-[120px] w-full rounded-md border px-3 py-2" />
+            </label>
+
+            <label className="grid gap-2 md:col-span-2">
+              <span className="text-sm font-medium">Tags (comma separated)</span>
+              <input name="tags" className="w-full rounded-md border px-3 py-2" placeholder="undead, grapple, fire" />
+            </label>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border bg-card p-4 shadow-sm space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold">Combat Fields</h2>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" name="uses_attack_roll" defaultChecked />
+              <span>Uses attack roll</span>
+            </label>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Range normal (ft)</span>
+              <input name="range_normal" className="w-full rounded-md border px-3 py-2" inputMode="numeric" />
+            </label>
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Range max (ft)</span>
+              <input name="range_max" className="w-full rounded-md border px-3 py-2" inputMode="numeric" />
+            </label>
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Attack bonus override</span>
+              <input name="attack_bonus_override" className="w-full rounded-md border px-3 py-2" inputMode="numeric" />
+            </label>
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Damage dice</span>
+              <input name="damage_dice" className="w-full rounded-md border px-3 py-2" placeholder="1d8" />
+            </label>
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Damage bonus</span>
+              <input name="damage_bonus" className="w-full rounded-md border px-3 py-2" inputMode="numeric" />
+            </label>
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Damage type</span>
+              <input name="damage_type" className="w-full rounded-md border px-3 py-2" placeholder="slashing" />
+            </label>
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Save ability</span>
+              <select name="save_ability" defaultValue="" className="w-full rounded-md border px-3 py-2">
+                <option value="">(none)</option>
+                <option value="str">str</option>
+                <option value="dex">dex</option>
+                <option value="con">con</option>
+                <option value="int">int</option>
+                <option value="wis">wis</option>
+                <option value="cha">cha</option>
+              </select>
+            </label>
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Save DC override</span>
+              <input name="save_dc_override" className="w-full rounded-md border px-3 py-2" inputMode="numeric" />
+            </label>
+            <label className="grid gap-2 md:col-span-2">
+              <span className="text-sm font-medium">On fail</span>
+              <textarea name="on_fail" className="w-full rounded-md border px-3 py-2" />
+            </label>
+            <label className="grid gap-2 md:col-span-2">
+              <span className="text-sm font-medium">On success</span>
+              <textarea name="on_success" className="w-full rounded-md border px-3 py-2" />
+            </label>
+          </div>
+        </div>
 
         <button type="submit" className="rounded-md border px-4 py-2 font-medium">
           Create Action

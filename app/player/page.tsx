@@ -27,9 +27,18 @@ type PlayerActionRow = {
   name: string;
   type: string | null;
   summary: string | null;
+  rules_text?: string | null;
+  range_normal?: number | null;
+  range_max?: number | null;
+  uses_attack_roll?: boolean | null;
+  save_ability?: string | null;
+  save_dc_override?: number | null;
   damage_dice?: string | null;
   attack_bonus_override?: number | null;
+  damage_bonus?: number | null;
   damage_type?: string | null;
+  on_fail?: string | null;
+  on_success?: string | null;
 };
 
 function n(v: unknown, fallback = 0) {
@@ -329,11 +338,28 @@ export default async function PlayerPage() {
   if (learnedActionIds.length) {
     const { data: actionRows, error: learnedActionsErr } = await supabase
       .from("actions")
-      .select("id,name,type,summary")
+      .select("*")
       .in("id", learnedActionIds)
       .order("name", { ascending: true });
     if (learnedActionsErr) throw new Error(`Failed to load action details: ${learnedActionsErr.message}`);
-    learnedActions = (actionRows ?? []) as PlayerActionRow[];
+    learnedActions = (actionRows ?? []).map((r: any) => ({
+      id: String(r.id),
+      name: String(r.name ?? "Action"),
+      type: r.type ?? null,
+      summary: r.summary ?? null,
+      rules_text: r.rules_text ?? null,
+      range_normal: Number.isFinite(Number(r.range_normal)) ? Number(r.range_normal) : null,
+      range_max: Number.isFinite(Number(r.range_max)) ? Number(r.range_max) : null,
+      uses_attack_roll: typeof r.uses_attack_roll === "boolean" ? r.uses_attack_roll : null,
+      save_ability: r.save_ability ?? null,
+      save_dc_override: Number.isFinite(Number(r.save_dc_override)) ? Number(r.save_dc_override) : null,
+      damage_dice: r.damage_dice ?? null,
+      attack_bonus_override: Number.isFinite(Number(r.attack_bonus_override)) ? Number(r.attack_bonus_override) : null,
+      damage_bonus: Number.isFinite(Number(r.damage_bonus)) ? Number(r.damage_bonus) : null,
+      damage_type: r.damage_type ?? null,
+      on_fail: r.on_fail ?? null,
+      on_success: r.on_success ?? null,
+    })) as PlayerActionRow[];
   }
   let learnedTraits: Array<{ id: string; name: string; summary: string | null; type: string | null }> = [];
   if (learnedTraitIds.length) {

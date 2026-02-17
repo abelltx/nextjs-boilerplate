@@ -71,6 +71,10 @@ export async function updateActionAction(formData: FormData) {
     attack_bonus_overrideRaw === "" ? null : Number(attack_bonus_overrideRaw);
 
   const damage_dice = String(formData.get("damage_dice") ?? "").trim() || null;
+  const range_normalRaw = String(formData.get("range_normal") ?? "").trim();
+  const range_normal = range_normalRaw === "" ? null : Number(range_normalRaw);
+  const range_maxRaw = String(formData.get("range_max") ?? "").trim();
+  const range_max = range_maxRaw === "" ? null : Number(range_maxRaw);
 
   const damage_bonusRaw = String(formData.get("damage_bonus") ?? "").trim();
   const damage_bonus = damage_bonusRaw === "" ? null : Number(damage_bonusRaw);
@@ -99,6 +103,12 @@ export async function updateActionAction(formData: FormData) {
   if (damage_bonus !== null && !Number.isFinite(damage_bonus)) {
     redirect(`/admin/actions/edit?err=bad_damage_bonus`);
   }
+  if (range_normal !== null && !Number.isFinite(range_normal)) {
+    redirect(`/admin/actions/edit?err=bad_range_normal`);
+  }
+  if (range_max !== null && !Number.isFinite(range_max)) {
+    redirect(`/admin/actions/edit?err=bad_range_max`);
+  }
   if (save_dc_override !== null && !Number.isFinite(save_dc_override)) {
     redirect(`/admin/actions/edit?err=bad_save_dc_override`);
   }
@@ -115,6 +125,8 @@ export async function updateActionAction(formData: FormData) {
 
       uses_attack_roll,
       attack_bonus_override,
+      range_normal,
+      range_max,
 
       damage_dice,
       damage_bonus,

@@ -106,9 +106,18 @@ export default function PlayerHubClient(props: {
     name: string;
     type?: string | null;
     summary?: string | null;
+    rules_text?: string | null;
+    range_normal?: number | null;
+    range_max?: number | null;
+    uses_attack_roll?: boolean | null;
+    save_ability?: string | null;
+    save_dc_override?: number | null;
     damage_dice?: string | null;
+    damage_bonus?: number | null;
     attack_bonus_override?: number | null;
     damage_type?: string | null;
+    on_fail?: string | null;
+    on_success?: string | null;
   }>;
 }) {
   const [tab, setTab] = useState<TabKey>("inventory");
@@ -709,14 +718,62 @@ function ActionListPanel(props: {
     name: string;
     type?: string | null;
     summary?: string | null;
+    rules_text?: string | null;
+    range_normal?: number | null;
+    range_max?: number | null;
+    uses_attack_roll?: boolean | null;
+    save_ability?: string | null;
+    save_dc_override?: number | null;
     damage_dice?: string | null;
+    damage_bonus?: number | null;
     attack_bonus_override?: number | null;
     damage_type?: string | null;
+    on_fail?: string | null;
+    on_success?: string | null;
   }>;
 }) {
+  const [rolls, setRolls] = useState<Record<string, { hit?: string; damage?: string }>>({});
+
+  function rollDie(sides: number) {
+    return Math.floor(Math.random() * sides) + 1;
+  }
+
+  function rollHit(action: any) {
+    const bonus = Number(action.attack_bonus_override ?? 0);
+    const d20 = rollDie(20);
+    const total = d20 + (Number.isFinite(bonus) ? bonus : 0);
+    setRolls((prev) => ({
+      ...prev,
+      [action.id]: {
+        ...(prev[action.id] ?? {}),
+        hit: `${total} (d20 ${d20}${bonus ? ` + ${bonus}` : ""})`,
+      },
+    }));
+  }
+
+  function rollDamage(action: any) {
+    const formula = String(action.damage_dice ?? "").trim().toLowerCase();
+    const bonusFromField = Number(action.damage_bonus ?? 0);
+    const m = formula.match(/^(\d*)d(\d+)([+-]\d+)?$/i);
+    if (!m) return;
+    const count = Math.max(1, Number(m[1] || 1));
+    const sides = Math.max(2, Number(m[2] || 2));
+    const inlineBonus = Number(m[3] || 0);
+    const bonus = (Number.isFinite(inlineBonus) ? inlineBonus : 0) + (Number.isFinite(bonusFromField) ? bonusFromField : 0);
+    const rollsArr = Array.from({ length: count }, () => rollDie(sides));
+    const total = rollsArr.reduce((t, n) => t + n, 0) + bonus;
+    setRolls((prev) => ({
+      ...prev,
+      [action.id]: {
+        ...(prev[action.id] ?? {}),
+        damage: `${total} ([${rollsArr.join(", ")}]${bonus ? ` ${bonus > 0 ? "+" : "-"} ${Math.abs(bonus)}` : ""})`,
+      },
+    }));
+  }
+
   return (
     <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
-      <div className="text-sm font-semibold">Character Actions</div>
+      <div className="text-sm font-semibold">Actions</div>
       {props.actions.length ? (
         <div className="mt-3 overflow-hidden rounded-xl border border-neutral-800">
           <div className="grid grid-cols-12 gap-2 border-b border-neutral-800 bg-neutral-900/50 px-3 py-2 text-[11px] uppercase tracking-wide text-neutral-400">
@@ -732,15 +789,49 @@ function ActionListPanel(props: {
                 <div className="truncate font-semibold text-neutral-100">{a.name}</div>
                 <div className="text-[11px] text-neutral-400">{a.type ?? "other"}</div>
               </div>
-              <div className="col-span-2 text-neutral-300">--</div>
-              <div className="col-span-2 text-neutral-300">
-                {a.attack_bonus_override != null ? `+${a.attack_bonus_override}` : "--"}
+              <div className="col-span-2 text-xs text-neutral-300">
+                {a.range_normal ? `${a.range_normal} ft.` : ""}
+                {a.range_max ? ` (${a.range_max})` : ""}
               </div>
-              <div className="col-span-2 text-neutral-300">
-                {a.damage_dice ? `${a.damage_dice}${a.damage_type ? ` ${a.damage_type}` : ""}` : "--"}
+              <div className="col-span-2 text-xs text-neutral-300">
+                {a.uses_attack_roll !== false && a.attack_bonus_override != null ? (
+                  <div className="space-y-1">
+                    <div>+{a.attack_bonus_override}</div>
+                    <button
+                      type="button"
+                      className="rounded border border-neutral-700 px-2 py-0.5 text-[11px] hover:bg-neutral-900"
+                      onClick={() => rollHit(a)}
+                    >
+                      Roll Hit
+                    </button>
+                    {rolls[a.id]?.hit ? <div className="text-emerald-300">{rolls[a.id]?.hit}</div> : null}
+                  </div>
+                ) : a.save_dc_override != null ? (
+                  <div>{`DC ${a.save_dc_override}${a.save_ability ? ` ${String(a.save_ability).toUpperCase()}` : ""}`}</div>
+                ) : null}
+              </div>
+              <div className="col-span-2 text-xs text-neutral-300">
+                {a.damage_dice ? (
+                  <div>
+                    <div>{`${a.damage_dice}${a.damage_type ? ` ${a.damage_type}` : ""}`}</div>
+                    <button
+                      type="button"
+                      className="mt-1 rounded border border-neutral-700 px-2 py-0.5 text-[11px] hover:bg-neutral-900"
+                      onClick={() => rollDamage(a)}
+                    >
+                      Roll Dmg
+                    </button>
+                    {rolls[a.id]?.damage ? <div className="text-emerald-300">{rolls[a.id]?.damage}</div> : null}
+                  </div>
+                ) : null}
               </div>
               <div className="col-span-3 text-xs text-neutral-300">
-                {a.summary?.trim() || "--"}
+                {a.summary?.trim() ? <div>{a.summary}</div> : null}
+                {!a.summary?.trim() && a.rules_text?.trim() ? (
+                  <div className="line-clamp-2">{a.rules_text}</div>
+                ) : null}
+                {a.on_fail?.trim() ? <div>{`On fail: ${a.on_fail}`}</div> : null}
+                {a.on_success?.trim() ? <div>{`On success: ${a.on_success}`}</div> : null}
               </div>
             </div>
           ))}

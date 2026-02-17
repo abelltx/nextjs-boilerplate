@@ -144,6 +144,26 @@ export default async function ActionEditPage({
             </label>
 
             <label className="grid gap-2">
+              <span className="text-sm font-medium">Range normal (ft)</span>
+              <input
+                name="range_normal"
+                defaultValue={action.range_normal ?? ""}
+                className="w-full rounded-lg border px-3 py-2"
+                inputMode="numeric"
+              />
+            </label>
+
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Range max (ft)</span>
+              <input
+                name="range_max"
+                defaultValue={action.range_max ?? ""}
+                className="w-full rounded-lg border px-3 py-2"
+                inputMode="numeric"
+              />
+            </label>
+
+            <label className="grid gap-2">
               <span className="text-sm font-medium">Damage dice</span>
               <input
                 name="damage_dice"
