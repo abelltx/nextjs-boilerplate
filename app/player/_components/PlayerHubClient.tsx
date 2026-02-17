@@ -77,6 +77,7 @@ function isLiveState(state: any) {
   if (state.is_live === true) return true;
   if (state.live === true) return true;
   if (state.roll_open === true) return true;
+  if (typeof state.presented_block_id === "string" && state.presented_block_id.trim().length > 0) return true;
   return false;
 }
 
@@ -110,9 +111,12 @@ export default function PlayerHubClient(props: {
 
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   useEffect(() => {
-    if (!selectedSessionId) {
-      if (liveSession?.id) setSelectedSessionId(liveSession.id);
-      else if (props.sessions?.[0]?.id) setSelectedSessionId(props.sessions[0].id);
+    if (liveSession?.id && liveSession.id !== selectedSessionId) {
+      setSelectedSessionId(liveSession.id);
+      return;
+    }
+    if (!selectedSessionId && props.sessions?.[0]?.id) {
+      setSelectedSessionId(props.sessions[0].id);
     }
   }, [selectedSessionId, liveSession, props.sessions]);
 
