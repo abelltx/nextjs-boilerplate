@@ -240,7 +240,6 @@ export async function claimNpcTrainingTraitAction(input: {
     .maybeSingle();
   if (traitErr) return { ok: false, error: traitErr.message };
   if (!trait?.id || trait.is_active === false) return { ok: false, error: "Trait not available." };
-  if (String(trait.type ?? "").toLowerCase() !== "training") return { ok: false, error: "Only training traits can be learned here." };
 
   const { data: existing, error: exErr } = await supabase
     .from("player_trait_links")

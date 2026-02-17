@@ -25,9 +25,9 @@ function normalizeUuidList(text: string) {
 export default function NpcTabsEditorClient(props: {
   initialMeta: any;
   fallbackInfo?: string | null;
-  itemOptions?: Array<{ id: string; name: string; faith_required?: number | null }>;
-  traitOptions?: Array<{ id: string; name: string }>;
-  actionOptions?: Array<{ id: string; name: string }>;
+  itemOptions?: Array<{ id: string; name: string; faith_required?: number | null; is_active?: boolean | null }>;
+  traitOptions?: Array<{ id: string; name: string; is_active?: boolean | null }>;
+  actionOptions?: Array<{ id: string; name: string; is_active?: boolean | null }>;
 }) {
   const rawTabs = (props.initialMeta?.npc_tabs ?? {}) as Record<string, any>;
   const [tabs, setTabs] = useState<Record<TabKey, { enabled: boolean; content: string }>>({
@@ -64,9 +64,11 @@ export default function NpcTabsEditorClient(props: {
   });
   const gearIds = useMemo(() => normalizeUuidList(gearText), [gearText]);
   const [trainingText, setTrainingText] = useState<string>(() => {
+    const allIds = props.initialMeta?.npc_tabs?.training?.training_ids;
     const ids = props.initialMeta?.npc_tabs?.training?.trait_ids;
     const actionIds = props.initialMeta?.npc_tabs?.training?.action_ids;
     const merged = [
+      ...(Array.isArray(allIds) ? allIds : []),
       ...(Array.isArray(ids) ? ids : []),
       ...(Array.isArray(actionIds) ? actionIds : []),
     ];
@@ -126,10 +128,27 @@ export default function NpcTabsEditorClient(props: {
         .filter(Boolean),
     [trainingIds, actionMap]
   );
+  const unknownTrainingSnapshots = useMemo(
+    () =>
+      trainingIds
+        .filter((id) => !traitMap.has(id) && !actionMap.has(id))
+        .map((id) => ({ id, name: id, source: "unknown" as const })),
+    [trainingIds, traitMap, actionMap]
+  );
   const combinedTrainingOptions = useMemo(
     () => [
-      ...(props.traitOptions ?? []).map((it) => ({ id: it.id, name: it.name, source: "trait" as const })),
-      ...(props.actionOptions ?? []).map((it) => ({ id: it.id, name: it.name, source: "action" as const })),
+      ...(props.traitOptions ?? []).map((it) => ({
+        id: it.id,
+        name: it.name,
+        is_active: it.is_active,
+        source: "trait" as const,
+      })),
+      ...(props.actionOptions ?? []).map((it) => ({
+        id: it.id,
+        name: it.name,
+        is_active: it.is_active,
+        source: "action" as const,
+      })),
     ],
     [props.traitOptions, props.actionOptions]
   );
@@ -152,10 +171,12 @@ export default function NpcTabsEditorClient(props: {
         },
         training: {
           ...tabs.training,
+          training_ids: trainingIds,
           trait_ids: trainingIds.filter((id) => traitMap.has(id)),
           action_ids: trainingIds.filter((id) => actionMap.has(id)),
           trait_snapshots: trainingSnapshots,
           action_snapshots: actionTrainingSnapshots,
+          unknown_snapshots: unknownTrainingSnapshots,
         },
       },
     },
@@ -246,7 +267,7 @@ export default function NpcTabsEditorClient(props: {
             {k === "training" ? (
               <div className="mt-2 space-y-2 rounded border border-dashed p-2">
                 <div className="text-xs font-semibold text-gray-600">
-                  Training Trait IDs (UUID, one per line)
+                  Training IDs (UUID, one per line)
                 </div>
                 <textarea
                   className="w-full border rounded p-2 h-28 font-mono text-xs"
@@ -255,11 +276,11 @@ export default function NpcTabsEditorClient(props: {
                   onChange={(e) => setTrainingText(e.target.value)}
                 />
                 <div className="space-y-1">
-                  <div className="text-[11px] text-gray-600">Quick add from Traits Library:</div>
+                  <div className="text-[11px] text-gray-600">Quick add from Traits + Actions Library:</div>
                   <select
                     className="w-full border rounded p-2 text-sm disabled:bg-gray-100 disabled:text-gray-500"
                     defaultValue=""
-                    disabled={(props.traitOptions ?? []).length === 0}
+                    disabled={combinedTrainingOptions.length === 0}
                     onChange={(e) => {
                       const next = e.target.value;
                       if (!next) return;
@@ -271,17 +292,19 @@ export default function NpcTabsEditorClient(props: {
                     }}
                   >
                     <option value="">
-                      {combinedTrainingOptions.length ? "Select a training trait or action..." : "No active training traits/actions found"}
+                      {combinedTrainingOptions.length ? "Select a trait or action..." : "No active traits/actions found"}
                     </option>
                     {combinedTrainingOptions.map((it) => (
                       <option key={`${it.source}-${it.id}`} value={it.id}>
-                        [{it.source === "trait" ? "Trait" : "Action"}] {it.name} ({it.id})
+                        [{it.source === "trait" ? "Trait" : "Action"}] {it.name}
+                        {it.is_active === false ? " (inactive)" : ""}
+                        {" "}({it.id})
                       </option>
                     ))}
                   </select>
                   {combinedTrainingOptions.length === 0 ? (
                     <div className="text-[11px] text-amber-700">
-                      Create or activate training traits/actions in <span className="font-mono">/admin/traits</span> and <span className="font-mono">/admin/actions</span>.
+                      Create or activate traits/actions in <span className="font-mono">/admin/traits</span> and <span className="font-mono">/admin/actions</span>.
                     </div>
                   ) : null}
                 </div>

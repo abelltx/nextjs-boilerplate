@@ -99,20 +99,31 @@ export default function NpcTabsCard(props: {
   }, [props.meta]);
   const gearItemIdsKey = JSON.stringify(gearItemIds);
   const trainingSnapshotRaw = JSON.stringify(props.meta?.npc_tabs?.training?.trait_snapshots ?? []);
+  const trainingAllIds = useMemo<string[]>(() => {
+    const allIds = props.meta?.npc_tabs?.training?.training_ids;
+    const traitIds = props.meta?.npc_tabs?.training?.trait_ids;
+    const actionIds = props.meta?.npc_tabs?.training?.action_ids;
+    const merged = [
+      ...(Array.isArray(allIds) ? allIds : []),
+      ...(Array.isArray(traitIds) ? traitIds : []),
+      ...(Array.isArray(actionIds) ? actionIds : []),
+    ];
+    return Array.from(new Set(merged.map((v: any) => String(v ?? "").trim()).filter(Boolean)));
+  }, [props.meta]);
   const trainingTraitIds = useMemo<string[]>(() => {
     const traitIds = props.meta?.npc_tabs?.training?.trait_ids;
-    if (Array.isArray(traitIds)) {
+    if (Array.isArray(traitIds) && traitIds.length) {
       return Array.from(new Set(traitIds.map((v: any) => String(v ?? "").trim()).filter(Boolean)));
     }
-    return [];
-  }, [props.meta]);
+    return trainingAllIds;
+  }, [props.meta, trainingAllIds]);
   const trainingActionIds = useMemo<string[]>(() => {
     const actionIds = props.meta?.npc_tabs?.training?.action_ids;
-    if (Array.isArray(actionIds)) {
+    if (Array.isArray(actionIds) && actionIds.length) {
       return Array.from(new Set(actionIds.map((v: any) => String(v ?? "").trim()).filter(Boolean)));
     }
-    return [];
-  }, [props.meta]);
+    return trainingAllIds;
+  }, [props.meta, trainingAllIds]);
   const trainingIdsKey = JSON.stringify([...trainingTraitIds, ...trainingActionIds].sort());
   const snapshotItems = useMemo<GearItem[]>(() => {
     const raw = JSON.parse(snapshotRaw || "[]");
@@ -150,6 +161,7 @@ export default function NpcTabsCard(props: {
       .filter((it: any): it is TrainingTrait => Boolean(it?.name));
   }, [trainingSnapshotRaw]);
   const trainingActionSnapshotRaw = JSON.stringify(props.meta?.npc_tabs?.training?.action_snapshots ?? []);
+  const trainingUnknownSnapshotRaw = JSON.stringify(props.meta?.npc_tabs?.training?.unknown_snapshots ?? []);
   const trainingActionSnapshotItems = useMemo<TrainingTrait[]>(() => {
     const raw = JSON.parse(trainingActionSnapshotRaw || "[]");
     const arr = Array.isArray(raw) ? raw : [];
@@ -168,13 +180,30 @@ export default function NpcTabsCard(props: {
       .filter((it: any): it is TrainingTrait => Boolean(it?.name));
   }, [trainingActionSnapshotRaw]);
   const [trainingTraits, setTrainingTraits] = useState<TrainingTrait[]>([...trainingSnapshotItems, ...trainingActionSnapshotItems]);
+  const trainingUnknownSnapshotItems = useMemo<TrainingTrait[]>(() => {
+    const raw = JSON.parse(trainingUnknownSnapshotRaw || "[]");
+    const arr = Array.isArray(raw) ? raw : [];
+    return arr
+      .map((it: any, idx: number) => {
+        const id = String(it?.id ?? "").trim();
+        if (!id) return null;
+        return {
+          id: `training-unknown-snapshot-${id}-${idx + 1}`,
+          traitId: id,
+          name: String(it?.name ?? id).trim(),
+          description: "",
+          source: "trait",
+        } as TrainingTrait;
+      })
+      .filter((it: any): it is TrainingTrait => Boolean(it?.name));
+  }, [trainingUnknownSnapshotRaw]);
 
   useEffect(() => {
     setGearItems(snapshotItems);
   }, [snapshotRaw]);
   useEffect(() => {
-    setTrainingTraits([...trainingSnapshotItems, ...trainingActionSnapshotItems]);
-  }, [trainingSnapshotRaw, trainingActionSnapshotRaw]);
+    setTrainingTraits([...trainingSnapshotItems, ...trainingActionSnapshotItems, ...trainingUnknownSnapshotItems]);
+  }, [trainingSnapshotRaw, trainingActionSnapshotRaw, trainingUnknownSnapshotRaw]);
 
   useEffect(() => {
     let alive = true;
@@ -231,7 +260,7 @@ export default function NpcTabsCard(props: {
       ]);
       if (!alive) return;
       if (traitErr || actionErr) {
-        if (!trainingSnapshotItems.length && !trainingActionSnapshotItems.length) setTrainingTraits([]);
+        if (!trainingSnapshotItems.length && !trainingActionSnapshotItems.length && !trainingUnknownSnapshotItems.length) setTrainingTraits([]);
         return;
       }
       const traitById = new Map<string, any>();
@@ -264,13 +293,13 @@ export default function NpcTabsCard(props: {
           } as TrainingTrait;
         })
         .filter((it): it is TrainingTrait => Boolean(it?.name));
-      setTrainingTraits([...mappedTraits, ...mappedActions]);
+      setTrainingTraits([...mappedTraits, ...mappedActions, ...trainingUnknownSnapshotItems]);
     }
     void loadTraits();
     return () => {
       alive = false;
     };
-  }, [supabase, trainingIdsKey, trainingSnapshotRaw, trainingActionSnapshotRaw]);
+  }, [supabase, trainingIdsKey, trainingSnapshotRaw, trainingActionSnapshotRaw, trainingUnknownSnapshotRaw]);
 
   const ownedSet = useMemo(
     () => new Set((props.playerShop?.ownedItems ?? []).map((n) => String(n).trim().toLowerCase())),

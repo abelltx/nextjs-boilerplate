@@ -93,13 +93,10 @@ export default async function AdminEpisodeEditPage({
   const { data: traitOptions } = await supabase
     .from("traits")
     .select("id,name,type,is_active")
-    .eq("is_active", true)
-    .eq("type", "training")
     .order("name", { ascending: true });
   const { data: actionOptions } = await supabase
     .from("actions")
     .select("id,name,is_active")
-    .eq("is_active", true)
     .order("name", { ascending: true });
 
   // Group blocks into scenes (scene blocks become headers)
