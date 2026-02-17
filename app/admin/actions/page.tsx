@@ -1,16 +1,12 @@
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/server";
-import ActionDamageRollClient from "./ActionDamageRollClient";
-import { openActionEditAction, quickUpdateActionDamageAction } from "./edit/actions";
+import { openActionEditAction } from "./edit/actions";
 
 type ActionRow = {
   id: string | null;
   name: string;
   type: string;
   summary: string | null;
-  damage_dice: string | null;
-  damage_type: string | null;
-  damage_bonus: number | null;
   tags: string[] | null;
   is_active: boolean;
   updated_at: string;
@@ -53,7 +49,7 @@ export default async function ActionsPage({
 
   let query = supabase
     .from("actions")
-    .select("id,name,type,summary,damage_dice,damage_type,damage_bonus,tags,is_active,updated_at")
+    .select("id,name,type,summary,tags,is_active,updated_at")
     .order("updated_at", { ascending: false });
 
   if (q) query = query.ilike("name", `%${q}%`);
@@ -181,45 +177,6 @@ export default async function ActionsPage({
                   {a.summary || "No summary yet."}
                 </p>
 
-                {valid ? (
-                  <div className="mt-3 rounded-lg border bg-white/70 p-2">
-                    <div className="mb-1 text-[11px] uppercase text-muted-foreground">Damage Setup</div>
-                    <form action={quickUpdateActionDamageAction} className="grid grid-cols-1 gap-2">
-                      <input type="hidden" name="id" value={idStr} />
-                      <div className="grid grid-cols-3 gap-2">
-                        <input
-                          name="damage_dice"
-                          defaultValue={a.damage_dice ?? ""}
-                          className="rounded border px-2 py-1 text-xs"
-                          placeholder="1d8"
-                        />
-                        <input
-                          name="damage_bonus"
-                          defaultValue={a.damage_bonus ?? ""}
-                          className="rounded border px-2 py-1 text-xs"
-                          placeholder="+1"
-                        />
-                        <input
-                          name="damage_type"
-                          defaultValue={a.damage_type ?? ""}
-                          className="rounded border px-2 py-1 text-xs"
-                          placeholder="slashing"
-                        />
-                      </div>
-                      <div className="flex items-center justify-between gap-2">
-                        <button type="submit" className="rounded border px-2 py-1 text-xs hover:bg-muted">
-                          Save
-                        </button>
-                        <ActionDamageRollClient
-                          damageDice={a.damage_dice}
-                          damageBonus={a.damage_bonus}
-                          damageType={a.damage_type}
-                        />
-                      </div>
-                    </form>
-                  </div>
-                ) : null}
-
                 {Array.isArray(a.tags) && a.tags.length ? (
                   <div className="mt-2 flex flex-wrap gap-1">
                     {a.tags.slice(0, 2).map((tag) => (
@@ -245,4 +202,3 @@ export default async function ActionsPage({
     </div>
   );
 }
-

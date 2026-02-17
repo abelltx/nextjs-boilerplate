@@ -733,6 +733,7 @@ function ActionListPanel(props: {
   }>;
 }) {
   const [rolls, setRolls] = useState<Record<string, { hit?: string; damage?: string }>>({});
+  const HEAL_TYPES = new Set(["healing", "temporary_hp"]);
 
   function rollDie(sides: number) {
     return Math.floor(Math.random() * sides) + 1;
@@ -762,11 +763,12 @@ function ActionListPanel(props: {
     const bonus = (Number.isFinite(inlineBonus) ? inlineBonus : 0) + (Number.isFinite(bonusFromField) ? bonusFromField : 0);
     const rollsArr = Array.from({ length: count }, () => rollDie(sides));
     const total = rollsArr.reduce((t, n) => t + n, 0) + bonus;
+    const outcomeLabel = HEAL_TYPES.has(String(action.damage_type ?? "").toLowerCase()) ? "heal" : "damage";
     setRolls((prev) => ({
       ...prev,
       [action.id]: {
         ...(prev[action.id] ?? {}),
-        damage: `${total} ([${rollsArr.join(", ")}]${bonus ? ` ${bonus > 0 ? "+" : "-"} ${Math.abs(bonus)}` : ""})`,
+        damage: `${total} ${outcomeLabel} ([${rollsArr.join(", ")}]${bonus ? ` ${bonus > 0 ? "+" : "-"} ${Math.abs(bonus)}` : ""})`,
       },
     }));
   }
@@ -819,7 +821,7 @@ function ActionListPanel(props: {
                       className="mt-1 rounded border border-neutral-700 px-2 py-0.5 text-[11px] hover:bg-neutral-900"
                       onClick={() => rollDamage(a)}
                     >
-                      Roll Dmg
+                      {HEAL_TYPES.has(String(a.damage_type ?? "").toLowerCase()) ? "Roll Heal" : "Roll Dmg"}
                     </button>
                     {rolls[a.id]?.damage ? <div className="text-emerald-300">{rolls[a.id]?.damage}</div> : null}
                   </div>

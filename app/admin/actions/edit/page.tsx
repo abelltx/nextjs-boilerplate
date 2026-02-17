@@ -6,6 +6,40 @@ import DeleteActionButton from "./DeleteActionButton";
 import ActionDamageRollClient from "../ActionDamageRollClient";
 
 const COOKIE_KEY = "action_edit_id";
+const DAMAGE_DICE_OPTIONS = [
+  "",
+  "1d4",
+  "1d6",
+  "1d8",
+  "1d10",
+  "1d12",
+  "2d4",
+  "2d6",
+  "2d8",
+  "2d10",
+  "2d12",
+  "3d6",
+  "4d6",
+];
+const DAMAGE_TYPE_OPTIONS = [
+  "",
+  "bludgeoning",
+  "piercing",
+  "slashing",
+  "acid",
+  "cold",
+  "fire",
+  "force",
+  "lightning",
+  "necrotic",
+  "poison",
+  "psychic",
+  "radiant",
+  "thunder",
+  "healing",
+  "temporary_hp",
+  "utility",
+];
 
 function isUuid(v: unknown) {
   if (typeof v !== "string") return false;
@@ -166,12 +200,16 @@ export default async function ActionEditPage({
 
             <label className="grid gap-2">
               <span className="text-sm font-medium">Damage dice formula</span>
-              <input
+              <select
                 name="damage_dice"
                 defaultValue={action.damage_dice ?? ""}
                 className="w-full rounded-lg border px-3 py-2"
-                placeholder="1d8"
-              />
+              >
+                <option value="">(none)</option>
+                {DAMAGE_DICE_OPTIONS.filter(Boolean).map((opt) => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
             </label>
 
             <label className="grid gap-2">
@@ -186,12 +224,16 @@ export default async function ActionEditPage({
 
             <label className="grid gap-2">
               <span className="text-sm font-medium">Damage type</span>
-              <input
+              <select
                 name="damage_type"
                 defaultValue={action.damage_type ?? ""}
                 className="w-full rounded-lg border px-3 py-2"
-                placeholder="slashing"
-              />
+              >
+                <option value="">(none)</option>
+                {DAMAGE_TYPE_OPTIONS.filter(Boolean).map((opt) => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
             </label>
 
             <div className="md:col-span-2 rounded-lg border p-3">

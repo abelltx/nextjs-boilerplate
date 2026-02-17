@@ -1,4 +1,38 @@
 import { createActionAction } from "./actions";
+const DAMAGE_DICE_OPTIONS = [
+  "",
+  "1d4",
+  "1d6",
+  "1d8",
+  "1d10",
+  "1d12",
+  "2d4",
+  "2d6",
+  "2d8",
+  "2d10",
+  "2d12",
+  "3d6",
+  "4d6",
+];
+const DAMAGE_TYPE_OPTIONS = [
+  "",
+  "bludgeoning",
+  "piercing",
+  "slashing",
+  "acid",
+  "cold",
+  "fire",
+  "force",
+  "lightning",
+  "necrotic",
+  "poison",
+  "psychic",
+  "radiant",
+  "thunder",
+  "healing",
+  "temporary_hp",
+  "utility",
+];
 
 export default async function ActionNewPage({
   searchParams,
@@ -91,7 +125,12 @@ export default async function ActionNewPage({
             </label>
             <label className="grid gap-2">
               <span className="text-sm font-medium">Damage dice</span>
-              <input name="damage_dice" className="w-full rounded-md border px-3 py-2" placeholder="1d8" />
+              <select name="damage_dice" defaultValue="" className="w-full rounded-md border px-3 py-2">
+                <option value="">(none)</option>
+                {DAMAGE_DICE_OPTIONS.filter(Boolean).map((opt) => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
             </label>
             <label className="grid gap-2">
               <span className="text-sm font-medium">Damage bonus</span>
@@ -99,7 +138,12 @@ export default async function ActionNewPage({
             </label>
             <label className="grid gap-2">
               <span className="text-sm font-medium">Damage type</span>
-              <input name="damage_type" className="w-full rounded-md border px-3 py-2" placeholder="slashing" />
+              <select name="damage_type" defaultValue="" className="w-full rounded-md border px-3 py-2">
+                <option value="">(none)</option>
+                {DAMAGE_TYPE_OPTIONS.filter(Boolean).map((opt) => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
             </label>
             <label className="grid gap-2">
               <span className="text-sm font-medium">Save ability</span>
