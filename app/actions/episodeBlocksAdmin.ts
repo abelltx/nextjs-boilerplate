@@ -37,7 +37,7 @@ async function maybeUploadBlockImage(
     return pub?.publicUrl ?? null;
   } catch (e) {
     console.error("maybeUploadBlockImage failed:", e);
-    return null;
+    throw new Error("Image upload failed. Please try a smaller image or check episode-assets storage permissions.");
   }
 }
 
@@ -86,18 +86,18 @@ export async function addEpisodeBlockAction(episodeId: string, fd: FormData) {
     const last = all[all.length - 1];
     nextOrder = (last?.sort_order ?? 0) + 10;
   } else {
-    const sceneIdx = all.findIndex((r) => r.id === sceneId && String(r.block_type).toLowerCase() === "scene");
+    const sceneIdx = all.findIndex((r) => r.id === sceneId && String(r.block_type).trim().toLowerCase() === "scene");
     if (sceneIdx === -1) {
       const last = all[all.length - 1];
       nextOrder = (last?.sort_order ?? 0) + 10;
     } else {
       let endIdx = sceneIdx;
       for (let i = sceneIdx + 1; i < all.length; i++) {
-        if (String(all[i].block_type).toLowerCase() === "scene") break;
+        if (String(all[i].block_type).trim().toLowerCase() === "scene") break;
         endIdx = i;
       }
       const prevOrder = all[endIdx]?.sort_order ?? all[sceneIdx].sort_order;
-      const nextScene = all.slice(endIdx + 1).find((r) => String(r.block_type).toLowerCase() === "scene") ?? null;
+      const nextScene = all.slice(endIdx + 1).find((r) => String(r.block_type).trim().toLowerCase() === "scene") ?? null;
       if (!nextScene) {
         nextOrder = prevOrder + 10;
       } else {

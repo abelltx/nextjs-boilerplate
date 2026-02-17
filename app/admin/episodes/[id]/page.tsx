@@ -90,7 +90,7 @@ export default async function AdminEpisodeEditPage({
   let current = { scene: null as any | null, items: [] as any[] };
 
   for (const b of blocks ?? []) {
-    if (b.block_type === "scene") {
+    if (String(b.block_type ?? "").trim().toLowerCase() === "scene") {
       if (current.scene || current.items.length) sceneGroups.push(current);
       current = { scene: b, items: [] };
     } else {
@@ -102,7 +102,7 @@ export default async function AdminEpisodeEditPage({
   const mins = Math.round((episode.default_duration_seconds ?? 0) / 60);
 
   // Progression: count only NON-scene blocks for "Block X of Y"
-  const nonSceneBlocks = (blocks ?? []).filter((b: any) => b.block_type !== "scene");
+  const nonSceneBlocks = (blocks ?? []).filter((b: any) => String(b.block_type ?? "").trim().toLowerCase() !== "scene");
   const nonSceneIndexById = new Map<string, number>();
   nonSceneBlocks.forEach((b: any, idx: number) => nonSceneIndexById.set(b.id, idx + 1));
   const nonSceneTotal = nonSceneBlocks.length;
@@ -111,7 +111,7 @@ export default async function AdminEpisodeEditPage({
   const playerScript = (blocks ?? [])
     .filter((b: any) => b.audience === "players" || b.audience === "both")
     .map((b: any) => {
-      const isScene = b.block_type === "scene";
+      const isScene = String(b.block_type ?? "").trim().toLowerCase() === "scene";
       const title = (b.title ?? "").trim();
       const body = (b.body ?? "").trim();
       if (isScene) {
@@ -229,7 +229,7 @@ export default async function AdminEpisodeEditPage({
                 className="w-full border rounded-lg p-2"
               />
               <div className="text-[11px] text-gray-500">
-                Upload replaces the current map. If you donâ€™t pick a file, the map stays as-is.
+                Upload replaces the current map. If you don't pick a file, the map stays as-is.
               </div>
             </label>
           </div>
@@ -264,7 +264,7 @@ export default async function AdminEpisodeEditPage({
           <div className="rounded-lg border p-3">
             <div className="text-sm font-semibold">{episode.title}</div>
             <div className="text-xs text-gray-600">
-              {episode.episode_code ?? "No code"} â€¢ {mins} min
+              {episode.episode_code ?? "No code"} | {mins} min
             </div>
           </div>
 
@@ -745,7 +745,7 @@ export default async function AdminEpisodeEditPage({
                   {/* Objective */}
                   <details className="rounded-lg border">
                     <summary className="cursor-pointer px-3 py-2 text-sm font-semibold">
-                      Objective <span className="text-xs font-normal text-gray-500">â€¢ players can see</span>
+                      Objective <span className="text-xs font-normal text-gray-500">| players can see</span>
                     </summary>
                     <div className="p-3 border-t space-y-2">
                       <form
@@ -775,7 +775,7 @@ export default async function AdminEpisodeEditPage({
                         <input
                           name="meta_json"
                           className="w-full border rounded p-2 font-mono text-[12px]"
-                          placeholder={`Meta JSON (optional) e.g.\n{\n  "dc": 12,\n  "success": "â€¦",\n  "fail": "â€¦"\n}`}
+                          placeholder={`Meta JSON (optional) e.g.\n{\n  "dc": 12,\n  "success": "...",\n  "fail": "..."\n}`}
                         />
                         <button className="px-3 py-2 rounded bg-black text-white">Add Objective</button>
                       </form>
@@ -785,7 +785,7 @@ export default async function AdminEpisodeEditPage({
                   {/* Map */}
                   <details className="rounded-lg border">
                     <summary className="cursor-pointer px-3 py-2 text-sm font-semibold">
-                      Map <span className="text-xs font-normal text-gray-500">â€¢ players can see</span>
+                      Map <span className="text-xs font-normal text-gray-500">| players can see</span>
                     </summary>
                     <div className="p-3 border-t space-y-2">
                       <form
@@ -822,7 +822,7 @@ export default async function AdminEpisodeEditPage({
                   {/* Narrative */}
                   <details className="rounded-lg border">
                     <summary className="cursor-pointer px-3 py-2 text-sm font-semibold">
-                      Narrative <span className="text-xs font-normal text-gray-500">â€¢ storyteller only (read to players)</span>
+                      Narrative <span className="text-xs font-normal text-gray-500">| storyteller only (read to players)</span>
                     </summary>
                     <div className="p-3 border-t space-y-2">
                       <form
@@ -856,7 +856,7 @@ export default async function AdminEpisodeEditPage({
                   {/* Note */}
                   <details className="rounded-lg border">
                     <summary className="cursor-pointer px-3 py-2 text-sm font-semibold">
-                      Note <span className="text-xs font-normal text-gray-500">â€¢ storyteller awareness</span>
+                      Note <span className="text-xs font-normal text-gray-500">| storyteller awareness</span>
                     </summary>
                     <div className="p-3 border-t space-y-2">
                       <form
@@ -875,7 +875,7 @@ export default async function AdminEpisodeEditPage({
                         <textarea
                           name="body"
                           className="w-full border rounded p-2 h-24"
-                          placeholder="Reminders, timing, hidden triggers, behind-the-screen infoâ€¦"
+                          placeholder="Reminders, timing, hidden triggers, behind-the-screen info..."
                         />
                         <button className="px-3 py-2 rounded bg-black text-white">Add Note</button>
                       </form>
@@ -885,7 +885,7 @@ export default async function AdminEpisodeEditPage({
                   {/* Hex Crawl (placeholder) */}
                   <details className="rounded-lg border">
                     <summary className="cursor-pointer px-3 py-2 text-sm font-semibold">
-                      Hex Crawl <span className="text-xs font-normal text-gray-500">â€¢ placeholder fields</span>
+                      Hex Crawl <span className="text-xs font-normal text-gray-500">| placeholder fields</span>
                     </summary>
                     <div className="p-3 border-t space-y-2">
                       <form
@@ -904,7 +904,7 @@ export default async function AdminEpisodeEditPage({
                         <textarea
                           name="body"
                           className="w-full border rounded p-2 h-24"
-                          placeholder="Hex description / travel prompts / discovery notesâ€¦"
+                          placeholder="Hex description / travel prompts / discovery notes..."
                         />
                         <textarea
                           name="meta_json"
@@ -919,7 +919,7 @@ export default async function AdminEpisodeEditPage({
                   {/* Encounter (placeholder) */}
                   <details className="rounded-lg border">
                     <summary className="cursor-pointer px-3 py-2 text-sm font-semibold">
-                      Encounter <span className="text-xs font-normal text-gray-500">â€¢ placeholder (battle + loot + monsters)</span>
+                      Encounter <span className="text-xs font-normal text-gray-500">| placeholder (battle + loot + monsters)</span>
                     </summary>
                     <div className="p-3 border-t space-y-3">
                       <div className="text-sm text-gray-700">
@@ -943,7 +943,7 @@ export default async function AdminEpisodeEditPage({
                         <textarea
                           name="body"
                           className="w-full border rounded p-2 h-28"
-                          placeholder="Encounter setup / win conditions / battlefield notesâ€¦"
+                          placeholder="Encounter setup / win conditions / battlefield notes..."
                         />
                         <textarea
                           name="meta_json"
@@ -1002,7 +1002,7 @@ export default async function AdminEpisodeEditPage({
                   {/* NPC (placeholder popup behavior) */}
                   <details className="rounded-lg border">
                     <summary className="cursor-pointer px-3 py-2 text-sm font-semibold">
-                      NPC <span className="text-xs font-normal text-gray-500">â€¢ placeholder â€œpopup when importantâ€</span>
+                      NPC <span className="text-xs font-normal text-gray-500">| placeholder \"popup when important\"</span>
                     </summary>
                     <div className="p-3 border-t space-y-2">
                       <form
@@ -1021,7 +1021,7 @@ export default async function AdminEpisodeEditPage({
                         <textarea
                           name="body"
                           className="w-full border rounded p-2 h-24"
-                          placeholder="NPC dialogue / role / what mattersâ€¦"
+                          placeholder="NPC dialogue / role / what matters..."
                         />
                         <textarea
                           name="meta_json"
@@ -1060,10 +1060,10 @@ export default async function AdminEpisodeEditPage({
                             <span className="font-semibold">
                               Block {idx || "?"} of {nonSceneTotal}
                             </span>{" "}
-                            <span className="text-gray-400">â€¢</span>{" "}
+                            <span className="text-gray-400">|</span>{" "}
                             <span className="font-mono">#{b.sort_order}</span>{" "}
-                            <span className="text-gray-400">â€¢</span>{" "}
-                            <span className="font-semibold">{b.block_type}</span> â€¢ {b.audience} â€¢ {b.mode}
+                            <span className="text-gray-400">|</span>{" "}
+                            <span className="font-semibold">{b.block_type}</span> | {b.audience} | {b.mode}
                           </div>
 
                           <div className="flex gap-2">
@@ -1074,7 +1074,7 @@ export default async function AdminEpisodeEditPage({
                                 redirect(`/admin/episodes/${episode.id}`);
                               }}
                             >
-                              <button className="px-2 py-1 border rounded">â†‘</button>
+                              <button className="px-2 py-1 border rounded">Up</button>
                             </form>
 
                             <form
@@ -1084,7 +1084,7 @@ export default async function AdminEpisodeEditPage({
                                 redirect(`/admin/episodes/${episode.id}`);
                               }}
                             >
-                              <button className="px-2 py-1 border rounded">â†“</button>
+                              <button className="px-2 py-1 border rounded">Down</button>
                             </form>
 
                             <form
@@ -1185,4 +1185,5 @@ export default async function AdminEpisodeEditPage({
     </div>
   );
 }
+
 
