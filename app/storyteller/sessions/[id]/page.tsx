@@ -136,8 +136,6 @@ export default async function DmScreenPage({
   const completedCount = scenes.filter((s) => completedSceneIds.includes(s.scene.id)).length;
   const episodePct = totalScenes > 0 ? Math.round((completedCount / totalScenes) * 100) : 0;
 
-  // roll mode map
-  const rollModes = (((state as any).roll_modes ?? {}) as Record<string, string>) || {};
   const blockById = new Map<string, Block>();
   for (const b of ordered) blockById.set(b.id, b);
   const runtimeSequence = buildRuntimeSequence(scenes as any);
@@ -164,74 +162,73 @@ export default async function DmScreenPage({
             </div>
           </div>
 
-          {/* Players + Roll Mode settings */}
+          {/* Players */}
           <div className="mt-4 grid grid-cols-6 gap-2">
             {Array.from({ length: 6 }).map((_, i) => {
               const pRow = (joins ?? [])[i];
               const playerId = pRow?.player_id ?? null;
 
-              const currentMode = playerId ? rollModes[playerId] ?? "dm" : "dm";
-
               return (
-                <div key={i} className="border rounded-lg p-2 text-center space-y-2">
+                <div key={i} className="border rounded-lg p-2 text-center">
                   <div>
                     <div className="text-xs text-gray-500">Player {i + 1}</div>
                     <div className="text-[11px] font-mono break-all">
                       {playerId ? playerId.slice(0, 8) : "-"}
                     </div>
                     {/* LIVE roll result line */}
-    <DmPlayerRollLineRealtime sessionId={sessionId} playerId={playerId} initialState={state as any} />
-  
-                  </div>
-
-                  <div className="text-left">
-                    <div className="text-[10px] uppercase text-gray-500">Roll Input</div>
-
-                    <form
-                      className="space-y-1"
-                      action={async (fd) => {
-                        "use server";
-                        if (!playerId) return;
-
-                        const nextMode = String(fd.get("mode") ?? "dm");
-                        const prev = (((state as any).roll_modes ?? {}) as Record<string, string>) || {};
-                        const next = { ...prev, [playerId]: nextMode };
-
-                        await updateState(session.id, { roll_modes: next });
-                        redirect(`/storyteller/sessions/${session.id}`);
-                      }}
-                    >
-                      <select
-                        name="mode"
-                        defaultValue={currentMode}
-                        className="w-full border rounded p-1 text-xs"
-                        disabled={!playerId}
-                      >
-                        <option value="dm">1) DM enters roll</option>
-                        <option value="player">2) Player enters roll</option>
-                        <option value="digital">3) Digital dice</option>
-                      </select>
-
-                      <button
-                        type="submit"
-                        className="w-full px-2 py-1 rounded bg-black text-white text-xs"
-                        disabled={!playerId}
-                      >
-                        Save
-                      </button>
-                    </form>
+                    <DmPlayerRollLineRealtime sessionId={sessionId} playerId={playerId} initialState={state as any} />
                   </div>
                 </div>
               );
             })}
 
-          </div>   {/* end grid-cols-6 */}
-        {/* LIVE roll results (DM realtime feed) */}
-        <DmRollResultsRealtime
-          sessionId={sessionId}
-          joins={joins as any}
-          initialState={state as any}
-        />
+          </div>
+
+          <div className="mt-3">
+            <CheckPromptCard
+              sessionId={session.id}
+              joins={joins as any[]}
+              rollOpen={Boolean((state as any).roll_open)}
+              currentPrompt={String((state as any).roll_prompt ?? "")}
+              onSendPrompt={async (fd) => {
+                "use server";
+                const checkKey = String(fd.get("check_key") ?? "Perception").trim();
+                const instruction = String(fd.get("instruction") ?? "").trim();
+                const dcRaw = String(fd.get("dc") ?? "").trim();
+                const target = String(fd.get("target") ?? "all").trim() || "all";
+                const dc = Number(dcRaw);
+                const hasDc = Number.isFinite(dc) && dc > 0;
+
+                const prompt = [
+                  "Roll Request",
+                  `${checkKey} check${hasDc ? ` (DC ${dc})` : ""}.`,
+                  instruction || `Click ${checkKey} in your sheet and report your total.`,
+                ].join(" ");
+
+                await updateState(session.id, {
+                  roll_open: true,
+                  roll_die: "d20",
+                  roll_prompt: prompt,
+                  roll_target: target,
+                  roll_round_id: randomUUID(),
+                  roll_results: {},
+                });
+                redirect(`/storyteller/sessions/${session.id}`);
+              }}
+              onClosePrompt={async () => {
+                "use server";
+                await updateState(session.id, { roll_open: false, roll_die: null, roll_prompt: null, roll_target: "all" });
+                redirect(`/storyteller/sessions/${session.id}`);
+              }}
+            />
+          </div>
+
+          {/* LIVE roll results (DM realtime feed) */}
+          <DmRollResultsRealtime
+            sessionId={sessionId}
+            joins={joins as any}
+            initialState={state as any}
+          />
         </div>     {/* end session box */}
 
 
@@ -564,9 +561,9 @@ export default async function DmScreenPage({
         </div>
       </div>
 
-      {/* EPISODE PROGRESS + ROLLS */}
+      {/* EPISODE PROGRESS */}
       <div className="grid grid-cols-12 gap-3">
-        <div className="col-span-6 border rounded-xl p-4">
+        <div className="col-span-12 border rounded-xl p-4">
           <div className="flex items-center justify-between">
             <div>
               <div className="text-xs uppercase text-gray-500">Episode Progress</div>
@@ -581,101 +578,6 @@ export default async function DmScreenPage({
           <div className="mt-3 h-2 rounded bg-gray-200 overflow-hidden">
             <div className="h-2 bg-black" style={{ width: `${episodePct}%` }} />
           </div>
-        </div>
-
-        <div className="col-span-6 border rounded-xl p-4">
-          <CheckPromptCard
-            sessionId={session.id}
-            joins={joins as any[]}
-            rollOpen={Boolean((state as any).roll_open)}
-            currentPrompt={String((state as any).roll_prompt ?? "")}
-            onSendPrompt={async (fd) => {
-              "use server";
-              const checkKey = String(fd.get("check_key") ?? "Perception").trim();
-              const instruction = String(fd.get("instruction") ?? "").trim();
-              const dcRaw = String(fd.get("dc") ?? "").trim();
-              const target = String(fd.get("target") ?? "all").trim() || "all";
-              const dc = Number(dcRaw);
-              const hasDc = Number.isFinite(dc) && dc > 0;
-
-              const prompt = [
-                "Roll Request",
-                `${checkKey} check${hasDc ? ` (DC ${dc})` : ""}.`,
-                instruction || `Click ${checkKey} in your sheet and report your total.`,
-              ].join(" ");
-
-              await updateState(session.id, {
-                roll_open: true,
-                roll_die: "d20",
-                roll_prompt: prompt,
-                roll_target: target,
-                roll_round_id: randomUUID(),
-                roll_results: {},
-              });
-              redirect(`/storyteller/sessions/${session.id}`);
-            }}
-            onClosePrompt={async () => {
-              "use server";
-              await updateState(session.id, { roll_open: false, roll_die: null, roll_prompt: null, roll_target: "all" });
-              redirect(`/storyteller/sessions/${session.id}`);
-            }}
-          />
-
-
-          {(state as any).roll_open ? (
-            <div className="mt-3 space-y-2">
-              <div className="text-xs uppercase text-gray-500">Enter Results (DM mode only)</div>
-
-              <div className="grid grid-cols-3 gap-2">
-                {(joins ?? []).slice(0, 6).map((j: any, idx: number) => {
-                  const playerId = j?.player_id;
-                  if (!playerId) return null;
-
-                  const mode = rollModes[playerId] ?? "dm";
-                  if (mode !== "dm") return null;
-
-                  return (
-                    <form
-                      key={playerId}
-                      className="border rounded-lg p-2 space-y-2"
-                      action={async (fd) => {
-                        "use server";
-                        const val = Number(fd.get("roll_value"));
-                        if (!Number.isFinite(val)) return;
-
-                        const prev = (((state as any).roll_results ?? {}) as Record<string, any>) || {};
-                        const next = {
-                          ...prev,
-                          [playerId]: { value: val, source: "dm", submitted_at: new Date().toISOString() },
-                        };
-
-                        await updateState(session.id, { roll_results: next });
-                        redirect(`/storyteller/sessions/${session.id}`);
-                      }}
-                    >
-                      <div className="text-xs text-gray-500">Player {idx + 1}</div>
-                      <div className="text-[11px] font-mono text-gray-700">{playerId.slice(0, 8)}</div>
-
-                      <input
-                        name="roll_value"
-                        type="number"
-                        className="w-full border rounded p-1 text-sm"
-                        placeholder="Enter roll"
-                      />
-
-                      <button className="w-full px-2 py-1 rounded bg-black text-white text-sm">Submit</button>
-                    </form>
-                  );
-                })}
-              </div>
-
-              <div className="text-xs text-gray-500">
-                Players set to "Player enters roll" or "Digital dice" submit from their device.
-              </div>
-            </div>
-          ) : (
-            <div className="mt-3 text-xs text-gray-600">Open a roll to collect results.</div>
-          )}
         </div>
       </div>
 
