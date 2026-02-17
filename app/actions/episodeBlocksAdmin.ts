@@ -67,17 +67,58 @@ export async function addEpisodeBlockAction(episodeId: string, fd: FormData) {
   const uploadedImageUrl = await maybeUploadBlockImage(supabase, episodeId, fd);
   const finalImageUrl = uploadedImageUrl ?? image_url;
   const meta = parseMetaJson(fd.get("meta_json"));
+  const sceneIdRaw = String(fd.get("scene_id") ?? "").trim();
+  const sceneId = sceneIdRaw && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sceneIdRaw)
+    ? sceneIdRaw
+    : null;
 
-  // Next sort_order = max + 10 (gives room for later inserts without reshuffling)
-  const { data: last } = await supabase
+  // Default append: max + 10. If scene_id is provided, insert at end of that scene.
+  let nextOrder = 10;
+  const { data: allRows, error: allErr } = await supabase
     .from("episode_blocks")
-    .select("sort_order")
+    .select("id,sort_order,block_type")
     .eq("episode_id", episodeId)
-    .order("sort_order", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .order("sort_order", { ascending: true });
+  if (allErr) throw new Error(allErr.message);
+  const all = (allRows ?? []) as Array<{ id: string; sort_order: number; block_type: string }>;
 
-  const nextOrder = (last?.sort_order ?? 0) + 10;
+  if (!sceneId) {
+    const last = all[all.length - 1];
+    nextOrder = (last?.sort_order ?? 0) + 10;
+  } else {
+    const sceneIdx = all.findIndex((r) => r.id === sceneId && String(r.block_type).toLowerCase() === "scene");
+    if (sceneIdx === -1) {
+      const last = all[all.length - 1];
+      nextOrder = (last?.sort_order ?? 0) + 10;
+    } else {
+      let endIdx = sceneIdx;
+      for (let i = sceneIdx + 1; i < all.length; i++) {
+        if (String(all[i].block_type).toLowerCase() === "scene") break;
+        endIdx = i;
+      }
+      const prevOrder = all[endIdx]?.sort_order ?? all[sceneIdx].sort_order;
+      const nextScene = all.slice(endIdx + 1).find((r) => String(r.block_type).toLowerCase() === "scene") ?? null;
+      if (!nextScene) {
+        nextOrder = prevOrder + 10;
+      } else {
+        const gap = Number(nextScene.sort_order) - Number(prevOrder);
+        if (gap >= 2) {
+          nextOrder = prevOrder + Math.floor(gap / 2);
+        } else {
+          // No room: shift everything from nextScene onward by +10.
+          const toShift = all.filter((r) => Number(r.sort_order) >= Number(nextScene.sort_order));
+          for (const r of toShift) {
+            const { error: upErr } = await supabase
+              .from("episode_blocks")
+              .update({ sort_order: Number(r.sort_order) + 10 })
+              .eq("id", r.id);
+            if (upErr) throw new Error(upErr.message);
+          }
+          nextOrder = prevOrder + 10;
+        }
+      }
+    }
+  }
 
   const { error } = await supabase.from("episode_blocks").insert({
     episode_id: episodeId,

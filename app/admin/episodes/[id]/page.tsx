@@ -685,6 +685,7 @@ export default async function AdminEpisodeEditPage({
                     redirect(`/admin/episodes/${episode.id}`);
                   }}
                 >
+                  <input type="hidden" name="scene_id" value={g.scene.id} />
                   <div className="flex items-center justify-between gap-2">
                     <div className="text-sm font-semibold">Quick Add Step</div>
                     <div className="text-xs text-gray-600">Use this for sequence building, then refine in block edit.</div>
@@ -744,6 +745,7 @@ export default async function AdminEpisodeEditPage({
                         <input type="hidden" name="block_type" value="objective" />
                         <input type="hidden" name="audience" value="players" />
                         <input type="hidden" name="mode" value="display" />
+                        <input type="hidden" name="scene_id" value={g.scene.id} />
                         <input
                           name="title"
                           className="w-full border rounded p-2"
@@ -773,6 +775,7 @@ export default async function AdminEpisodeEditPage({
                     <div className="p-3 border-t space-y-2">
                       <form
                         className="space-y-2"
+                        encType="multipart/form-data"
                         action={async (fd) => {
                           "use server";
                           await addEpisodeBlockAction(episode.id, fd);
@@ -782,6 +785,7 @@ export default async function AdminEpisodeEditPage({
                         <input type="hidden" name="block_type" value="map" />
                         <input type="hidden" name="audience" value="players" />
                         <input type="hidden" name="mode" value="display" />
+                        <input type="hidden" name="scene_id" value={g.scene.id} />
                         <input
                           name="title"
                           className="w-full border rounded p-2"
@@ -817,6 +821,7 @@ export default async function AdminEpisodeEditPage({
                         <input type="hidden" name="block_type" value="narrative" />
                         <input type="hidden" name="audience" value="storyteller" />
                         <input type="hidden" name="mode" value="read" />
+                        <input type="hidden" name="scene_id" value={g.scene.id} />
                         <input
                           name="title"
                           className="w-full border rounded p-2"
@@ -850,6 +855,7 @@ export default async function AdminEpisodeEditPage({
                         <input type="hidden" name="block_type" value="note" />
                         <input type="hidden" name="audience" value="storyteller" />
                         <input type="hidden" name="mode" value="display" />
+                        <input type="hidden" name="scene_id" value={g.scene.id} />
                         <input name="title" className="w-full border rounded p-2" defaultValue="Note" />
                         <textarea
                           name="body"
@@ -878,6 +884,7 @@ export default async function AdminEpisodeEditPage({
                         <input type="hidden" name="block_type" value="hex_crawl" />
                         <input type="hidden" name="audience" value="storyteller" />
                         <input type="hidden" name="mode" value="prompt" />
+                        <input type="hidden" name="scene_id" value={g.scene.id} />
                         <input name="title" className="w-full border rounded p-2" placeholder="Hex title" defaultValue="Hex Crawl" />
                         <textarea
                           name="body"
@@ -916,6 +923,7 @@ export default async function AdminEpisodeEditPage({
                         <input type="hidden" name="block_type" value="encounter" />
                         <input type="hidden" name="audience" value="both" />
                         <input type="hidden" name="mode" value="encounter" />
+                        <input type="hidden" name="scene_id" value={g.scene.id} />
                         <input name="title" className="w-full border rounded p-2" defaultValue="Encounter" />
                         <textarea
                           name="body"
@@ -942,6 +950,7 @@ export default async function AdminEpisodeEditPage({
                         <input type="hidden" name="block_type" value="loot" />
                         <input type="hidden" name="audience" value="both" />
                         <input type="hidden" name="mode" value="display" />
+                        <input type="hidden" name="scene_id" value={g.scene.id} />
                         <input name="title" className="w-full border rounded p-2" defaultValue="Loot (after encounter)" />
                         <textarea
                           name="body"
@@ -963,6 +972,7 @@ export default async function AdminEpisodeEditPage({
                         <input type="hidden" name="block_type" value="monster" />
                         <input type="hidden" name="audience" value="storyteller" />
                         <input type="hidden" name="mode" value="display" />
+                        <input type="hidden" name="scene_id" value={g.scene.id} />
                         <input name="title" className="w-full border rounded p-2" defaultValue="Monsters (placeholder)" />
                         <textarea
                           name="body"
@@ -991,6 +1001,7 @@ export default async function AdminEpisodeEditPage({
                         <input type="hidden" name="block_type" value="npc" />
                         <input type="hidden" name="audience" value="both" />
                         <input type="hidden" name="mode" value="prompt" />
+                        <input type="hidden" name="scene_id" value={g.scene.id} />
                         <input name="title" className="w-full border rounded p-2" placeholder="NPC name" defaultValue="NPC" />
                         <textarea
                           name="body"
