@@ -22,6 +22,12 @@ function mod(score?: number) {
   return Math.floor((s - 10) / 2);
 }
 
+function abilityGearBonus(stat: StatBlock, key: AbilityKey) {
+  const info = stat._breakdown?.abilities?.[key];
+  const gear = Number(info?.gear ?? 0);
+  return Number.isFinite(gear) ? gear : 0;
+}
+
 function fmt(n: number) {
   return n >= 0 ? `+${n}` : String(n);
 }
@@ -56,7 +62,7 @@ export function AbilitiesCard({
             key={r.k}
             onClick={(e) => {
               const score = Number(a[r.k] ?? 10);
-              const bonus = mod(score);
+              const bonus = mod(score) + abilityGearBonus(stat, r.k);
               const roll = Math.floor(Math.random() * 20) + 1;
               const total = roll + bonus;
               onAbilityRoll?.(
@@ -181,10 +187,10 @@ export function SkillsCard({
           <div className="text-right">Bonus</div>
         </div>
         {skillDefs.map((s) => {
-          const abilityMod = mod(a[s.ability]);
+          const abilityBonus = mod(a[s.ability]) + abilityGearBonus(stat, s.ability);
           const hasOverride = Object.prototype.hasOwnProperty.call(skills, s.key);
-          const totalBonus = hasOverride ? Number(skills[s.key] ?? 0) : abilityMod;
-          const proficient = totalBonus > abilityMod;
+          const totalBonus = hasOverride ? Number(skills[s.key] ?? 0) + abilityGearBonus(stat, s.ability) : abilityBonus;
+          const proficient = totalBonus > abilityBonus;
 
           return (
             <button

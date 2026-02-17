@@ -21,6 +21,12 @@ function mod(score?: number) {
   return Math.floor((s - 10) / 2);
 }
 
+function abilityGearBonus(stat: StatBlock, key: AbilityKey) {
+  const info = stat?._breakdown?.abilities?.[key];
+  const gear = Number(info?.gear ?? 0);
+  return Number.isFinite(gear) ? gear : 0;
+}
+
 function fmtSigned(n: number) {
   return n >= 0 ? `+${n}` : String(n);
 }
@@ -72,13 +78,38 @@ export default function RollPanel(props: {
   );
 
   const skillEntries = useMemo(() => {
-    const entries = Object.entries(skills).map(([name, bonus]) => ({
-      name,
-      bonus: Number(bonus ?? 0),
-    }));
+    const abilityBySkill: Record<string, AbilityKey> = {
+      acrobatics: "dex",
+      animal_handling: "wis",
+      arcana: "int",
+      athletics: "str",
+      deception: "cha",
+      history: "int",
+      insight: "wis",
+      intimidation: "cha",
+      investigation: "int",
+      medicine: "wis",
+      nature: "int",
+      perception: "wis",
+      performance: "cha",
+      persuasion: "cha",
+      religion: "int",
+      sleight_of_hand: "dex",
+      stealth: "dex",
+      survival: "wis",
+    };
+
+    const entries = Object.entries(skills).map(([name, bonus]) => {
+      const ability = abilityBySkill[name];
+      const gear = ability ? abilityGearBonus(props.stat, ability) : 0;
+      return {
+        name,
+        bonus: Number(bonus ?? 0) + gear,
+      };
+    });
     entries.sort((a, b) => a.name.localeCompare(b.name));
     return entries;
-  }, [skills]);
+  }, [skills, props.stat]);
 
   const doRoll = (label: string, dice: { n: number; sides: number }[], bonus = 0) => {
     const rolls: number[] = [];
@@ -107,6 +138,7 @@ export default function RollPanel(props: {
 
     setLast(entry);
     setHistory((h) => [entry, ...h].slice(0, 12));
+    return entry;
   };
 
   const disabled = Boolean(props.disabled || props.lockRoll);
@@ -125,19 +157,83 @@ export default function RollPanel(props: {
         </div>
 
         <div className="mt-3 grid grid-cols-4 gap-2 sm:grid-cols-7">
-          <DieButton sides={4} onClick={() => doRoll("Roll d4", [{ n: 1, sides: 4 }])} disabled={disabled} highlight={props.highlightDie === 4} onGuidedRoll={props.onGuidedRoll} />
-          <DieButton sides={6} onClick={() => doRoll("Roll d6", [{ n: 1, sides: 6 }])} disabled={disabled} highlight={props.highlightDie === 6} onGuidedRoll={props.onGuidedRoll} />
-          <DieButton sides={8} onClick={() => doRoll("Roll d8", [{ n: 1, sides: 8 }])} disabled={disabled} highlight={props.highlightDie === 8} onGuidedRoll={props.onGuidedRoll} />
-          <DieButton sides={10} onClick={() => doRoll("Roll d10", [{ n: 1, sides: 10 }])} disabled={disabled} highlight={props.highlightDie === 10} onGuidedRoll={props.onGuidedRoll} />
-          <DieButton sides={12} onClick={() => doRoll("Roll d12", [{ n: 1, sides: 12 }])} disabled={disabled} highlight={props.highlightDie === 12} onGuidedRoll={props.onGuidedRoll} />
-          <DieButton sides={20} onClick={() => doRoll("Roll d20", [{ n: 1, sides: 20 }])} disabled={disabled} highlight={props.highlightDie === 20} onGuidedRoll={props.onGuidedRoll} />
+          <DieButton
+            sides={4}
+            onClick={(fromRect) => {
+              const entry = doRoll("Roll d4", [{ n: 1, sides: 4 }]);
+              if (props.highlightDie === 4 && props.onGuidedRoll) {
+                props.onGuidedRoll({ label: entry.label, total: entry.total, breakdown: entry.breakdown }, fromRect);
+              }
+            }}
+            disabled={disabled}
+            highlight={props.highlightDie === 4}
+          />
+          <DieButton
+            sides={6}
+            onClick={(fromRect) => {
+              const entry = doRoll("Roll d6", [{ n: 1, sides: 6 }]);
+              if (props.highlightDie === 6 && props.onGuidedRoll) {
+                props.onGuidedRoll({ label: entry.label, total: entry.total, breakdown: entry.breakdown }, fromRect);
+              }
+            }}
+            disabled={disabled}
+            highlight={props.highlightDie === 6}
+          />
+          <DieButton
+            sides={8}
+            onClick={(fromRect) => {
+              const entry = doRoll("Roll d8", [{ n: 1, sides: 8 }]);
+              if (props.highlightDie === 8 && props.onGuidedRoll) {
+                props.onGuidedRoll({ label: entry.label, total: entry.total, breakdown: entry.breakdown }, fromRect);
+              }
+            }}
+            disabled={disabled}
+            highlight={props.highlightDie === 8}
+          />
+          <DieButton
+            sides={10}
+            onClick={(fromRect) => {
+              const entry = doRoll("Roll d10", [{ n: 1, sides: 10 }]);
+              if (props.highlightDie === 10 && props.onGuidedRoll) {
+                props.onGuidedRoll({ label: entry.label, total: entry.total, breakdown: entry.breakdown }, fromRect);
+              }
+            }}
+            disabled={disabled}
+            highlight={props.highlightDie === 10}
+          />
+          <DieButton
+            sides={12}
+            onClick={(fromRect) => {
+              const entry = doRoll("Roll d12", [{ n: 1, sides: 12 }]);
+              if (props.highlightDie === 12 && props.onGuidedRoll) {
+                props.onGuidedRoll({ label: entry.label, total: entry.total, breakdown: entry.breakdown }, fromRect);
+              }
+            }}
+            disabled={disabled}
+            highlight={props.highlightDie === 12}
+          />
+          <DieButton
+            sides={20}
+            onClick={(fromRect) => {
+              const entry = doRoll("Roll d20", [{ n: 1, sides: 20 }]);
+              if (props.highlightDie === 20 && props.onGuidedRoll) {
+                props.onGuidedRoll({ label: entry.label, total: entry.total, breakdown: entry.breakdown }, fromRect);
+              }
+            }}
+            disabled={disabled}
+            highlight={props.highlightDie === 20}
+          />
           <DieButton
             sides={100}
             label="d100"
-            onClick={() => doRoll("Roll d100", [{ n: 1, sides: 100 }])}
+            onClick={(fromRect) => {
+              const entry = doRoll("Roll d100", [{ n: 1, sides: 100 }]);
+              if (props.highlightDie === 100 && props.onGuidedRoll) {
+                props.onGuidedRoll({ label: entry.label, total: entry.total, breakdown: entry.breakdown }, fromRect);
+              }
+            }}
             disabled={disabled}
             highlight={props.highlightDie === 100}
-            onGuidedRoll={props.onGuidedRoll}
           />
         </div>
       </div>
@@ -148,16 +244,20 @@ export default function RollPanel(props: {
         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
           {abilityRows.map((a) => {
             const score = Number((abilities as any)[a.key] ?? 10);
-            const bonus = mod(score);
+            const bonus = mod(score) + abilityGearBonus(props.stat, a.key);
             return (
               <ActionRollButton
                 key={a.key}
                 title={`${a.label} Check`}
                 subtitle={`d20 ${fmtSigned(bonus)}`}
-                onClick={() => doRoll(`${a.label} Check`, [{ n: 1, sides: 20 }], bonus)}
+                onClick={(fromRect) => {
+                  const entry = doRoll(`${a.label} Check`, [{ n: 1, sides: 20 }], bonus);
+                  if (props.highlightAbility === a.key && props.onGuidedRoll) {
+                    props.onGuidedRoll({ label: entry.label, total: entry.total, breakdown: entry.breakdown }, fromRect);
+                  }
+                }}
                 disabled={disabled}
                 highlight={props.highlightAbility === a.key}
-                onGuidedRoll={props.onGuidedRoll}
               />
             );
           })}
@@ -180,10 +280,14 @@ export default function RollPanel(props: {
                 key={s.name}
                 title={s.name}
                 subtitle={`d20 ${fmtSigned(s.bonus)}`}
-                onClick={() => doRoll(`${s.name} Check`, [{ n: 1, sides: 20 }], s.bonus)}
+                onClick={(fromRect) => {
+                  const entry = doRoll(`${s.name} Check`, [{ n: 1, sides: 20 }], s.bonus);
+                  if (props.highlightSkill?.toLowerCase() === s.name.toLowerCase() && props.onGuidedRoll) {
+                    props.onGuidedRoll({ label: entry.label, total: entry.total, breakdown: entry.breakdown }, fromRect);
+                  }
+                }}
                 disabled={disabled}
                 highlight={props.highlightSkill?.toLowerCase() === s.name.toLowerCase()}
-                onGuidedRoll={props.onGuidedRoll}
               />
             ))}
           </div>
@@ -272,23 +376,15 @@ export default function RollPanel(props: {
 function DieButton(props: {
   sides: number;
   label?: string;
-  onClick: () => void;
+  onClick: (fromRect: DOMRect) => void;
   disabled?: boolean;
   highlight?: boolean;
-  onGuidedRoll?: (meta: { label: string; total: number; breakdown: string }, fromRect: DOMRect) => void;
 }) {
   const text = props.label ?? `d${props.sides}`;
   return (
     <button
       onClick={(e) => {
-        props.onClick();
-        if (props.highlight && props.onGuidedRoll) {
-          const roll = Math.floor(Math.random() * props.sides) + 1;
-          props.onGuidedRoll(
-            { label: `${text.toUpperCase()} Roll`, total: roll, breakdown: `${text}(${roll})` },
-            e.currentTarget.getBoundingClientRect()
-          );
-        }
+        props.onClick(e.currentTarget.getBoundingClientRect());
       }}
       disabled={props.disabled}
       className={[
@@ -311,28 +407,14 @@ function DieButton(props: {
 function ActionRollButton(props: {
   title: string;
   subtitle: string;
-  onClick: () => void;
+  onClick: (fromRect: DOMRect) => void;
   disabled?: boolean;
   highlight?: boolean;
-  onGuidedRoll?: (meta: { label: string; total: number; breakdown: string }, fromRect: DOMRect) => void;
 }) {
   return (
     <button
       onClick={(e) => {
-        props.onClick();
-        if (props.highlight && props.onGuidedRoll) {
-          const bonusMatch = props.subtitle.match(/([+-]\d+)/);
-          const bonus = bonusMatch ? Number(bonusMatch[1]) : 0;
-          const roll = Math.floor(Math.random() * 20) + 1;
-          props.onGuidedRoll(
-            {
-              label: props.title,
-              total: roll + bonus,
-              breakdown: `d20(${roll}) ${bonus >= 0 ? "+" : "-"} ${Math.abs(bonus)}`,
-            },
-            e.currentTarget.getBoundingClientRect()
-          );
-        }
+        props.onClick(e.currentTarget.getBoundingClientRect());
       }}
       disabled={props.disabled}
       className={[
