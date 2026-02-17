@@ -319,6 +319,7 @@ export default function PlayerHubClient(props: {
       alert(res.error ?? "Could not add item.");
       return;
     }
+    window.dispatchEvent(new CustomEvent("inventory:refresh"));
     router.refresh();
   }
 

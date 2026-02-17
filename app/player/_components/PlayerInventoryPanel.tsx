@@ -128,6 +128,17 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [characterId]);
 
+  useEffect(() => {
+    const onRefresh = () => {
+      void load();
+    };
+    window.addEventListener("inventory:refresh", onRefresh as EventListener);
+    return () => {
+      window.removeEventListener("inventory:refresh", onRefresh as EventListener);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const filtered = rows;
 
     async function setEquipped(row: ItemRow, equipped: boolean) {
