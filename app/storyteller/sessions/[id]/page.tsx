@@ -1,4 +1,4 @@
-export const dynamic = "force-dynamic";
+﻿export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const fetchCache = "force-no-store";
 
@@ -11,6 +11,10 @@ import { presentBlockToPlayersAction, clearPresentedAction } from "@/app/actions
 import DmRollResultsRealtime from "@/components/DmRollResultsRealtime";
 import DmPlayerRollLineRealtime from "@/components/DmPlayerRollLineRealtime";
 import { randomUUID } from "crypto";
+import SequenceRail from "@/components/episode-runtime/SequenceRail";
+import RevealCard from "@/components/episode-runtime/RevealCard";
+import CheckPromptCard from "@/components/episode-runtime/CheckPromptCard";
+import { buildRuntimeSequence, extractMapMarkers } from "@/lib/episodeRuntime";
 
 
 
@@ -41,19 +45,6 @@ function isEncounter(b: Block) {
 }
 function isPresentable(b: Block) {
   return b.audience !== "storyteller";
-}
-
-function getMapMarkers(meta: any): Array<{ id: string; label: string; x: number; y: number; target_block_id: string | null }> {
-  const list = Array.isArray(meta?.markers) ? meta.markers : [];
-  return list
-    .map((m: any, i: number) => ({
-      id: String(m?.id ?? `m-${i + 1}`),
-      label: String(m?.label ?? `Marker ${i + 1}`),
-      x: Number(m?.x ?? 50),
-      y: Number(m?.y ?? 50),
-      target_block_id: m?.target_block_id ? String(m.target_block_id) : null,
-    }))
-    .filter((m: any) => Number.isFinite(m.x) && Number.isFinite(m.y));
 }
 
 export default async function DmScreenPage({
@@ -149,6 +140,8 @@ export default async function DmScreenPage({
   const rollModes = (((state as any).roll_modes ?? {}) as Record<string, string>) || {};
   const blockById = new Map<string, Block>();
   for (const b of ordered) blockById.set(b.id, b);
+  const runtimeSequence = buildRuntimeSequence(scenes as any);
+  const activeSceneId = scenes[presentedSceneIdx]?.scene?.id ?? null;
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-4">
@@ -184,9 +177,9 @@ export default async function DmScreenPage({
                   <div>
                     <div className="text-xs text-gray-500">Player {i + 1}</div>
                     <div className="text-[11px] font-mono break-all">
-                      {playerId ? playerId.slice(0, 8) : "—"}
+                      {playerId ? playerId.slice(0, 8) : "-"}
                     </div>
-                    {/* ✅ LIVE roll result line */}
+                    {/* LIVE roll result line */}
     <DmPlayerRollLineRealtime sessionId={sessionId} playerId={playerId} initialState={state as any} />
   
                   </div>
@@ -233,7 +226,7 @@ export default async function DmScreenPage({
             })}
 
           </div>   {/* end grid-cols-6 */}
-        {/* ✅ LIVE roll results (DM realtime feed) */}
+        {/* LIVE roll results (DM realtime feed) */}
         <DmRollResultsRealtime
           sessionId={sessionId}
           joins={joins as any}
@@ -252,7 +245,7 @@ export default async function DmScreenPage({
                 Load / switch which episode is attached to this session
               </div>
               <div className="mt-1 text-xs text-gray-500">
-                Current episode_id: <span className="font-mono">{episodeId ?? "—"}</span>
+                Current episode_id: <span className="font-mono">{episodeId ?? "-"}</span>
               </div>
             </div>
             <EpisodePicker sessionId={sessionId} episodes={episodes ?? []} />
@@ -326,7 +319,7 @@ export default async function DmScreenPage({
             <div className="text-sm text-gray-700">
               {totalScenes ? (
                 <>
-                  Current: <b>{currentSceneHuman || 0}</b> of <b>{totalScenes}</b> • Completed: <b>{completedCount}</b> of{" "}
+                  Current: <b>{currentSceneHuman || 0}</b> of <b>{totalScenes}</b> | Completed: <b>{completedCount}</b> of{" "}
                   <b>{totalScenes}</b>
                 </>
               ) : (
@@ -347,6 +340,8 @@ export default async function DmScreenPage({
         </div>
 
         <div className="space-y-2">
+          <SequenceRail items={runtimeSequence} activeId={activeSceneId} />
+
           {scenes.map((s, si) => {
             const sceneLive = s.scene.id === presentedId || s.children.some((c) => c.id === presentedId);
             const sceneDone = completedSceneIds.includes(s.scene.id);
@@ -414,7 +409,7 @@ export default async function DmScreenPage({
                         }}
                       >
                         <button className="px-3 py-2 rounded bg-black text-white text-sm" disabled={!nextInScene}>
-                          Next in Scene ▶
+                          Next in Scene {" >"}
                         </button>
                       </form>
 
@@ -426,7 +421,7 @@ export default async function DmScreenPage({
                         }}
                       >
                         <button className="px-3 py-2 rounded border text-sm" disabled={!nextSceneFirst}>
-                          Next Scene ⇢
+                          Next Scene {" >>"}
                         </button>
                       </form>
                     </div>
@@ -444,7 +439,7 @@ export default async function DmScreenPage({
                             <summary className="cursor-pointer flex items-center justify-between gap-3">
                               <div className="text-sm">
                                 <span className="font-semibold">{b.block_type}</span>
-                                {b.title ? ` — ${b.title}` : ""}
+                                {b.title ? ` - ${b.title}` : ""}
                                 {!presentable ? <span className="ml-2 text-xs text-gray-500">(ST)</span> : null}
                                 {live ? <span className="ml-2 text-xs text-green-700">(LIVE)</span> : null}
                               </div>
@@ -452,15 +447,20 @@ export default async function DmScreenPage({
                             </summary>
 
                             <div className="mt-2 space-y-2">
-                              {b.body ? <div className="whitespace-pre-wrap text-sm">{b.body}</div> : null}
-
-                              {b.image_url ? (
-                                <div className="rounded border overflow-hidden">
-                                  <div className="relative">
+                              <RevealCard
+                                kind={b.block_type}
+                                audience={b.audience}
+                                mode={b.mode}
+                                title={b.title}
+                                body={b.body}
+                                className="border-gray-200"
+                              >
+                                {b.image_url ? (
+                                  <div className="relative overflow-hidden rounded border">
                                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                                    <img src={b.image_url} alt="Block" className="w-full h-auto" />
+                                    <img src={b.image_url} alt={b.title ?? "Block"} className="w-full h-auto" />
                                     {String(b.block_type).toLowerCase() === "map"
-                                      ? getMapMarkers(b.meta).map((m, i) => (
+                                      ? extractMapMarkers(b.meta).map((m, i) => (
                                           <div
                                             key={m.id}
                                             className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-white bg-black/80 px-2 py-0.5 text-[10px] font-semibold text-white"
@@ -475,32 +475,32 @@ export default async function DmScreenPage({
                                         ))
                                       : null}
                                   </div>
-                                </div>
-                              ) : null}
+                                ) : null}
+                              </RevealCard>
 
                               {String(b.block_type).toLowerCase() === "map" ? (
                                 <div className="rounded border p-2 bg-gray-50 space-y-2">
                                   <div className="text-xs uppercase text-gray-500">Map Markers</div>
-                                  {getMapMarkers(b.meta).length === 0 ? (
+                                  {extractMapMarkers(b.meta).length === 0 ? (
                                     <div className="text-sm text-gray-600">No markers linked yet.</div>
                                   ) : (
                                     <div className="flex flex-wrap gap-2">
-                                      {getMapMarkers(b.meta).map((m, i) => {
-                                        const target = m.target_block_id ? blockById.get(m.target_block_id) : null;
+                                      {extractMapMarkers(b.meta).map((m, i) => {
+                                        const target = m.targetBlockId ? blockById.get(m.targetBlockId) : null;
                                         return (
                                           <form
                                             key={m.id}
                                             action={async () => {
                                               "use server";
-                                              if (!m.target_block_id) return;
-                                              await presentBlockToPlayersAction(session.id, m.target_block_id);
+                                              if (!m.targetBlockId) return;
+                                              await presentBlockToPlayersAction(session.id, m.targetBlockId);
                                               redirect(`/storyteller/sessions/${session.id}`);
                                             }}
                                           >
                                             <button
                                               className="rounded border px-2 py-1 text-xs"
-                                              disabled={!m.target_block_id}
-                                              title={m.target_block_id ? `Reveal ${target?.title ?? "linked block"}` : "No linked block"}
+                                              disabled={!m.targetBlockId}
+                                              title={m.targetBlockId ? `Reveal ${target?.title ?? "linked block"}` : "No linked block"}
                                             >
                                               Reveal {i + 1}: {m.label}
                                             </button>
@@ -526,8 +526,8 @@ export default async function DmScreenPage({
                                         <div key={m.id || mi} className="border rounded p-2 bg-white">
                                           <div className="font-semibold">{m.name || `Monster ${mi + 1}`}</div>
                                           <div className="text-xs text-gray-600">
-                                            AC {m.ac ?? "—"} • HP {m.hp ?? "—"} • ATK {m.attack ?? "—"} • DMG{" "}
-                                            {m.damage ?? "—"}
+                                            AC {m.ac ?? "-"} | HP {m.hp ?? "-"} | ATK {m.attack ?? "-"} | DMG{" "}
+                                            {m.damage ?? "-"}
                                           </div>
                                         </div>
                                       ))}
@@ -573,7 +573,7 @@ export default async function DmScreenPage({
               <div className="font-bold">
                 {totalScenes === 0 ? "No scenes" : `Scene ${Math.max(1, currentSceneHuman || 1)} / ${totalScenes}`}
               </div>
-              <div className="text-xs text-gray-600 mt-1">Completion is driven by “Mark Scene Complete”.</div>
+              <div className="text-xs text-gray-600 mt-1">Completion is driven by "Mark Scene Complete".</div>
             </div>
             <div className="text-2xl font-bold">{episodePct}%</div>
           </div>
@@ -584,42 +584,43 @@ export default async function DmScreenPage({
         </div>
 
         <div className="col-span-6 border rounded-xl p-4">
-          <div className="text-xs uppercase text-gray-500">Roll Requests (physical dice)</div>
+          <CheckPromptCard
+            sessionId={session.id}
+            joins={joins as any[]}
+            rollOpen={Boolean((state as any).roll_open)}
+            currentPrompt={String((state as any).roll_prompt ?? "")}
+            onSendPrompt={async (fd) => {
+              "use server";
+              const checkKey = String(fd.get("check_key") ?? "Perception").trim();
+              const instruction = String(fd.get("instruction") ?? "").trim();
+              const dcRaw = String(fd.get("dc") ?? "").trim();
+              const target = String(fd.get("target") ?? "all").trim() || "all";
+              const dc = Number(dcRaw);
+              const hasDc = Number.isFinite(dc) && dc > 0;
 
-          <div className="mt-2 flex flex-wrap gap-2">
-            {["d20", "d12", "d10", "d8", "d6", "d4"].map((die) => (
-              <form
-                key={die}
-                action={async () => {
-                  "use server";
-                  await updateState(session.id, {
-                    roll_open: true,
-                    roll_die: die,
-                    roll_prompt: `Roll your ${die.toUpperCase()} now`,
-                    roll_target: "all",
+              const prompt = [
+                "Roll Request",
+                `${checkKey} check${hasDc ? ` (DC ${dc})` : ""}.`,
+                instruction || `Click ${checkKey} in your sheet and report your total.`,
+              ].join(" ");
 
-                    // NEW — one-roll-per-round enforcement
-                    roll_round_id: randomUUID(),
-                    roll_results: {},
-                  });
+              await updateState(session.id, {
+                roll_open: true,
+                roll_die: "d20",
+                roll_prompt: prompt,
+                roll_target: target,
+                roll_round_id: randomUUID(),
+                roll_results: {},
+              });
+              redirect(`/storyteller/sessions/${session.id}`);
+            }}
+            onClosePrompt={async () => {
+              "use server";
+              await updateState(session.id, { roll_open: false, roll_die: null, roll_prompt: null, roll_target: "all" });
+              redirect(`/storyteller/sessions/${session.id}`);
+            }}
+          />
 
-                  redirect(`/storyteller/sessions/${session.id}`);
-                }}
-              >
-                <button className="px-3 py-2 rounded bg-black text-white text-sm">Roll {die}</button>
-              </form>
-            ))}
-
-            <form
-              action={async () => {
-                "use server";
-                await updateState(session.id, { roll_open: false, roll_die: null, roll_prompt: null });
-                redirect(`/storyteller/sessions/${session.id}`);
-              }}
-            >
-              <button className="px-3 py-2 rounded border text-sm">Close Roll</button>
-            </form>
-          </div>
 
           {(state as any).roll_open ? (
             <div className="mt-3 space-y-2">
@@ -669,7 +670,7 @@ export default async function DmScreenPage({
               </div>
 
               <div className="text-xs text-gray-500">
-                Players set to “Player enters roll” or “Digital dice” submit from their device.
+                Players set to "Player enters roll" or "Digital dice" submit from their device.
               </div>
             </div>
           ) : (
@@ -725,3 +726,4 @@ export default async function DmScreenPage({
     </div>
   );
 }
+

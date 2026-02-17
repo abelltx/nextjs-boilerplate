@@ -517,16 +517,18 @@ export default async function AdminEpisodeEditPage({
           </div>
         </form>
 
-        {/* GLOBAL Add Block (still useful) */}
-        <form
-          className="border rounded-lg p-3 space-y-2"
-          encType="multipart/form-data"
-          action={async (fd) => {
-            "use server";
-            await addEpisodeBlockAction(episode.id, fd);
-            redirect(`/admin/episodes/${episode.id}`);
-          }}
-        >
+        {/* GLOBAL Add Block (advanced) */}
+        <details className="border rounded-lg p-3">
+          <summary className="cursor-pointer text-sm font-semibold">Advanced: Global Add Block</summary>
+          <form
+            className="mt-3 space-y-2"
+            encType="multipart/form-data"
+            action={async (fd) => {
+              "use server";
+              await addEpisodeBlockAction(episode.id, fd);
+              redirect(`/admin/episodes/${episode.id}`);
+            }}
+          >
           <div className="grid grid-cols-4 gap-2">
             <label className="space-y-1">
               <div className="text-xs uppercase text-gray-500">Type</div>
@@ -578,7 +580,8 @@ export default async function AdminEpisodeEditPage({
             placeholder={`Meta JSON (optional)\nExample:\n{\n  "attire_required": ["Shepherd cloak"],\n  "loot_potential": ["Olives"]\n}`}
             className="w-full border rounded p-2 h-28 font-mono text-[12px]"
           />
-        </form>
+          </form>
+        </details>
 
         {/* Blocks List (Grouped by Scene) */}
         <div className="space-y-4">
@@ -667,7 +670,11 @@ export default async function AdminEpisodeEditPage({
               </div>
 
               {/* Scene Content */}
-              <div className="p-3 space-y-4">
+              <details className="p-3" open={gi === 0}>
+                <summary className="cursor-pointer text-sm font-semibold">
+                  Scene Builder ({g.items.length} step{g.items.length === 1 ? "" : "s"})
+                </summary>
+                <div className="mt-3 space-y-4">
                 {/* Quick add (sequence-first) */}
                 <form
                   className="rounded-xl border bg-slate-50 p-3 space-y-2"
@@ -1003,7 +1010,11 @@ export default async function AdminEpisodeEditPage({
                 </details>
 
                 {/* Existing blocks under scene */}
-                <div className="space-y-3">
+                <details className="rounded-xl border p-3" open={gi === 0}>
+                  <summary className="cursor-pointer text-sm font-semibold">
+                    Existing Steps ({g.items.length})
+                  </summary>
+                  <div className="mt-3 space-y-3">
                   {g.items.length === 0 ? (
                     <div className="text-sm text-gray-500 italic">No blocks under this scene yet.</div>
                   ) : null}
@@ -1012,7 +1023,12 @@ export default async function AdminEpisodeEditPage({
                     const idx = nonSceneIndexById.get(b.id) ?? 0;
 
                     return (
-                      <div key={b.id} className="border rounded-lg p-3">
+                      <details key={b.id} className="border rounded-lg p-3">
+                        <summary className="cursor-pointer text-sm">
+                          <span className="font-semibold">{b.block_type}</span>
+                          {b.title ? ` - ${b.title}` : ""}
+                        </summary>
+                        <div className="mt-3">
                         <div className="flex items-center justify-between gap-3">
                           <div className="text-xs text-gray-600">
                             <span className="font-semibold">
@@ -1116,17 +1132,20 @@ export default async function AdminEpisodeEditPage({
                           <button className="px-3 py-2 rounded border">Save Block</button>
                         </form>
 
-                        {b.image_url ? (
-                          <div className="mt-3 rounded border overflow-hidden">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={b.image_url} alt="Block" className="w-full h-auto" />
-                          </div>
-                        ) : null}
-                      </div>
+                          {b.image_url ? (
+                            <div className="mt-3 rounded border overflow-hidden">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={b.image_url} alt="Block" className="w-full h-auto" />
+                            </div>
+                          ) : null}
+                        </div>
+                      </details>
                     );
                   })}
+                  </div>
+                </details>
                 </div>
-              </div>
+              </details>
             </div>
           ))}
         </div>

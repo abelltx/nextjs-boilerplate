@@ -44,6 +44,9 @@ export default function RollPanel(props: {
   stat: StatBlock;
   disabled?: boolean;
   disabledReason?: string;
+  highlightAbility?: AbilityKey;
+  highlightSkill?: string;
+  highlightDie?: number;
 }) {
   const [history, setHistory] = useState<RollEntry[]>([]);
   const [last, setLast] = useState<RollEntry | null>(null);
@@ -120,13 +123,19 @@ export default function RollPanel(props: {
         </div>
 
         <div className="mt-3 grid grid-cols-4 gap-2 sm:grid-cols-7">
-          <DieButton sides={4} onClick={() => doRoll("Roll d4", [{ n: 1, sides: 4 }])} disabled={disabled} />
-          <DieButton sides={6} onClick={() => doRoll("Roll d6", [{ n: 1, sides: 6 }])} disabled={disabled} />
-          <DieButton sides={8} onClick={() => doRoll("Roll d8", [{ n: 1, sides: 8 }])} disabled={disabled} />
-          <DieButton sides={10} onClick={() => doRoll("Roll d10", [{ n: 1, sides: 10 }])} disabled={disabled} />
-          <DieButton sides={12} onClick={() => doRoll("Roll d12", [{ n: 1, sides: 12 }])} disabled={disabled} />
-          <DieButton sides={20} onClick={() => doRoll("Roll d20", [{ n: 1, sides: 20 }])} disabled={disabled} />
-          <DieButton sides={100} label="d100" onClick={() => doRoll("Roll d100", [{ n: 1, sides: 100 }])} disabled={disabled} />
+          <DieButton sides={4} onClick={() => doRoll("Roll d4", [{ n: 1, sides: 4 }])} disabled={disabled} highlight={props.highlightDie === 4} />
+          <DieButton sides={6} onClick={() => doRoll("Roll d6", [{ n: 1, sides: 6 }])} disabled={disabled} highlight={props.highlightDie === 6} />
+          <DieButton sides={8} onClick={() => doRoll("Roll d8", [{ n: 1, sides: 8 }])} disabled={disabled} highlight={props.highlightDie === 8} />
+          <DieButton sides={10} onClick={() => doRoll("Roll d10", [{ n: 1, sides: 10 }])} disabled={disabled} highlight={props.highlightDie === 10} />
+          <DieButton sides={12} onClick={() => doRoll("Roll d12", [{ n: 1, sides: 12 }])} disabled={disabled} highlight={props.highlightDie === 12} />
+          <DieButton sides={20} onClick={() => doRoll("Roll d20", [{ n: 1, sides: 20 }])} disabled={disabled} highlight={props.highlightDie === 20} />
+          <DieButton
+            sides={100}
+            label="d100"
+            onClick={() => doRoll("Roll d100", [{ n: 1, sides: 100 }])}
+            disabled={disabled}
+            highlight={props.highlightDie === 100}
+          />
         </div>
       </div>
 
@@ -144,6 +153,7 @@ export default function RollPanel(props: {
                 subtitle={`d20 ${fmtSigned(bonus)}`}
                 onClick={() => doRoll(`${a.label} Check`, [{ n: 1, sides: 20 }], bonus)}
                 disabled={disabled}
+                highlight={props.highlightAbility === a.key}
               />
             );
           })}
@@ -168,6 +178,7 @@ export default function RollPanel(props: {
                 subtitle={`d20 ${fmtSigned(s.bonus)}`}
                 onClick={() => doRoll(`${s.name} Check`, [{ n: 1, sides: 20 }], s.bonus)}
                 disabled={disabled}
+                highlight={props.highlightSkill?.toLowerCase() === s.name.toLowerCase()}
               />
             ))}
           </div>
@@ -258,6 +269,7 @@ function DieButton(props: {
   label?: string;
   onClick: () => void;
   disabled?: boolean;
+  highlight?: boolean;
 }) {
   const text = props.label ?? `d${props.sides}`;
   return (
@@ -265,9 +277,12 @@ function DieButton(props: {
       onClick={props.onClick}
       disabled={props.disabled}
       className={[
-        "group relative rounded-2xl border border-neutral-800 bg-neutral-950/40 px-3 py-3 text-center transition",
+        "group relative rounded-2xl border bg-neutral-950/40 px-3 py-3 text-center transition",
         "hover:bg-neutral-900/50 hover:border-neutral-600 active:scale-[0.99]",
         "disabled:opacity-40 disabled:hover:bg-neutral-950/40 disabled:hover:border-neutral-800 disabled:cursor-not-allowed",
+        props.highlight
+          ? "border-emerald-400/80 bg-emerald-500/10 shadow-[0_0_0_1px_rgba(52,211,153,0.35),0_0_18px_rgba(52,211,153,0.35)] animate-pulse"
+          : "border-neutral-800",
       ].join(" ")}
       title={`Roll ${text}`}
     >
@@ -283,15 +298,19 @@ function ActionRollButton(props: {
   subtitle: string;
   onClick: () => void;
   disabled?: boolean;
+  highlight?: boolean;
 }) {
   return (
     <button
       onClick={props.onClick}
       disabled={props.disabled}
       className={[
-        "rounded-2xl border border-neutral-800 bg-neutral-950/40 p-3 text-left transition",
+        "rounded-2xl border bg-neutral-950/40 p-3 text-left transition",
         "hover:bg-neutral-900/50 hover:border-neutral-600 active:scale-[0.99]",
         "disabled:opacity-40 disabled:hover:bg-neutral-950/40 disabled:hover:border-neutral-800 disabled:cursor-not-allowed",
+        props.highlight
+          ? "border-emerald-400/80 bg-emerald-500/10 shadow-[0_0_0_1px_rgba(52,211,153,0.35),0_0_18px_rgba(52,211,153,0.35)] animate-pulse"
+          : "border-neutral-800",
       ].join(" ")}
     >
       <div className="text-sm font-semibold text-white">{props.title}</div>

@@ -194,53 +194,105 @@ function phaseProgress(phase: WorkflowPhase, manualDone: Set<string>) {
 function workflowFromCounts(counts: Counts): WorkflowPhase[] {
   return [
     {
-      title: "Phase 0: Episode Zero Launch",
-      objective: "Ship the onboarding mission at The Upper Room Church.",
+      title: "Point A: Storyteller Dashboard",
+      objective: "Run live sessions smoothly from the storyteller side.",
       steps: [
         {
-          id: "p0_create_episode_zero",
-          label: "Create Episode Zero shell",
-          description: "Create the episode record for The Upper Room Church.",
-          href: "/admin/episodes/new?title=Episode%20Zero%20-%20The%20Upper%20Room%20Church&episode_code=ZERO-001&duration_mins=90&encounters=3&summary=Onboarding%20mission%20at%20The%20Upper%20Room%20Church",
-          current: counts.episodes,
-          target: 1,
-        },
-        {
-          id: "p0_scene_class_discovery",
-          label: "Build Scene 1: Discovering Your Class",
-          description: "Add player-facing blocks for class discovery and NPC mentors.",
-          href: "/admin/episodes",
-          current: 0,
-          target: 1,
-        },
-        {
-          id: "p0_scene_sanctuary_entry",
-          label: "Build Scene 2: Sanctuary Entry",
-          description: "Add door challenge checks, fallback paths, and success outcomes.",
-          href: "/admin/episodes",
-          current: 0,
-          target: 1,
-        },
-        {
-          id: "p0_scene_restore_torah",
-          label: "Build Scene 3: Restore the Torah",
-          description: "Add return, handoff, and final commissioning beats.",
-          href: "/admin/episodes",
-          current: 0,
-          target: 1,
-        },
-        {
-          id: "p0_zero_mission_playtest",
-          label: "Run 1 full playtest",
-          description: "Complete one end-to-end test with at least one player.",
+          id: "pa_session_runtime",
+          label: "Session runtime stable",
+          description: "Session join/present/clear flow works with no reload confusion.",
           href: "/storyteller/sessions",
-          current: counts.sessions,
+          current: counts.sessions > 0 ? 1 : 0,
+          target: 1,
+        },
+        {
+          id: "pa_episode_assignment",
+          label: "Episode assignment flow",
+          description: "Storyteller can pick/switch episode on session page reliably.",
+          href: "/storyteller/sessions",
+          current: counts.episodes > 0 && counts.sessions > 0 ? 1 : 0,
+          target: 1,
+        },
+        {
+          id: "pa_roll_requests",
+          label: "Roll request loop",
+          description: "Roll prompts from storyteller route to players and results come back.",
+          href: "/storyteller/sessions",
+          current: counts.sessionPlayers > 0 ? 1 : 0,
           target: 1,
         },
       ],
     },
     {
-      title: "Phase 1: Foundation",
+      title: "Point B: Episode Mechanics",
+      objective: "Build reusable runtime components for episode execution.",
+      steps: [
+        {
+          id: "pb_scene_map",
+          label: "1) SceneMap",
+          description: "Intro image + marker hotspots for scene exploration.",
+          href: "/admin/episodes",
+          current: 0,
+          target: 1,
+        },
+        {
+          id: "pb_reveal_bridge",
+          label: "2) RevealCard + PresenterBridge",
+          description: "Click marker, reveal linked card, and present instantly to player stage.",
+          href: "/storyteller/sessions",
+          current: 0,
+          target: 1,
+        },
+        {
+          id: "pb_sequence_rail",
+          label: "3) SequenceRail",
+          description: "Linear scene runner with next/back/present controls for live pacing.",
+          href: "/storyteller/sessions",
+          current: 0,
+          target: 1,
+        },
+        {
+          id: "pb_check_prompt",
+          label: "4) CheckPrompt",
+          description: "Reusable skill/ability check request and response loop.",
+          href: "/storyteller/sessions",
+          current: 0,
+          target: 1,
+        },
+        {
+          id: "pb_encounter_lite",
+          label: "5) EncounterLite",
+          description: "Initiative + HP/damage controls for lightweight battle running.",
+          href: "/storyteller/sessions",
+          current: 0,
+          target: 1,
+        },
+      ],
+    },
+    {
+      title: "Point C: Player Dashboard",
+      objective: "Ensure player-side experience mirrors storyteller intent.",
+      steps: [
+        {
+          id: "pc_stage_render",
+          label: "Stage rendering parity",
+          description: "Players see exactly what storyteller presents (image, text, marker context).",
+          href: "/player",
+          current: counts.sessionPlayers > 0 ? 1 : 0,
+          target: 1,
+        },
+        {
+          id: "pc_character_interaction",
+          label: "Character interaction loop",
+          description: "Player skills, inventory effects, and roll actions are usable in live session.",
+          href: "/player",
+          current: counts.items > 0 ? 1 : 0,
+          target: 1,
+        },
+      ],
+    },
+    {
+      title: "Content Library",
       objective: "Establish your core content libraries and build baseline.",
       steps: [
         {
@@ -286,7 +338,7 @@ function workflowFromCounts(counts: Counts): WorkflowPhase[] {
       ],
     },
     {
-      title: "Phase 2: Playable Loop",
+      title: "Playtest Cadence",
       objective: "Run one complete session loop from stage prompt to reward.",
       steps: [
         {
@@ -316,7 +368,7 @@ function workflowFromCounts(counts: Counts): WorkflowPhase[] {
       ],
     },
     {
-      title: "Phase 3: Production Ready",
+      title: "Production Readiness",
       objective: "Scale quality, reliability, and operations before content burst.",
       steps: [
         {
@@ -619,16 +671,16 @@ export default async function GMHubPage() {
       <div className="mt-6 rounded-xl border bg-amber-50/50 p-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <div className="text-sm font-semibold">Episode Zero Launch</div>
+            <div className="text-sm font-semibold">Point B Sprint</div>
             <div className="text-xs text-muted-foreground">
-              The first launch mission is The Upper Room Church. Future episodes can stay lighter.
+              Focus this sprint on Point B components first, then wire them into Episode Zero.
             </div>
           </div>
           <Link
-            href="/admin/episodes/new?title=Episode%20Zero%20-%20The%20Upper%20Room%20Church&episode_code=ZERO-001&duration_mins=90&encounters=3&summary=Onboarding%20mission%20at%20The%20Upper%20Room%20Church"
+            href="/admin/episodes"
             className="inline-flex items-center rounded-md border bg-white px-3 py-2 text-xs font-semibold hover:bg-slate-50"
           >
-            Create Episode Zero Template
+            Open Episode Builder
           </Link>
         </div>
       </div>

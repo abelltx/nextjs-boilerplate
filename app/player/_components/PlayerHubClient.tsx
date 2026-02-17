@@ -5,12 +5,64 @@ import { useRouter } from "next/navigation";
 import PlayerStatusHeader from "./PlayerStatusHeader";
 import JourneyLog from "./JourneyLog";
 import JoinSessionModal from "./JoinSessionModal";
-import { AbilitiesCard, SavesCard, SkillsCard, PassivesCard } from "./PlayerSheetPanels";
+import { AbilitiesCard, SavesCard, SkillsCard, PassivesCard, type AbilityKey } from "./PlayerSheetPanels";
 import RollPanel from "./RollPanel";
 import PlayerInventoryPanel from "./PlayerInventoryPanel";
 import { leaveSessionAction } from "../actions";
+import RevealCard from "@/components/episode-runtime/RevealCard";
+import { extractMapMarkers } from "@/lib/episodeRuntime";
 
 type TabKey = "inventory" | "actions" | "talents" | "journey";
+
+type PromptTarget =
+  | { kind: "skill"; skillKey: string }
+  | { kind: "ability"; abilityKey: AbilityKey }
+  | { kind: "die"; die: number }
+  | null;
+
+const SKILL_ALIASES: Array<{ key: string; aliases: string[] }> = [
+  { key: "acrobatics", aliases: ["acrobatics"] },
+  { key: "animal_handling", aliases: ["animal handling", "animal_handling"] },
+  { key: "arcana", aliases: ["arcana"] },
+  { key: "athletics", aliases: ["athletics"] },
+  { key: "deception", aliases: ["deception"] },
+  { key: "history", aliases: ["history"] },
+  { key: "insight", aliases: ["insight"] },
+  { key: "intimidation", aliases: ["intimidation"] },
+  { key: "investigation", aliases: ["investigation"] },
+  { key: "medicine", aliases: ["medicine"] },
+  { key: "nature", aliases: ["nature"] },
+  { key: "perception", aliases: ["perception"] },
+  { key: "performance", aliases: ["performance"] },
+  { key: "persuasion", aliases: ["persuasion"] },
+  { key: "religion", aliases: ["religion"] },
+  { key: "sleight_of_hand", aliases: ["sleight of hand", "sleight_of_hand"] },
+  { key: "stealth", aliases: ["stealth"] },
+  { key: "survival", aliases: ["survival"] },
+];
+
+function detectPromptTarget(prompt: string): PromptTarget {
+  const lower = String(prompt ?? "").toLowerCase();
+  if (!lower.trim()) return null;
+
+  const dieMatch = lower.match(/\bd\s*(4|6|8|10|12|20|100)\b/);
+  if (dieMatch) return { kind: "die", die: Number(dieMatch[1]) };
+
+  if (/\bstrength\b|\bstr\b/.test(lower)) return { kind: "ability", abilityKey: "str" };
+  if (/\bdexterity\b|\bdex\b/.test(lower)) return { kind: "ability", abilityKey: "dex" };
+  if (/\bconstitution\b|\bcon\b/.test(lower)) return { kind: "ability", abilityKey: "con" };
+  if (/\bintelligence\b|\bint\b/.test(lower)) return { kind: "ability", abilityKey: "int" };
+  if (/\bwisdom\b|\bwis\b/.test(lower)) return { kind: "ability", abilityKey: "wis" };
+  if (/\bcharisma\b|\bcha\b/.test(lower)) return { kind: "ability", abilityKey: "cha" };
+
+  for (const skill of SKILL_ALIASES) {
+    for (const alias of skill.aliases) {
+      if (lower.includes(alias)) return { kind: "skill", skillKey: skill.key };
+    }
+  }
+
+  return null;
+}
 
 function isLiveState(state: any) {
   if (!state) return false;
@@ -113,6 +165,7 @@ export default function PlayerHubClient(props: {
 
   const rollOpen = Boolean(stageState?.roll_open);
   const rollPrompt = String(stageState?.roll_prompt ?? "");
+  const promptTarget = useMemo(() => (rollOpen ? detectPromptTarget(rollPrompt) : null), [rollOpen, rollPrompt]);
   const stageStoryText = String(stage?.session?.story_text ?? selectedSession?.story_text ?? "");
 
   async function handleLeaveFromHeader() {
@@ -168,7 +221,7 @@ export default function PlayerHubClient(props: {
 
         <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-12">
           <aside className="lg:col-span-3 space-y-4">
-            <AbilitiesCard stat={stat} />
+            <AbilitiesCard stat={stat} highlightAbility={promptTarget?.kind === "ability" ? promptTarget.abilityKey : null} />
             <SavesCard stat={stat} />
             <PassivesCard stat={stat} />
 
@@ -237,7 +290,14 @@ export default function PlayerHubClient(props: {
               ) : (
                 <div className="space-y-3">
                   <div className="text-sm font-semibold">Actions</div>
-                  <RollPanel stat={stat} disabled={isLiveMode} disabledReason="Rolls are handled in Live Mode." />
+                  <RollPanel
+                    stat={stat}
+                    disabled={isLiveMode}
+                    disabledReason="Rolls are handled in Live Mode."
+                    highlightAbility={promptTarget?.kind === "ability" ? promptTarget.abilityKey : undefined}
+                    highlightSkill={promptTarget?.kind === "skill" ? promptTarget.skillKey : undefined}
+                    highlightDie={promptTarget?.kind === "die" ? promptTarget.die : undefined}
+                  />
                 </div>
               )}
             </div>
@@ -245,7 +305,7 @@ export default function PlayerHubClient(props: {
 
           <aside className="lg:col-span-3 space-y-4">
             <div className="lg:sticky lg:top-4">
-              <SkillsCard stat={stat} />
+              <SkillsCard stat={stat} highlightSkill={promptTarget?.kind === "skill" ? promptTarget.skillKey : null} />
             </div>
           </aside>
         </div>
@@ -287,24 +347,23 @@ function Tab(props: {
 }
 
 function StagePanel({ block }: { block: any }) {
-  const markers = Array.isArray(block?.meta?.markers) ? block.meta.markers : [];
+  const markers = extractMapMarkers(block?.meta);
   return (
     <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
       <div className="text-sm font-semibold">Stage</div>
 
       {block ? (
         <div className="mt-3 space-y-3">
-          <div className="text-lg font-extrabold">{block.title ?? block.block_type ?? "Presented"}</div>
-
-          {block.image_url ? (
-            <StageImagePreview src={block.image_url} alt={block.title ?? "Presented"} markers={markers} />
-          ) : null}
-
-          {block.body ? (
-            <div className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-200">{block.body}</div>
-          ) : (
-            <div className="text-sm text-neutral-400">No body text.</div>
-          )}
+          <RevealCard
+            kind={block.block_type ?? "presented"}
+            title={block.title ?? block.block_type ?? "Presented"}
+            body={block.body ?? ""}
+            className="border-neutral-800 bg-neutral-950/40 text-neutral-100"
+          >
+            {block.image_url ? (
+              <StageImagePreview src={block.image_url} alt={block.title ?? "Presented"} markers={markers as any} />
+            ) : null}
+          </RevealCard>
         </div>
       ) : (
         <div className="mt-3 text-sm text-neutral-300">

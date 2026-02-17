@@ -24,7 +24,7 @@ function fmt(n: number) {
   return n >= 0 ? `+${n}` : String(n);
 }
 
-export function AbilitiesCard({ stat }: { stat: StatBlock }) {
+export function AbilitiesCard({ stat, highlightAbility = null }: { stat: StatBlock; highlightAbility?: AbilityKey | null }) {
   const a = stat.abilities ?? { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
   const rows: Array<{ k: AbilityKey; label: string }> = [
     { k: "str", label: "STR" },
@@ -39,7 +39,15 @@ export function AbilitiesCard({ stat }: { stat: StatBlock }) {
     <Card title="Abilities">
       <div className="grid grid-cols-2 gap-2">
         {rows.map((r) => (
-          <div key={r.k} className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-2">
+          <div
+            key={r.k}
+            className={[
+              "rounded-xl border bg-neutral-950/40 p-2 transition",
+              highlightAbility === r.k
+                ? "border-emerald-400/80 bg-emerald-500/10 shadow-[0_0_0_1px_rgba(52,211,153,0.35),0_0_18px_rgba(52,211,153,0.35)] animate-pulse"
+                : "border-neutral-800",
+            ].join(" ")}
+          >
             <div className="text-[11px] text-neutral-400">{r.label}</div>
             <div className="flex items-baseline justify-between">
               {(() => {
@@ -100,7 +108,7 @@ export function SavesCard({ stat }: { stat: StatBlock }) {
   );
 }
 
-export function SkillsCard({ stat }: { stat: StatBlock }) {
+export function SkillsCard({ stat, highlightSkill = null }: { stat: StatBlock; highlightSkill?: string | null }) {
   const skills = stat.skills ?? {};
   const a = stat.abilities ?? { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
 
@@ -146,7 +154,12 @@ export function SkillsCard({ stat }: { stat: StatBlock }) {
           return (
             <div
               key={s.key}
-              className="grid items-center rounded-lg border border-neutral-800 bg-neutral-950/40 px-3 py-2"
+              className={[
+                "grid items-center rounded-lg border bg-neutral-950/40 px-3 py-2 transition",
+                highlightSkill === s.key
+                  ? "border-emerald-400/80 bg-emerald-500/10 shadow-[0_0_0_1px_rgba(52,211,153,0.35),0_0_18px_rgba(52,211,153,0.35)] animate-pulse"
+                  : "border-neutral-800",
+              ].join(" ")}
               style={{ gridTemplateColumns: "30px 44px minmax(0, 1fr) 64px" }}
             >
               <div>
