@@ -8,6 +8,8 @@ export default function RevealCard(props: {
   body?: string | null;
   imageUrl?: string | null;
   imageAlt?: string;
+  hideBody?: boolean;
+  childrenTop?: ReactNode;
   children?: ReactNode;
   className?: string;
 }) {
@@ -21,13 +23,15 @@ export default function RevealCard(props: {
         </div>
       ) : null}
 
+      {props.childrenTop ? <div className="mb-2">{props.childrenTop}</div> : null}
+
       <div className="text-sm font-semibold">{props.title?.trim() || "(Untitled)"}</div>
 
-      {props.body?.trim() ? (
+      {!props.hideBody && props.body?.trim() ? (
         <div className="mt-1 whitespace-pre-wrap text-sm">{props.body}</div>
-      ) : (
+      ) : !props.hideBody ? (
         <div className="mt-1 text-sm opacity-70">Add content.</div>
-      )}
+      ) : null}
 
       {props.children ? (
         <div className="mt-2">{props.children}</div>
@@ -40,4 +44,3 @@ export default function RevealCard(props: {
     </div>
   );
 }
-

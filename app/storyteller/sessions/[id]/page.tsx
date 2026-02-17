@@ -514,6 +514,12 @@ export default async function DmScreenPage({
                                 title={b.title}
                                 body={b.body}
                                 className="border-gray-200"
+                                hideBody={String(b.block_type).toLowerCase() === "npc"}
+                                childrenTop={
+                                  String(b.block_type).toLowerCase() === "npc" ? (
+                                    <NpcTabsCard meta={b.meta} fallbackInfo={b.body ?? ""} imageUrl={b.image_url ?? null} />
+                                  ) : undefined
+                                }
                               >
                                 {b.image_url ? (
                                   String(b.block_type).toLowerCase() === "map" ? (
@@ -555,9 +561,6 @@ export default async function DmScreenPage({
                                       <img src={b.image_url} alt={b.title ?? "Block"} className="w-full h-auto" />
                                     </div>
                                   )
-                                ) : null}
-                                {String(b.block_type).toLowerCase() === "npc" ? (
-                                  <NpcTabsCard meta={b.meta} fallbackInfo={b.body ?? ""} />
                                 ) : null}
                               </RevealCard>
                                 );

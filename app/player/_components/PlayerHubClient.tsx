@@ -523,8 +523,14 @@ function StagePanel({ block, linkedBlocks }: { block: any; linkedBlocks?: Record
             title={block.title ?? block.block_type ?? "Presented"}
             body={block.body ?? ""}
             className="border-neutral-800 bg-neutral-950/40 text-neutral-100"
+            hideBody={String(block.block_type ?? "").toLowerCase() === "npc"}
+            childrenTop={
+              String(block.block_type ?? "").toLowerCase() === "npc" ? (
+                <NpcTabsCard meta={block.meta} fallbackInfo={block.body ?? ""} imageUrl={block.image_url ?? null} />
+              ) : undefined
+            }
           >
-            {block.image_url ? (
+            {block.image_url && String(block.block_type ?? "").toLowerCase() === "map" ? (
               <SceneMap
                 src={block.image_url}
                 alt={block.title ?? "Presented"}
@@ -534,9 +540,6 @@ function StagePanel({ block, linkedBlocks }: { block: any; linkedBlocks?: Record
                   if (m.targetBlockId) setSelectedMarkerBlockId(m.targetBlockId);
                 }}
               />
-            ) : null}
-            {String(block.block_type ?? "").toLowerCase() === "npc" ? (
-              <NpcTabsCard meta={block.meta} fallbackInfo={block.body ?? ""} />
             ) : null}
           </RevealCard>
 
@@ -551,13 +554,20 @@ function StagePanel({ block, linkedBlocks }: { block: any; linkedBlocks?: Record
                   title={selectedReveal.title ?? selectedReveal.block_type ?? "Reveal"}
                   body={selectedReveal.body ?? ""}
                   className="border-neutral-700 bg-neutral-950/40 text-neutral-100"
+                  hideBody={String(selectedReveal.block_type ?? "").toLowerCase() === "npc"}
+                  childrenTop={
+                    String(selectedReveal.block_type ?? "").toLowerCase() === "npc" ? (
+                      <NpcTabsCard
+                        meta={selectedReveal.meta}
+                        fallbackInfo={selectedReveal.body ?? ""}
+                        imageUrl={selectedReveal.image_url ?? null}
+                      />
+                    ) : undefined
+                  }
                 >
-                  {selectedReveal.image_url ? (
+                  {selectedReveal.image_url && String(selectedReveal.block_type ?? "").toLowerCase() !== "npc" ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={selectedReveal.image_url} alt={selectedReveal.title ?? "Reveal"} className="w-full rounded-lg border border-neutral-800" />
-                  ) : null}
-                  {String(selectedReveal.block_type ?? "").toLowerCase() === "npc" ? (
-                    <NpcTabsCard meta={selectedReveal.meta} fallbackInfo={selectedReveal.body ?? ""} />
                   ) : null}
                 </RevealCard>
               </div>

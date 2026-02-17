@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 
 type TabKey = "information" | "gear" | "quests" | "training";
+type RuntimeTabKey = "image" | TabKey;
 
 const TAB_LABELS: Record<TabKey, string> = {
   information: "Information",
@@ -11,9 +12,9 @@ const TAB_LABELS: Record<TabKey, string> = {
   training: "Training",
 };
 
-type TabDef = { key: TabKey; label: string; content: string };
+type TabDef = { key: RuntimeTabKey; label: string; content: string };
 
-export default function NpcTabsCard(props: { meta: any; fallbackInfo?: string | null }) {
+export default function NpcTabsCard(props: { meta: any; fallbackInfo?: string | null; imageUrl?: string | null }) {
   const tabs = useMemo<TabDef[]>(() => {
     const raw = (props.meta?.npc_tabs ?? {}) as Record<string, any>;
     const base: Record<TabKey, { enabled: boolean; content: string }> = {
@@ -35,12 +36,18 @@ export default function NpcTabsCard(props: { meta: any; fallbackInfo?: string | 
       },
     };
 
-    return (Object.keys(TAB_LABELS) as TabKey[])
+    const coreTabs = (Object.keys(TAB_LABELS) as TabKey[])
       .filter((k) => base[k].enabled)
       .map((k) => ({ key: k, label: TAB_LABELS[k], content: base[k].content || "No details yet." }));
+    if (props.imageUrl) {
+      return [{ key: "image" as RuntimeTabKey, label: "Image", content: "" }, ...coreTabs];
+    }
+    return coreTabs;
   }, [props.meta, props.fallbackInfo]);
 
-  const [active, setActive] = useState<TabKey>((tabs[0]?.key ?? "information") as TabKey);
+  const [active, setActive] = useState<RuntimeTabKey>(
+    (tabs.find((t) => t.key === "information")?.key ?? tabs[0]?.key ?? "information") as RuntimeTabKey
+  );
 
   const activeTab = tabs.find((t) => t.key === active) ?? tabs[0] ?? null;
   if (!activeTab) return null;
@@ -52,7 +59,7 @@ export default function NpcTabsCard(props: { meta: any; fallbackInfo?: string | 
           <button
             key={t.key}
             type="button"
-            onClick={() => setActive(t.key)}
+            onClick={() => setActive(t.key as RuntimeTabKey)}
             className={[
               "rounded-lg border px-2 py-1 text-xs",
               activeTab.key === t.key
@@ -60,12 +67,26 @@ export default function NpcTabsCard(props: { meta: any; fallbackInfo?: string | 
                 : "border-neutral-700 text-neutral-300 hover:bg-neutral-900",
             ].join(" ")}
           >
-            {t.label}
+            {t.key === "image" && props.imageUrl ? (
+              <span className="inline-flex items-center gap-1">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={props.imageUrl} alt="NPC thumbnail" className="h-4 w-4 rounded object-cover" />
+                <span>{t.label}</span>
+              </span>
+            ) : (
+              t.label
+            )}
           </button>
         ))}
       </div>
-      <div className="mt-3 whitespace-pre-wrap text-sm text-neutral-200">{activeTab.content}</div>
+      {activeTab.key === "image" && props.imageUrl ? (
+        <div className="mt-3 rounded-lg border border-neutral-700 overflow-hidden">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={props.imageUrl} alt="NPC portrait" className="w-full h-auto" />
+        </div>
+      ) : (
+        <div className="mt-3 whitespace-pre-wrap text-sm text-neutral-200">{activeTab.content}</div>
+      )}
     </div>
   );
 }
-
