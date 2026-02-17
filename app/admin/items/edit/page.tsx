@@ -422,6 +422,17 @@ export default async function ItemEditPage({
                   className="mt-1 h-9 w-full rounded-md border px-3 text-sm"
                 />
               </div>
+              <div>
+                <label className="text-xs text-muted-foreground">Faith Required</label>
+                <input
+                  name="faith_required"
+                  type="number"
+                  min="0"
+                  step="1"
+                  defaultValue={item.faith_required ?? 0}
+                  className="mt-1 h-9 w-full rounded-md border px-3 text-sm"
+                />
+              </div>
 
               <div className="flex items-end gap-3">
                 <label className="flex items-center gap-2 text-sm">

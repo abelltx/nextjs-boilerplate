@@ -2,6 +2,7 @@
 
 import { supabaseServer } from "@/lib/supabase/server";
 import { getProfile } from "@/lib/auth/getProfile";
+import { revalidatePath } from "next/cache";
 
 function isUuid(value: string) {
   const v = value.trim();
@@ -138,5 +139,74 @@ export async function submitRollResultAction(input: {
     .eq("session_id", input.sessionId);
 
   if (upErr) return { ok: false, error: upErr.message };
+  return { ok: true };
+}
+
+export async function claimNpcGearItemAction(input: {
+  characterId: string;
+  itemId: string;
+}): Promise<{ ok: boolean; alreadyOwned?: boolean; error?: string }> {
+  "use server";
+  const { user } = await getProfile();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const characterId = String(input.characterId ?? "").trim();
+  const itemId = String(input.itemId ?? "").trim();
+  if (!characterId || !itemId) return { ok: false, error: "Missing item or character." };
+
+  const supabase = await supabaseServer();
+
+  const { data: ch, error: chErr } = await supabase
+    .from("characters")
+    .select("id,user_id")
+    .eq("id", characterId)
+    .maybeSingle();
+  if (chErr) return { ok: false, error: chErr.message };
+  if (!ch?.id || ch.user_id !== user.id) return { ok: false, error: "Character not found." };
+
+  const { data: item, error: itemErr } = await supabase
+    .from("items")
+    .select("id,name,faith_required,is_active")
+    .eq("id", itemId)
+    .maybeSingle();
+  if (itemErr) return { ok: false, error: itemErr.message };
+  if (!item?.id || item.is_active === false) return { ok: false, error: "Item not available." };
+
+  let faithAvailable = 0;
+  const { data: cur } = await supabase
+    .from("character_stats_current")
+    .select("stat_block_current")
+    .eq("character_id", characterId)
+    .maybeSingle();
+  const curFaith = Number((cur as any)?.stat_block_current?.resources?.faith_available ?? NaN);
+  if (Number.isFinite(curFaith)) faithAvailable = curFaith;
+  if (!Number.isFinite(curFaith)) {
+    const fallbackFaith = Number((ch as any)?.stat_block?.resources?.faith_available ?? NaN);
+    if (Number.isFinite(fallbackFaith)) faithAvailable = fallbackFaith;
+  }
+  const requiredFaith = Math.max(0, Number(item.faith_required ?? 0));
+  if (faithAvailable < requiredFaith) {
+    return { ok: false, error: `Requires ${requiredFaith} faith.` };
+  }
+
+  const { data: existing, error: exErr } = await supabase
+    .from("inventory_items")
+    .select("id")
+    .eq("character_id", characterId)
+    .eq("item_id", itemId)
+    .limit(1)
+    .maybeSingle();
+  if (exErr) return { ok: false, error: exErr.message };
+  if (existing?.id) return { ok: true, alreadyOwned: true };
+
+  const { error: insErr } = await supabase.from("inventory_items").insert({
+    character_id: characterId,
+    item_id: itemId,
+    name: item.name,
+    quantity: 1,
+  });
+  if (insErr) return { ok: false, error: insErr.message };
+
+  revalidatePath("/player");
   return { ok: true };
 }

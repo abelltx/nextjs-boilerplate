@@ -8,7 +8,7 @@ import JoinSessionModal from "./JoinSessionModal";
 import { AbilitiesCard, SavesCard, SkillsCard, PassivesCard, type AbilityKey } from "./PlayerSheetPanels";
 import RollPanel from "./RollPanel";
 import PlayerInventoryPanel from "./PlayerInventoryPanel";
-import { leaveSessionAction, submitRollResultAction } from "../actions";
+import { claimNpcGearItemAction, leaveSessionAction, submitRollResultAction } from "../actions";
 import RevealCard from "@/components/episode-runtime/RevealCard";
 import SceneMap from "@/components/episode-runtime/SceneMap";
 import NpcTabsCard from "@/components/episode-runtime/NpcTabsCard";
@@ -96,12 +96,21 @@ export default function PlayerHubClient(props: {
   const [tab, setTab] = useState<TabKey>("inventory");
   const [joinOpen, setJoinOpen] = useState(false);
   const [optimisticLiveSession, setOptimisticLiveSession] = useState<{ id: string; name?: string | null } | null>(null);
+  const [claimingGearId, setClaimingGearId] = useState<string | null>(null);
   const router = useRouter();
 
   const stat = (props.character?.stat_block ?? {}) as any;
   const derived = stat?.derived ?? {};
   const resources = stat?.resources ?? {};
   const effects = stat?.effects ?? [];
+  const faithPoints = Number(resources.faith_available ?? 0);
+  const ownedInventoryItemIds = useMemo(
+    () =>
+      (props.inventory ?? [])
+        .map((it) => String(it?.item_id ?? "").trim().toLowerCase())
+        .filter((id) => id.length > 0),
+    [props.inventory]
+  );
 
   const liveSession = useMemo(() => {
     const candidates = (props.sessions ?? [])
@@ -293,6 +302,21 @@ export default function PlayerHubClient(props: {
     }
   }
 
+  async function handleClaimNpcGear(item: { id: string; itemId: string; name: string; faithRequired: number }) {
+    if (claimingGearId) return;
+    setClaimingGearId(item.id);
+    const res = await claimNpcGearItemAction({
+      characterId: String(props.character?.id ?? ""),
+      itemId: item.itemId,
+    });
+    setClaimingGearId(null);
+    if (!res.ok) {
+      alert(res.error ?? "Could not add item.");
+      return;
+    }
+    router.refresh();
+  }
+
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100">
       <div className="mx-auto max-w-6xl px-4 py-6">
@@ -347,7 +371,16 @@ export default function PlayerHubClient(props: {
               <div className="text-sm font-semibold">Stage</div>
 
               <div className="mt-4 space-y-4">
-                <StagePanel block={stageBlock} linkedBlocks={stage?.linkedBlocks ?? {}} />
+                <StagePanel
+                  block={stageBlock}
+                  linkedBlocks={stage?.linkedBlocks ?? {}}
+                  playerShop={{
+                    faithPoints,
+                    ownedItems: ownedInventoryItemIds,
+                    claimingId: claimingGearId,
+                    onClaim: handleClaimNpcGear,
+                  }}
+                />
 
                 {rollOpen ? (
                   <div ref={promptBoxRef}>
@@ -502,7 +535,20 @@ function Tab(props: {
   );
 }
 
-function StagePanel({ block, linkedBlocks }: { block: any; linkedBlocks?: Record<string, any> }) {
+function StagePanel({
+  block,
+  linkedBlocks,
+  playerShop,
+}: {
+  block: any;
+  linkedBlocks?: Record<string, any>;
+  playerShop?: {
+    faithPoints: number;
+    ownedItems: string[];
+    claimingId?: string | null;
+    onClaim?: (item: { id: string; itemId: string; name: string; faithRequired: number }) => void | Promise<void>;
+  };
+}) {
   const markers = extractMapMarkers(block?.meta);
   const [selectedMarkerBlockId, setSelectedMarkerBlockId] = useState<string | null>(null);
 
@@ -526,7 +572,13 @@ function StagePanel({ block, linkedBlocks }: { block: any; linkedBlocks?: Record
             hideBody={String(block.block_type ?? "").toLowerCase() === "npc"}
             childrenTop={
               String(block.block_type ?? "").toLowerCase() === "npc" ? (
-                <NpcTabsCard meta={block.meta} fallbackInfo={block.body ?? ""} imageUrl={block.image_url ?? null} embedded />
+                <NpcTabsCard
+                  meta={block.meta}
+                  fallbackInfo={block.body ?? ""}
+                  imageUrl={block.image_url ?? null}
+                  embedded
+                  playerShop={playerShop}
+                />
               ) : undefined
             }
           >
@@ -562,6 +614,7 @@ function StagePanel({ block, linkedBlocks }: { block: any; linkedBlocks?: Record
                         fallbackInfo={selectedReveal.body ?? ""}
                         imageUrl={selectedReveal.image_url ?? null}
                         embedded
+                        playerShop={playerShop}
                       />
                     ) : undefined
                   }

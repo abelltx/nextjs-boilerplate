@@ -171,7 +171,7 @@ export default async function PlayerPage() {
   // ---- Inventory ----
   const { data: inventory, error: invErr } = await supabase
     .from("inventory_items")
-    .select("id,name,quantity,created_at")
+    .select("id,item_id,name,quantity,created_at")
     .eq("character_id", character.id)
     .order("created_at", { ascending: true });
 

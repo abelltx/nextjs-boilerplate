@@ -85,6 +85,11 @@ export default async function AdminEpisodeEditPage({
     .order("sort_order", { ascending: true });
 
   if (blocksErr) throw new Error(blocksErr.message);
+  const { data: itemOptions } = await supabase
+    .from("items")
+    .select("id,name,faith_required,is_active")
+    .eq("is_active", true)
+    .order("name", { ascending: true });
 
   // Group blocks into scenes (scene blocks become headers)
   const sceneGroups: Array<{ scene: any | null; items: any[] }> = [];
@@ -1174,7 +1179,11 @@ export default async function AdminEpisodeEditPage({
                               Save an image URL or upload an image for this map block first, then reopen this block to place markers.
                             </div>
                           ) : String(b.block_type).toLowerCase() === "npc" ? (
-                            <NpcTabsEditorClient initialMeta={b.meta ?? {}} fallbackInfo={b.body ?? ""} />
+                            <NpcTabsEditorClient
+                              initialMeta={b.meta ?? {}}
+                              fallbackInfo={b.body ?? ""}
+                              itemOptions={(itemOptions ?? []) as any[]}
+                            />
                           ) : (
                             <textarea
                               name="meta_json"
