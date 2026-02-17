@@ -13,6 +13,7 @@ export default function SceneMap(props: {
   markers?: MapMarker[];
   className?: string;
   showMagnifier?: boolean;
+  onMarkerClick?: (marker: MapMarker, index: number) => void;
 }) {
   const [hover, setHover] = useState(false);
   const [zoom, setZoom] = useState(2);
@@ -37,14 +38,21 @@ export default function SceneMap(props: {
         <img src={props.src} alt={props.alt} className="w-full" />
 
         {(props.markers ?? []).map((m, i) => (
-          <div
+          <button
             key={m.id}
-            className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-white bg-black/80 px-2 py-0.5 text-[10px] font-semibold text-white"
+            type="button"
+            className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-white bg-black/80 px-2 py-0.5 text-[10px] font-semibold text-white hover:bg-black"
             style={{ left: `${clamp(m.x)}%`, top: `${clamp(m.y)}%` }}
             title={m.label}
+            onClick={(e) => {
+              e.stopPropagation();
+              setPos({ x: clamp(m.x), y: clamp(m.y) });
+              setHover(true);
+              props.onMarkerClick?.(m, i);
+            }}
           >
             {i + 1}
-          </div>
+          </button>
         ))}
 
         {props.showMagnifier && hover ? (
