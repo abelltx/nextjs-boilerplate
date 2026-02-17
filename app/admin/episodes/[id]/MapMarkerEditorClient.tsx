@@ -123,8 +123,9 @@ export default function MapMarkerEditorClient(props: {
           addMarker(x, y);
         }}
       >
+        {/* Use the same coordinate surface as player SceneMap (full-width image, no contain letterboxing). */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={props.imageUrl} alt="Map marker editor" className="max-h-80 w-full object-contain" />
+        <img src={props.imageUrl} alt="Map marker editor" className="w-full h-auto block select-none" draggable={false} />
 
         {markers.map((m, i) => (
           <button
