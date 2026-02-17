@@ -682,6 +682,25 @@ export default async function AdminEpisodeEditPage({
                     </form>
                   </details>
                 ) : null}
+                {!g.scene ? (
+                  <div className="mt-2 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800 space-y-2">
+                    <div>This group has no scene header block, so "Edit scene header" is unavailable.</div>
+                    <form
+                      action={async (fd) => {
+                        "use server";
+                        await addEpisodeBlockAction(episode.id, fd);
+                        redirect(`/admin/episodes/${episode.id}`);
+                      }}
+                      className="flex flex-wrap items-center gap-2"
+                    >
+                      <input type="hidden" name="block_type" value="scene" />
+                      <input type="hidden" name="audience" value="both" />
+                      <input type="hidden" name="mode" value="display" />
+                      <input name="title" defaultValue="Scene" className="rounded border px-2 py-1 text-xs" />
+                      <button className="rounded border px-2 py-1 text-xs">Create Scene Header</button>
+                    </form>
+                  </div>
+                ) : null}
               </div>
 
               {/* Scene Content */}

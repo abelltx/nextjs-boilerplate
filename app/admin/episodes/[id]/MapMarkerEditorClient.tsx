@@ -14,6 +14,10 @@ function clamp(n: number, min = 0, max = 100) {
   return Math.max(min, Math.min(max, n));
 }
 
+function round3(n: number) {
+  return Math.round(n * 1000) / 1000;
+}
+
 function normalizeMarkers(input: any): Marker[] {
   const list = Array.isArray(input?.markers) ? input.markers : [];
   return list.map((m: any, i: number) => ({
@@ -76,7 +80,9 @@ export default function MapMarkerEditorClient(props: {
     const rect = wrapRef.current.getBoundingClientRect();
     const x = ((clientX - rect.left) / rect.width) * 100;
     const y = ((clientY - rect.top) / rect.height) * 100;
-    setMarkers((prev) => prev.map((m) => (m.id === draggingId ? { ...m, x: clamp(x), y: clamp(y) } : m)));
+    setMarkers((prev) =>
+      prev.map((m) => (m.id === draggingId ? { ...m, x: round3(clamp(x)), y: round3(clamp(y)) } : m))
+    );
     setDidDrag(true);
   }
 
@@ -160,6 +166,7 @@ export default function MapMarkerEditorClient(props: {
             type="number"
             min={0}
             max={100}
+            step="0.001"
             value={selected.x}
             onChange={(e) => updateSelected({ x: clamp(Number(e.target.value || 0)) })}
             placeholder="X"
@@ -169,6 +176,7 @@ export default function MapMarkerEditorClient(props: {
             type="number"
             min={0}
             max={100}
+            step="0.001"
             value={selected.y}
             onChange={(e) => updateSelected({ y: clamp(Number(e.target.value || 0)) })}
             placeholder="Y"

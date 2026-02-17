@@ -12,7 +12,6 @@ import { randomUUID } from "crypto";
 import SequenceRail from "@/components/episode-runtime/SequenceRail";
 import RevealCard from "@/components/episode-runtime/RevealCard";
 import CheckPromptCard from "@/components/episode-runtime/CheckPromptCard";
-import SceneMap from "@/components/episode-runtime/SceneMap";
 import { buildRuntimeSequence, extractMapMarkers } from "@/lib/episodeRuntime";
 
 
@@ -504,6 +503,9 @@ export default async function DmScreenPage({
                             </summary>
 
                             <div className="mt-2 space-y-2">
+                              {(() => {
+                                const mapMarkers = extractMapMarkers(b.meta);
+                                return (
                               <RevealCard
                                 kind={b.block_type}
                                 audience={b.audience}
@@ -514,7 +516,38 @@ export default async function DmScreenPage({
                               >
                                 {b.image_url ? (
                                   String(b.block_type).toLowerCase() === "map" ? (
-                                    <SceneMap src={b.image_url} alt={b.title ?? "Map"} markers={extractMapMarkers(b.meta)} />
+                                    <div className="relative overflow-hidden rounded border">
+                                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                                      <img src={b.image_url} alt={b.title ?? "Map"} className="w-full h-auto" />
+                                      {mapMarkers.map((m, i) => (
+                                        <form
+                                          key={m.id}
+                                          action={async () => {
+                                            "use server";
+                                            if (!m.targetBlockId) return;
+                                            await presentBlockToPlayersAction(session.id, m.targetBlockId);
+                                            redirect(`/storyteller/sessions/${session.id}`);
+                                          }}
+                                          className="absolute -translate-x-1/2 -translate-y-1/2"
+                                          style={{
+                                            left: `${Math.max(0, Math.min(100, m.x))}%`,
+                                            top: `${Math.max(0, Math.min(100, m.y))}%`,
+                                          }}
+                                        >
+                                          <button
+                                            className="rounded-full border border-white bg-black/80 px-2 py-0.5 text-[10px] font-semibold text-white"
+                                            title={
+                                              m.targetBlockId
+                                                ? `Reveal ${blockById.get(m.targetBlockId)?.title ?? "linked block"}`
+                                                : `${m.label} (no link)`
+                                            }
+                                            disabled={!m.targetBlockId}
+                                          >
+                                            {i + 1}
+                                          </button>
+                                        </form>
+                                      ))}
+                                    </div>
                                   ) : (
                                     <div className="relative overflow-hidden rounded border">
                                       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -523,6 +556,8 @@ export default async function DmScreenPage({
                                   )
                                 ) : null}
                               </RevealCard>
+                                );
+                              })()}
 
                               {String(b.block_type).toLowerCase() === "map" ? (
                                 <div className="rounded border p-2 bg-gray-50 space-y-2">
