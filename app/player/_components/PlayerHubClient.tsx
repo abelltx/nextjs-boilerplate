@@ -8,7 +8,12 @@ import JoinSessionModal from "./JoinSessionModal";
 import { AbilitiesCard, SavesCard, SkillsCard, PassivesCard, type AbilityKey } from "./PlayerSheetPanels";
 import RollPanel from "./RollPanel";
 import PlayerInventoryPanel from "./PlayerInventoryPanel";
-import { claimNpcGearItemAction, leaveSessionAction, submitRollResultAction } from "../actions";
+import {
+  claimNpcGearItemAction,
+  claimNpcTrainingTraitAction,
+  leaveSessionAction,
+  submitRollResultAction,
+} from "../actions";
 import RevealCard from "@/components/episode-runtime/RevealCard";
 import SceneMap from "@/components/episode-runtime/SceneMap";
 import NpcTabsCard from "@/components/episode-runtime/NpcTabsCard";
@@ -92,11 +97,13 @@ export default function PlayerHubClient(props: {
   sessionStates: Record<string, any>;
   presentedBlocks: Record<string, any>;
   gameLog: any[];
+  playerTraitIds?: string[];
 }) {
   const [tab, setTab] = useState<TabKey>("inventory");
   const [joinOpen, setJoinOpen] = useState(false);
   const [optimisticLiveSession, setOptimisticLiveSession] = useState<{ id: string; name?: string | null } | null>(null);
   const [claimingGearId, setClaimingGearId] = useState<string | null>(null);
+  const [claimingTrainingId, setClaimingTrainingId] = useState<string | null>(null);
   const router = useRouter();
 
   const stat = (props.character?.stat_block ?? {}) as any;
@@ -110,6 +117,10 @@ export default function PlayerHubClient(props: {
         .map((it) => String(it?.item_id ?? "").trim().toLowerCase())
         .filter((id) => id.length > 0),
     [props.inventory]
+  );
+  const ownedTraitIds = useMemo(
+    () => (props.playerTraitIds ?? []).map((id) => String(id).trim().toLowerCase()).filter(Boolean),
+    [props.playerTraitIds]
   );
 
   const liveSession = useMemo(() => {
@@ -322,6 +333,20 @@ export default function PlayerHubClient(props: {
     window.dispatchEvent(new CustomEvent("inventory:refresh"));
     router.refresh();
   }
+  async function handleClaimNpcTraining(trait: { id: string; traitId: string; name: string }) {
+    if (claimingTrainingId) return;
+    setClaimingTrainingId(trait.id);
+    const res = await claimNpcTrainingTraitAction({
+      characterId: String(props.character?.id ?? ""),
+      traitId: trait.traitId,
+    });
+    setClaimingTrainingId(null);
+    if (!res.ok) {
+      alert(res.error ?? "Could not learn training.");
+      return;
+    }
+    router.refresh();
+  }
 
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100">
@@ -383,8 +408,11 @@ export default function PlayerHubClient(props: {
                   playerShop={{
                     faithPoints,
                     ownedItems: ownedInventoryItemIds,
+                    ownedTraits: ownedTraitIds,
                     claimingId: claimingGearId,
+                    claimingTraitId: claimingTrainingId,
                     onClaim: handleClaimNpcGear,
+                    onClaimTraining: handleClaimNpcTraining,
                   }}
                 />
 
@@ -551,8 +579,11 @@ function StagePanel({
   playerShop?: {
     faithPoints: number;
     ownedItems: string[];
+    ownedTraits?: string[];
     claimingId?: string | null;
+    claimingTraitId?: string | null;
     onClaim?: (item: { id: string; itemId: string; name: string; faithRequired: number }) => void | Promise<void>;
+    onClaimTraining?: (trait: { id: string; traitId: string; name: string }) => void | Promise<void>;
   };
 }) {
   const markers = extractMapMarkers(block?.meta);

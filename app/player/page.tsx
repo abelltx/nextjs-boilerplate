@@ -15,6 +15,13 @@ type ItemEffectRow = {
   value: number | null;
   notes: string | null;
 };
+type TraitEffectRow = {
+  effect_type: string | null;
+  effect_key: string | null;
+  mode: string | null;
+  value: number | null;
+  notes: string | null;
+};
 
 function n(v: unknown, fallback = 0) {
   const num = Number(v);
@@ -27,7 +34,7 @@ function toSaveKey(raw: string): AbilityKey | null {
   return null;
 }
 
-function applyItemEffects(baseStat: any, effects: ItemEffectRow[]) {
+function applyEffects(baseStat: any, effects: Array<ItemEffectRow | TraitEffectRow>) {
   const stat = { ...(baseStat ?? {}) } as any;
   const abilities = { ...(stat.abilities ?? {}) } as Record<string, number>;
   const baseAbilities = { ...abilities } as Record<string, number>;
@@ -281,9 +288,36 @@ export default async function PlayerPage() {
     if (effectsErr) throw new Error(`Failed to load item effects: ${effectsErr.message}`);
     itemEffects = (effectsRows ?? []) as ItemEffectRow[];
   }
+  const { data: traitLinks, error: traitLinksErr } = await supabase
+    .from("player_trait_links")
+    .select("trait_id")
+    .eq("character_id", character.id);
+  if (traitLinksErr && !String(traitLinksErr.message ?? "").toLowerCase().includes("does not exist")) {
+    throw new Error(`Failed to load player traits: ${traitLinksErr.message}`);
+  }
+  const learnedTraitIds = Array.from(
+    new Set(
+      (traitLinks ?? [])
+        .map((r: { trait_id: string | null }) => r.trait_id)
+        .filter((id: string | null): id is string => Boolean(id))
+    )
+  );
+  let traitEffects: TraitEffectRow[] = [];
+  if (learnedTraitIds.length) {
+    const { data: traitEffectRows, error: traitEffectsErr } = await supabase
+      .from("trait_effects")
+      .select("effect_type,effect_key,mode,value,notes,sort_order,created_at")
+      .in("trait_id", learnedTraitIds)
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true });
+    if (traitEffectsErr && !String(traitEffectsErr.message ?? "").toLowerCase().includes("does not exist")) {
+      throw new Error(`Failed to load trait effects: ${traitEffectsErr.message}`);
+    }
+    traitEffects = (traitEffectRows ?? []) as TraitEffectRow[];
+  }
 
   const baseStatBlock = curRow?.stat_block_current ?? character.stat_block ?? {};
-  const mergedStatBlock = applyItemEffects(baseStatBlock, itemEffects);
+  const mergedStatBlock = applyEffects(baseStatBlock, [...itemEffects, ...traitEffects]);
 
   character = { ...character, stat_block: mergedStatBlock };
 
@@ -298,6 +332,7 @@ export default async function PlayerPage() {
       sessionStates={sessionStates ?? {}}
       presentedBlocks={presentedBlocks ?? {}}
       gameLog={gameLog ?? []}
+      playerTraitIds={learnedTraitIds}
     />
   );
 }

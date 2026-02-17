@@ -88,3 +88,45 @@ export async function updateTraitAction(formData: FormData) {
   // After save, bounce back to list
   redirect("/admin/traits?saved=1");
 }
+
+export async function addTraitEffectAction(formData: FormData) {
+  const traitId = String(formData.get("trait_id") ?? "").trim();
+  if (!isUuid(traitId)) redirect("/admin/traits/edit?err=bad_trait_id");
+
+  const effect_type = String(formData.get("effect_type") ?? "").trim();
+  const effect_key = String(formData.get("effect_key") ?? "").trim();
+  const mode = String(formData.get("mode") ?? "").trim();
+  const notes = String(formData.get("notes") ?? "").trim();
+  const sort_order = formData.get("sort_order") ? Number(formData.get("sort_order")) : 0;
+
+  const valueRaw = formData.get("value");
+  const value = valueRaw === null || valueRaw === "" ? null : Number(valueRaw);
+
+  if (!effect_type || !effect_key || !mode) redirect("/admin/traits/edit?err=bad_effect");
+  if (["ability", "ac", "speed", "skill", "save"].includes(effect_type)) {
+    if (value === null || !isFinite(value)) redirect("/admin/traits/edit?err=value_required");
+  }
+  if (effect_type === "special" && !notes) redirect("/admin/traits/edit?err=notes_required");
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("trait_effects").insert({
+    trait_id: traitId,
+    effect_type,
+    effect_key,
+    mode,
+    value: ["resistance", "immunity", "advantage", "special"].includes(effect_type) ? null : value,
+    notes: effect_type === "special" ? notes : (notes || null),
+    sort_order,
+  });
+  if (error) redirect(`/admin/traits/edit?err=${encodeURIComponent(error.message)}`);
+  redirect("/admin/traits/edit");
+}
+
+export async function deleteTraitEffectAction(formData: FormData) {
+  const effectId = String(formData.get("effect_id") ?? "").trim();
+  if (!isUuid(effectId)) redirect("/admin/traits/edit?err=bad_effect_id");
+  const supabase = await createClient();
+  const { error } = await supabase.from("trait_effects").delete().eq("id", effectId);
+  if (error) redirect(`/admin/traits/edit?err=${encodeURIComponent(error.message)}`);
+  redirect("/admin/traits/edit");
+}

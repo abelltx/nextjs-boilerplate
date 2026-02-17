@@ -90,6 +90,12 @@ export default async function AdminEpisodeEditPage({
     .select("id,name,faith_required,is_active")
     .eq("is_active", true)
     .order("name", { ascending: true });
+  const { data: traitOptions } = await supabase
+    .from("traits")
+    .select("id,name,type,is_active")
+    .eq("is_active", true)
+    .eq("type", "training")
+    .order("name", { ascending: true });
 
   // Group blocks into scenes (scene blocks become headers)
   const sceneGroups: Array<{ scene: any | null; items: any[] }> = [];
@@ -1183,6 +1189,7 @@ export default async function AdminEpisodeEditPage({
                               initialMeta={b.meta ?? {}}
                               fallbackInfo={b.body ?? ""}
                               itemOptions={(itemOptions ?? []) as any[]}
+                              traitOptions={(traitOptions ?? []) as any[]}
                             />
                           ) : (
                             <textarea

@@ -26,6 +26,7 @@ export default function NpcTabsEditorClient(props: {
   initialMeta: any;
   fallbackInfo?: string | null;
   itemOptions?: Array<{ id: string; name: string; faith_required?: number | null }>;
+  traitOptions?: Array<{ id: string; name: string }>;
 }) {
   const rawTabs = (props.initialMeta?.npc_tabs ?? {}) as Record<string, any>;
   const [tabs, setTabs] = useState<Record<TabKey, { enabled: boolean; content: string }>>({
@@ -61,6 +62,12 @@ export default function NpcTabsEditorClient(props: {
     return "";
   });
   const gearIds = useMemo(() => normalizeUuidList(gearText), [gearText]);
+  const [trainingText, setTrainingText] = useState<string>(() => {
+    const ids = props.initialMeta?.npc_tabs?.training?.trait_ids;
+    if (Array.isArray(ids)) return ids.map((v: any) => String(v ?? "").trim()).filter(Boolean).join("\n");
+    return "";
+  });
+  const trainingIds = useMemo(() => normalizeUuidList(trainingText), [trainingText]);
   const optionMap = useMemo(() => {
     const map = new Map<string, { id: string; name: string; faith_required?: number | null }>();
     for (const it of props.itemOptions ?? []) map.set(String(it.id), it);
@@ -81,6 +88,22 @@ export default function NpcTabsEditorClient(props: {
         .filter(Boolean),
     [gearIds, optionMap]
   );
+  const traitMap = useMemo(() => {
+    const map = new Map<string, { id: string; name: string }>();
+    for (const it of props.traitOptions ?? []) map.set(String(it.id), it);
+    return map;
+  }, [props.traitOptions]);
+  const trainingSnapshots = useMemo(
+    () =>
+      trainingIds
+        .map((id) => {
+          const found = traitMap.get(id);
+          if (!found) return null;
+          return { id: found.id, name: found.name };
+        })
+        .filter(Boolean),
+    [trainingIds, traitMap]
+  );
 
   const extraMeta = useMemo(() => {
     const copy = { ...(props.initialMeta ?? {}) } as Record<string, any>;
@@ -97,6 +120,11 @@ export default function NpcTabsEditorClient(props: {
           ...tabs.gear,
           item_ids: gearIds,
           item_snapshots: itemSnapshots,
+        },
+        training: {
+          ...tabs.training,
+          trait_ids: trainingIds,
+          trait_snapshots: trainingSnapshots,
         },
       },
     },
@@ -176,6 +204,61 @@ export default function NpcTabsEditorClient(props: {
                             </span>
                           ) : (
                             <span className="ml-2 text-amber-700">Not found in current item library</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+            {k === "training" ? (
+              <div className="mt-2 space-y-2 rounded border border-dashed p-2">
+                <div className="text-xs font-semibold text-gray-600">
+                  Training Trait IDs (UUID, one per line)
+                </div>
+                <textarea
+                  className="w-full border rounded p-2 h-28 font-mono text-xs"
+                  placeholder={"11111111-2222-3333-4444-555555555555\n..."}
+                  value={trainingText}
+                  onChange={(e) => setTrainingText(e.target.value)}
+                />
+                {(props.traitOptions ?? []).length ? (
+                  <div className="space-y-1">
+                    <div className="text-[11px] text-gray-600">Quick add from Traits Library:</div>
+                    <select
+                      className="w-full border rounded p-2 text-sm"
+                      defaultValue=""
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        if (!next) return;
+                        setTrainingText((prev) => {
+                          const merged = Array.from(new Set([...normalizeUuidList(prev), next]));
+                          return merged.join("\n");
+                        });
+                        e.currentTarget.value = "";
+                      }}
+                    >
+                      <option value="">Select a training trait...</option>
+                      {(props.traitOptions ?? []).map((it) => (
+                        <option key={it.id} value={it.id}>
+                          {it.name} ({it.id})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
+                {trainingIds.length ? (
+                  <div className="space-y-1">
+                    {trainingIds.map((id) => {
+                      const found = traitMap.get(id);
+                      return (
+                        <div key={id} className="rounded border px-2 py-1 text-xs">
+                          <span className="font-mono">{id}</span>
+                          {found ? (
+                            <span className="ml-2 text-gray-600">{found.name}</span>
+                          ) : (
+                            <span className="ml-2 text-amber-700">Not found in current traits library</span>
                           )}
                         </div>
                       );

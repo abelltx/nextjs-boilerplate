@@ -210,3 +210,55 @@ export async function claimNpcGearItemAction(input: {
   revalidatePath("/player");
   return { ok: true };
 }
+
+export async function claimNpcTrainingTraitAction(input: {
+  characterId: string;
+  traitId: string;
+}): Promise<{ ok: boolean; alreadyOwned?: boolean; error?: string }> {
+  "use server";
+  const { user } = await getProfile();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const characterId = String(input.characterId ?? "").trim();
+  const traitId = String(input.traitId ?? "").trim();
+  if (!characterId || !traitId) return { ok: false, error: "Missing trait or character." };
+
+  const supabase = await supabaseServer();
+
+  const { data: ch, error: chErr } = await supabase
+    .from("characters")
+    .select("id,user_id")
+    .eq("id", characterId)
+    .maybeSingle();
+  if (chErr) return { ok: false, error: chErr.message };
+  if (!ch?.id || ch.user_id !== user.id) return { ok: false, error: "Character not found." };
+
+  const { data: trait, error: traitErr } = await supabase
+    .from("traits")
+    .select("id,name,type,is_active")
+    .eq("id", traitId)
+    .maybeSingle();
+  if (traitErr) return { ok: false, error: traitErr.message };
+  if (!trait?.id || trait.is_active === false) return { ok: false, error: "Trait not available." };
+  if (String(trait.type ?? "").toLowerCase() !== "training") return { ok: false, error: "Only training traits can be learned here." };
+
+  const { data: existing, error: exErr } = await supabase
+    .from("player_trait_links")
+    .select("id")
+    .eq("character_id", characterId)
+    .eq("trait_id", traitId)
+    .limit(1)
+    .maybeSingle();
+  if (exErr) return { ok: false, error: exErr.message };
+  if (existing?.id) return { ok: true, alreadyOwned: true };
+
+  const { error: insErr } = await supabase.from("player_trait_links").insert({
+    player_id: user.id,
+    character_id: characterId,
+    trait_id: traitId,
+  });
+  if (insErr) return { ok: false, error: insErr.message };
+
+  revalidatePath("/player");
+  return { ok: true };
+}
