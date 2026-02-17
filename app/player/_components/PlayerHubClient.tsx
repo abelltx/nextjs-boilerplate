@@ -138,6 +138,7 @@ export default function PlayerHubClient(props: {
     linkedBlocks?: Record<string, any>;
     players?: string[];
   } | null>(null);
+  const stageHashRef = useRef<string>("");
 
   const selectedSession = props.sessions.find((s) => s.id === selectedSessionId) ?? null;
   const optimisticLiveSessionName =
@@ -158,7 +159,11 @@ export default function PlayerHubClient(props: {
         const res = await fetch(`/api/player/session-stage?session_id=${selectedSessionId}`, { cache: "no-store" });
         const json = await res.json();
         if (!alive) return;
-        setStage(json);
+        const nextHash = JSON.stringify(json ?? {});
+        if (nextHash !== stageHashRef.current) {
+          stageHashRef.current = nextHash;
+          setStage(json);
+        }
       } catch {
         if (!alive) return;
         setStage((s) => s ?? { ok: false });

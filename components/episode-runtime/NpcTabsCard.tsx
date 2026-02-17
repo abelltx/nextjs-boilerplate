@@ -67,6 +67,7 @@ export default function NpcTabsCard(props: {
   const [active, setActive] = useState<RuntimeTabKey>(
     (tabs.find((t) => t.key === "information")?.key ?? tabs[0]?.key ?? "information") as RuntimeTabKey
   );
+  const snapshotRaw = JSON.stringify(props.meta?.npc_tabs?.gear?.item_snapshots ?? []);
   const supabase = useMemo(() => createClient(), []);
   const gearItemIds = useMemo<string[]>(() => {
     const itemIds = props.meta?.npc_tabs?.gear?.item_ids;
@@ -85,8 +86,9 @@ export default function NpcTabsCard(props: {
     }
     return [];
   }, [props.meta]);
+  const gearItemIdsKey = JSON.stringify(gearItemIds);
   const snapshotItems = useMemo<GearItem[]>(() => {
-    const raw = props.meta?.npc_tabs?.gear?.item_snapshots;
+    const raw = JSON.parse(snapshotRaw || "[]");
     const arr = Array.isArray(raw) ? raw : [];
     return arr
       .map((it: any, idx: number) => {
@@ -101,12 +103,12 @@ export default function NpcTabsCard(props: {
         } as GearItem;
       })
       .filter((it: any): it is GearItem => Boolean(it?.name));
-  }, [props.meta]);
+  }, [snapshotRaw]);
   const [gearItems, setGearItems] = useState<GearItem[]>(snapshotItems);
 
   useEffect(() => {
     setGearItems(snapshotItems);
-  }, [snapshotItems]);
+  }, [snapshotRaw]);
 
   useEffect(() => {
     let alive = true;
@@ -145,7 +147,7 @@ export default function NpcTabsCard(props: {
     return () => {
       alive = false;
     };
-  }, [supabase, gearItemIds, snapshotItems.length]);
+  }, [supabase, gearItemIdsKey, snapshotRaw]);
 
   const ownedSet = useMemo(
     () => new Set((props.playerShop?.ownedItems ?? []).map((n) => String(n).trim().toLowerCase())),
