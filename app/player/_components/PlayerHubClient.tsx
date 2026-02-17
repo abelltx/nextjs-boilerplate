@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import PlayerStatusHeader from "./PlayerStatusHeader";
 import JourneyLog from "./JourneyLog";
@@ -19,6 +19,12 @@ type PromptTarget =
   | { kind: "ability"; abilityKey: AbilityKey }
   | { kind: "die"; die: number }
   | null;
+
+type GuidedRoll = {
+  label: string;
+  total: number;
+  breakdown: string;
+};
 
 const SKILL_ALIASES: Array<{ key: string; aliases: string[] }> = [
   { key: "acrobatics", aliases: ["acrobatics"] },
@@ -167,6 +173,45 @@ export default function PlayerHubClient(props: {
   const rollPrompt = String(stageState?.roll_prompt ?? "");
   const promptTarget = useMemo(() => (rollOpen ? detectPromptTarget(rollPrompt) : null), [rollOpen, rollPrompt]);
   const stageStoryText = String(stage?.session?.story_text ?? selectedSession?.story_text ?? "");
+  const promptBoxRef = useRef<HTMLDivElement | null>(null);
+  const [guidedResult, setGuidedResult] = useState<GuidedRoll | null>(null);
+  const [flight, setFlight] = useState<{
+    id: number;
+    text: string;
+    startX: number;
+    startY: number;
+    dx: number;
+    dy: number;
+    active: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!rollOpen) {
+      setGuidedResult(null);
+      setFlight(null);
+    }
+  }, [rollOpen, rollPrompt]);
+
+  function launchRollFlight(fromRect: DOMRect, result: GuidedRoll) {
+    const targetRect = promptBoxRef.current?.getBoundingClientRect();
+    if (!targetRect) {
+      setGuidedResult(result);
+      return;
+    }
+    const startX = fromRect.left + fromRect.width / 2;
+    const startY = fromRect.top + fromRect.height / 2;
+    const endX = targetRect.left + targetRect.width * 0.82;
+    const endY = targetRect.top + targetRect.height * 0.32;
+    const id = Date.now();
+    setFlight({ id, text: `${result.total}`, startX, startY, dx: endX - startX, dy: endY - startY, active: false });
+    requestAnimationFrame(() => {
+      setFlight((f) => (f && f.id === id ? { ...f, active: true } : f));
+    });
+    window.setTimeout(() => {
+      setGuidedResult(result);
+      setFlight((f) => (f && f.id === id ? null : f));
+    }, 760);
+  }
 
   async function handleLeaveFromHeader() {
     const sid = optimisticLiveSession?.id ?? liveSession?.id ?? selectedSessionId;
@@ -187,6 +232,23 @@ export default function PlayerHubClient(props: {
     setSelectedSessionId(null);
     setOptimisticLiveSession(null);
     router.refresh();
+  }
+
+  function handleAbilityGuidedRoll(ability: AbilityKey, meta: { label: string; total: number; breakdown?: string }, fromRect: DOMRect) {
+    if (!rollOpen || promptTarget?.kind !== "ability" || promptTarget.abilityKey !== ability) return;
+    launchRollFlight(fromRect, { label: meta.label, total: meta.total, breakdown: meta.breakdown ?? "" });
+  }
+
+  function handleSkillGuidedRoll(skillKey: string, meta: { label: string; total: number; breakdown?: string }, fromRect: DOMRect) {
+    if (!rollOpen || promptTarget?.kind !== "skill" || promptTarget.skillKey !== skillKey) return;
+    launchRollFlight(fromRect, { label: meta.label, total: meta.total, breakdown: meta.breakdown ?? "" });
+  }
+
+  function handleRollPanelGuided(meta: { label: string; total: number; breakdown: string }, fromRect: DOMRect) {
+    if (!rollOpen) return;
+    if (promptTarget?.kind === "die" || promptTarget?.kind === "ability" || promptTarget?.kind === "skill") {
+      launchRollFlight(fromRect, meta);
+    }
   }
 
   return (
@@ -221,7 +283,11 @@ export default function PlayerHubClient(props: {
 
         <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-12">
           <aside className="lg:col-span-3 space-y-4">
-            <AbilitiesCard stat={stat} highlightAbility={promptTarget?.kind === "ability" ? promptTarget.abilityKey : null} />
+            <AbilitiesCard
+              stat={stat}
+              highlightAbility={promptTarget?.kind === "ability" ? promptTarget.abilityKey : null}
+              onAbilityRoll={handleAbilityGuidedRoll}
+            />
             <SavesCard stat={stat} />
             <PassivesCard stat={stat} />
 
@@ -237,7 +303,11 @@ export default function PlayerHubClient(props: {
               <div className="mt-4 space-y-4">
                 <StagePanel block={stageBlock} />
 
-                {rollOpen ? <RollRequestPanel prompt={rollPrompt} /> : null}
+                {rollOpen ? (
+                  <div ref={promptBoxRef}>
+                    <RollRequestPanel prompt={rollPrompt} guidedResult={guidedResult} />
+                  </div>
+                ) : null}
 
                 {stageStoryText ? (
                   <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
@@ -292,11 +362,12 @@ export default function PlayerHubClient(props: {
                   <div className="text-sm font-semibold">Actions</div>
                   <RollPanel
                     stat={stat}
-                    disabled={isLiveMode}
+                    disabled={isLiveMode && !rollOpen}
                     disabledReason="Rolls are handled in Live Mode."
                     highlightAbility={promptTarget?.kind === "ability" ? promptTarget.abilityKey : undefined}
                     highlightSkill={promptTarget?.kind === "skill" ? promptTarget.skillKey : undefined}
                     highlightDie={promptTarget?.kind === "die" ? promptTarget.die : undefined}
+                    onGuidedRoll={handleRollPanelGuided}
                   />
                 </div>
               )}
@@ -305,11 +376,29 @@ export default function PlayerHubClient(props: {
 
           <aside className="lg:col-span-3 space-y-4">
             <div className="lg:sticky lg:top-4">
-              <SkillsCard stat={stat} highlightSkill={promptTarget?.kind === "skill" ? promptTarget.skillKey : null} />
+              <SkillsCard
+                stat={stat}
+                highlightSkill={promptTarget?.kind === "skill" ? promptTarget.skillKey : null}
+                onSkillRoll={handleSkillGuidedRoll}
+              />
             </div>
           </aside>
         </div>
       </div>
+
+      {flight ? (
+        <div
+          className="pointer-events-none fixed z-[100] rounded-lg border border-green-200 bg-green-400/20 px-3 py-1 text-sm font-bold text-green-100 shadow-[0_0_0_2px_rgba(134,239,172,0.8),0_0_26px_rgba(34,197,94,0.95),0_0_48px_rgba(34,197,94,0.5)] transition-all duration-700 ease-out"
+          style={{
+            left: flight.startX,
+            top: flight.startY,
+            transform: `translate(${flight.active ? flight.dx : 0}px, ${flight.active ? flight.dy : 0}px) scale(${flight.active ? 0.72 : 1})`,
+            opacity: flight.active ? 0.08 : 1,
+          }}
+        >
+          {flight.text}
+        </div>
+      ) : null}
 
       <JoinSessionModal
         open={joinOpen}
@@ -477,11 +566,16 @@ function StageImagePreview({
   );
 }
 
-function RollRequestPanel({ prompt }: { prompt: string }) {
+function RollRequestPanel({ prompt, guidedResult }: { prompt: string; guidedResult: GuidedRoll | null }) {
   return (
-    <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
-      <div className="text-sm font-semibold">Roll Request</div>
+    <div className="rounded-2xl border border-green-300/90 bg-green-500/10 p-4 shadow-[0_0_0_2px_rgba(74,222,128,0.65),0_0_24px_rgba(34,197,94,0.8)]">
+      <div className="text-sm font-semibold text-green-100">Roll Request</div>
       <div className="mt-3 text-sm text-neutral-200">{prompt || "Follow the storyteller's roll instruction."}</div>
+      {guidedResult ? (
+        <div className="mt-3 rounded-lg border border-green-300/70 bg-neutral-950/60 px-3 py-2 text-sm text-green-200">
+          Result: <span className="font-semibold">{guidedResult.total}</span> ({guidedResult.breakdown})
+        </div>
+      ) : null}
       <div className="mt-2 text-xs text-neutral-400">
         Example: Click <span className="text-neutral-200">Perception</span> in your Skills panel, then report your result.
       </div>

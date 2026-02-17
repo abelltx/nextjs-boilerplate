@@ -47,6 +47,7 @@ export default function RollPanel(props: {
   highlightAbility?: AbilityKey;
   highlightSkill?: string;
   highlightDie?: number;
+  onGuidedRoll?: (meta: { label: string; total: number; breakdown: string }, fromRect: DOMRect) => void;
 }) {
   const [history, setHistory] = useState<RollEntry[]>([]);
   const [last, setLast] = useState<RollEntry | null>(null);
@@ -123,18 +124,19 @@ export default function RollPanel(props: {
         </div>
 
         <div className="mt-3 grid grid-cols-4 gap-2 sm:grid-cols-7">
-          <DieButton sides={4} onClick={() => doRoll("Roll d4", [{ n: 1, sides: 4 }])} disabled={disabled} highlight={props.highlightDie === 4} />
-          <DieButton sides={6} onClick={() => doRoll("Roll d6", [{ n: 1, sides: 6 }])} disabled={disabled} highlight={props.highlightDie === 6} />
-          <DieButton sides={8} onClick={() => doRoll("Roll d8", [{ n: 1, sides: 8 }])} disabled={disabled} highlight={props.highlightDie === 8} />
-          <DieButton sides={10} onClick={() => doRoll("Roll d10", [{ n: 1, sides: 10 }])} disabled={disabled} highlight={props.highlightDie === 10} />
-          <DieButton sides={12} onClick={() => doRoll("Roll d12", [{ n: 1, sides: 12 }])} disabled={disabled} highlight={props.highlightDie === 12} />
-          <DieButton sides={20} onClick={() => doRoll("Roll d20", [{ n: 1, sides: 20 }])} disabled={disabled} highlight={props.highlightDie === 20} />
+          <DieButton sides={4} onClick={() => doRoll("Roll d4", [{ n: 1, sides: 4 }])} disabled={disabled} highlight={props.highlightDie === 4} onGuidedRoll={props.onGuidedRoll} />
+          <DieButton sides={6} onClick={() => doRoll("Roll d6", [{ n: 1, sides: 6 }])} disabled={disabled} highlight={props.highlightDie === 6} onGuidedRoll={props.onGuidedRoll} />
+          <DieButton sides={8} onClick={() => doRoll("Roll d8", [{ n: 1, sides: 8 }])} disabled={disabled} highlight={props.highlightDie === 8} onGuidedRoll={props.onGuidedRoll} />
+          <DieButton sides={10} onClick={() => doRoll("Roll d10", [{ n: 1, sides: 10 }])} disabled={disabled} highlight={props.highlightDie === 10} onGuidedRoll={props.onGuidedRoll} />
+          <DieButton sides={12} onClick={() => doRoll("Roll d12", [{ n: 1, sides: 12 }])} disabled={disabled} highlight={props.highlightDie === 12} onGuidedRoll={props.onGuidedRoll} />
+          <DieButton sides={20} onClick={() => doRoll("Roll d20", [{ n: 1, sides: 20 }])} disabled={disabled} highlight={props.highlightDie === 20} onGuidedRoll={props.onGuidedRoll} />
           <DieButton
             sides={100}
             label="d100"
             onClick={() => doRoll("Roll d100", [{ n: 1, sides: 100 }])}
             disabled={disabled}
             highlight={props.highlightDie === 100}
+            onGuidedRoll={props.onGuidedRoll}
           />
         </div>
       </div>
@@ -154,6 +156,7 @@ export default function RollPanel(props: {
                 onClick={() => doRoll(`${a.label} Check`, [{ n: 1, sides: 20 }], bonus)}
                 disabled={disabled}
                 highlight={props.highlightAbility === a.key}
+                onGuidedRoll={props.onGuidedRoll}
               />
             );
           })}
@@ -179,6 +182,7 @@ export default function RollPanel(props: {
                 onClick={() => doRoll(`${s.name} Check`, [{ n: 1, sides: 20 }], s.bonus)}
                 disabled={disabled}
                 highlight={props.highlightSkill?.toLowerCase() === s.name.toLowerCase()}
+                onGuidedRoll={props.onGuidedRoll}
               />
             ))}
           </div>
@@ -270,18 +274,28 @@ function DieButton(props: {
   onClick: () => void;
   disabled?: boolean;
   highlight?: boolean;
+  onGuidedRoll?: (meta: { label: string; total: number; breakdown: string }, fromRect: DOMRect) => void;
 }) {
   const text = props.label ?? `d${props.sides}`;
   return (
     <button
-      onClick={props.onClick}
+      onClick={(e) => {
+        props.onClick();
+        if (props.highlight && props.onGuidedRoll) {
+          const roll = Math.floor(Math.random() * props.sides) + 1;
+          props.onGuidedRoll(
+            { label: `${text.toUpperCase()} Roll`, total: roll, breakdown: `${text}(${roll})` },
+            e.currentTarget.getBoundingClientRect()
+          );
+        }
+      }}
       disabled={props.disabled}
       className={[
         "group relative rounded-2xl border bg-neutral-950/40 px-3 py-3 text-center transition",
         "hover:bg-neutral-900/50 hover:border-neutral-600 active:scale-[0.99]",
         "disabled:opacity-40 disabled:hover:bg-neutral-950/40 disabled:hover:border-neutral-800 disabled:cursor-not-allowed",
         props.highlight
-          ? "border-emerald-400/80 bg-emerald-500/10 shadow-[0_0_0_1px_rgba(52,211,153,0.35),0_0_18px_rgba(52,211,153,0.35)] animate-pulse"
+          ? "border-green-300 bg-green-500/15 shadow-[0_0_0_2px_rgba(74,222,128,0.8),0_0_24px_rgba(34,197,94,0.95),0_0_44px_rgba(34,197,94,0.55)] animate-pulse"
           : "border-neutral-800",
       ].join(" ")}
       title={`Roll ${text}`}
@@ -299,17 +313,33 @@ function ActionRollButton(props: {
   onClick: () => void;
   disabled?: boolean;
   highlight?: boolean;
+  onGuidedRoll?: (meta: { label: string; total: number; breakdown: string }, fromRect: DOMRect) => void;
 }) {
   return (
     <button
-      onClick={props.onClick}
+      onClick={(e) => {
+        props.onClick();
+        if (props.highlight && props.onGuidedRoll) {
+          const bonusMatch = props.subtitle.match(/([+-]\d+)/);
+          const bonus = bonusMatch ? Number(bonusMatch[1]) : 0;
+          const roll = Math.floor(Math.random() * 20) + 1;
+          props.onGuidedRoll(
+            {
+              label: props.title,
+              total: roll + bonus,
+              breakdown: `d20(${roll}) ${bonus >= 0 ? "+" : "-"} ${Math.abs(bonus)}`,
+            },
+            e.currentTarget.getBoundingClientRect()
+          );
+        }
+      }}
       disabled={props.disabled}
       className={[
         "rounded-2xl border bg-neutral-950/40 p-3 text-left transition",
         "hover:bg-neutral-900/50 hover:border-neutral-600 active:scale-[0.99]",
         "disabled:opacity-40 disabled:hover:bg-neutral-950/40 disabled:hover:border-neutral-800 disabled:cursor-not-allowed",
         props.highlight
-          ? "border-emerald-400/80 bg-emerald-500/10 shadow-[0_0_0_1px_rgba(52,211,153,0.35),0_0_18px_rgba(52,211,153,0.35)] animate-pulse"
+          ? "border-green-300 bg-green-500/15 shadow-[0_0_0_2px_rgba(74,222,128,0.8),0_0_24px_rgba(34,197,94,0.95),0_0_44px_rgba(34,197,94,0.55)] animate-pulse"
           : "border-neutral-800",
       ].join(" ")}
     >

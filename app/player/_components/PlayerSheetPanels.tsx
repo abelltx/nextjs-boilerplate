@@ -15,6 +15,8 @@ export type StatBlock = {
   effects?: Array<{ name: string; kind?: "buff" | "debuff"; note?: string }>;
 };
 
+type RollClickMeta = { label: string; total: number; breakdown?: string };
+
 function mod(score?: number) {
   const s = Number(score ?? 10);
   return Math.floor((s - 10) / 2);
@@ -24,7 +26,15 @@ function fmt(n: number) {
   return n >= 0 ? `+${n}` : String(n);
 }
 
-export function AbilitiesCard({ stat, highlightAbility = null }: { stat: StatBlock; highlightAbility?: AbilityKey | null }) {
+export function AbilitiesCard({
+  stat,
+  highlightAbility = null,
+  onAbilityRoll,
+}: {
+  stat: StatBlock;
+  highlightAbility?: AbilityKey | null;
+  onAbilityRoll?: (ability: AbilityKey, meta: RollClickMeta, fromRect: DOMRect) => void;
+}) {
   const a = stat.abilities ?? { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
   const rows: Array<{ k: AbilityKey; label: string }> = [
     { k: "str", label: "STR" },
@@ -39,12 +49,24 @@ export function AbilitiesCard({ stat, highlightAbility = null }: { stat: StatBlo
     <Card title="Abilities">
       <div className="grid grid-cols-2 gap-2">
         {rows.map((r) => (
-          <div
+          <button
+            type="button"
             key={r.k}
+            onClick={(e) => {
+              const score = Number(a[r.k] ?? 10);
+              const bonus = mod(score);
+              const roll = Math.floor(Math.random() * 20) + 1;
+              const total = roll + bonus;
+              onAbilityRoll?.(
+                r.k,
+                { label: `${r.label} Check`, total, breakdown: `d20(${roll}) ${bonus >= 0 ? "+" : "-"} ${Math.abs(bonus)}` },
+                e.currentTarget.getBoundingClientRect()
+              );
+            }}
             className={[
-              "rounded-xl border bg-neutral-950/40 p-2 transition",
+              "rounded-xl border bg-neutral-950/40 p-2 text-left transition",
               highlightAbility === r.k
-                ? "border-emerald-400/80 bg-emerald-500/10 shadow-[0_0_0_1px_rgba(52,211,153,0.35),0_0_18px_rgba(52,211,153,0.35)] animate-pulse"
+                ? "border-green-300 bg-green-500/15 shadow-[0_0_0_2px_rgba(74,222,128,0.8),0_0_24px_rgba(34,197,94,0.95),0_0_44px_rgba(34,197,94,0.55)] animate-pulse"
                 : "border-neutral-800",
             ].join(" ")}
           >
@@ -68,7 +90,7 @@ export function AbilitiesCard({ stat, highlightAbility = null }: { stat: StatBlo
               })()}
               <div className="text-sm text-neutral-200">{fmt(mod(a[r.k]))}</div>
             </div>
-          </div>
+          </button>
         ))}
       </div>
     </Card>
@@ -108,7 +130,15 @@ export function SavesCard({ stat }: { stat: StatBlock }) {
   );
 }
 
-export function SkillsCard({ stat, highlightSkill = null }: { stat: StatBlock; highlightSkill?: string | null }) {
+export function SkillsCard({
+  stat,
+  highlightSkill = null,
+  onSkillRoll,
+}: {
+  stat: StatBlock;
+  highlightSkill?: string | null;
+  onSkillRoll?: (skillKey: string, meta: RollClickMeta, fromRect: DOMRect) => void;
+}) {
   const skills = stat.skills ?? {};
   const a = stat.abilities ?? { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
 
@@ -152,12 +182,22 @@ export function SkillsCard({ stat, highlightSkill = null }: { stat: StatBlock; h
           const proficient = totalBonus > abilityMod;
 
           return (
-            <div
+            <button
+              type="button"
               key={s.key}
+              onClick={(e) => {
+                const roll = Math.floor(Math.random() * 20) + 1;
+                const total = roll + totalBonus;
+                onSkillRoll?.(
+                  s.key,
+                  { label: `${s.label} Check`, total, breakdown: `d20(${roll}) ${totalBonus >= 0 ? "+" : "-"} ${Math.abs(totalBonus)}` },
+                  e.currentTarget.getBoundingClientRect()
+                );
+              }}
               className={[
-                "grid items-center rounded-lg border bg-neutral-950/40 px-3 py-2 transition",
+                "grid items-center rounded-lg border bg-neutral-950/40 px-3 py-2 text-left transition",
                 highlightSkill === s.key
-                  ? "border-emerald-400/80 bg-emerald-500/10 shadow-[0_0_0_1px_rgba(52,211,153,0.35),0_0_18px_rgba(52,211,153,0.35)] animate-pulse"
+                  ? "border-green-300 bg-green-500/15 shadow-[0_0_0_2px_rgba(74,222,128,0.8),0_0_24px_rgba(34,197,94,0.95),0_0_44px_rgba(34,197,94,0.55)] animate-pulse"
                   : "border-neutral-800",
               ].join(" ")}
               style={{ gridTemplateColumns: "30px 44px minmax(0, 1fr) 64px" }}
@@ -176,7 +216,7 @@ export function SkillsCard({ stat, highlightSkill = null }: { stat: StatBlock; h
                 <span>{s.label}</span>
               </div>
               <div className="justify-self-end text-right text-sm font-semibold text-white">{fmt(totalBonus)}</div>
-            </div>
+            </button>
           );
         })}
       </div>
