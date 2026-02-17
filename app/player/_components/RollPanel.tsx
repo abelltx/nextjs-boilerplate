@@ -48,6 +48,7 @@ export default function RollPanel(props: {
   highlightSkill?: string;
   highlightDie?: number;
   onGuidedRoll?: (meta: { label: string; total: number; breakdown: string }, fromRect: DOMRect) => void;
+  lockRoll?: boolean;
 }) {
   const [history, setHistory] = useState<RollEntry[]>([]);
   const [last, setLast] = useState<RollEntry | null>(null);
@@ -108,7 +109,7 @@ export default function RollPanel(props: {
     setHistory((h) => [entry, ...h].slice(0, 12));
   };
 
-  const disabled = Boolean(props.disabled);
+  const disabled = Boolean(props.disabled || props.lockRoll);
 
   return (
     <div className="space-y-4">

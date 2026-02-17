@@ -30,10 +30,12 @@ export function AbilitiesCard({
   stat,
   highlightAbility = null,
   onAbilityRoll,
+  rollLocked = false,
 }: {
   stat: StatBlock;
   highlightAbility?: AbilityKey | null;
   onAbilityRoll?: (ability: AbilityKey, meta: RollClickMeta, fromRect: DOMRect) => void;
+  rollLocked?: boolean;
 }) {
   const a = stat.abilities ?? { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
   const rows: Array<{ k: AbilityKey; label: string }> = [
@@ -63,8 +65,9 @@ export function AbilitiesCard({
                 e.currentTarget.getBoundingClientRect()
               );
             }}
+            disabled={rollLocked}
             className={[
-              "rounded-xl border bg-neutral-950/40 p-2 text-left transition",
+              "rounded-xl border bg-neutral-950/40 p-2 text-left transition disabled:cursor-not-allowed disabled:opacity-60",
               highlightAbility === r.k
                 ? "border-green-300 bg-green-500/15 shadow-[0_0_0_2px_rgba(74,222,128,0.8),0_0_24px_rgba(34,197,94,0.95),0_0_44px_rgba(34,197,94,0.55)] animate-pulse"
                 : "border-neutral-800",
@@ -134,10 +137,12 @@ export function SkillsCard({
   stat,
   highlightSkill = null,
   onSkillRoll,
+  rollLocked = false,
 }: {
   stat: StatBlock;
   highlightSkill?: string | null;
   onSkillRoll?: (skillKey: string, meta: RollClickMeta, fromRect: DOMRect) => void;
+  rollLocked?: boolean;
 }) {
   const skills = stat.skills ?? {};
   const a = stat.abilities ?? { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
@@ -194,8 +199,9 @@ export function SkillsCard({
                   e.currentTarget.getBoundingClientRect()
                 );
               }}
+              disabled={rollLocked}
               className={[
-                "grid items-center rounded-lg border bg-neutral-950/40 px-3 py-2 text-left transition",
+                "grid items-center rounded-lg border bg-neutral-950/40 px-3 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-60",
                 highlightSkill === s.key
                   ? "border-green-300 bg-green-500/15 shadow-[0_0_0_2px_rgba(74,222,128,0.8),0_0_24px_rgba(34,197,94,0.95),0_0_44px_rgba(34,197,94,0.55)] animate-pulse"
                   : "border-neutral-800",

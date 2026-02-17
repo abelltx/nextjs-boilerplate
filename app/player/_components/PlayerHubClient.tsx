@@ -8,7 +8,7 @@ import JoinSessionModal from "./JoinSessionModal";
 import { AbilitiesCard, SavesCard, SkillsCard, PassivesCard, type AbilityKey } from "./PlayerSheetPanels";
 import RollPanel from "./RollPanel";
 import PlayerInventoryPanel from "./PlayerInventoryPanel";
-import { leaveSessionAction } from "../actions";
+import { leaveSessionAction, submitRollResultAction } from "../actions";
 import RevealCard from "@/components/episode-runtime/RevealCard";
 import { extractMapMarkers } from "@/lib/episodeRuntime";
 
@@ -80,6 +80,7 @@ function isLiveState(state: any) {
 }
 
 export default function PlayerHubClient(props: {
+  userId: string;
   userEmail: string;
   accessLabel: string;
   character: any;
@@ -173,6 +174,9 @@ export default function PlayerHubClient(props: {
   const rollPrompt = String(stageState?.roll_prompt ?? "");
   const promptTarget = useMemo(() => (rollOpen ? detectPromptTarget(rollPrompt) : null), [rollOpen, rollPrompt]);
   const stageStoryText = String(stage?.session?.story_text ?? selectedSession?.story_text ?? "");
+  const [diceMode, setDiceMode] = useState<"digital" | "manual">("digital");
+  const [manualValue, setManualValue] = useState("");
+  const [submittingRoll, setSubmittingRoll] = useState(false);
   const promptBoxRef = useRef<HTMLDivElement | null>(null);
   const [guidedResult, setGuidedResult] = useState<GuidedRoll | null>(null);
   const [flight, setFlight] = useState<{
@@ -184,13 +188,37 @@ export default function PlayerHubClient(props: {
     dy: number;
     active: boolean;
   } | null>(null);
+  const currentRoundId = String(stageState?.roll_round_id ?? "");
+  const myExistingResult = (stageState?.roll_results?.[props.userId] ?? null) as any;
+  const alreadySubmittedRound = Boolean(
+    rollOpen && currentRoundId && myExistingResult?.round_id && String(myExistingResult.round_id) === currentRoundId
+  );
+  const rollLocked = rollOpen && (Boolean(guidedResult) || Boolean(flight) || alreadySubmittedRound);
 
   useEffect(() => {
     if (!rollOpen) {
       setGuidedResult(null);
       setFlight(null);
+      setManualValue("");
+      setSubmittingRoll(false);
     }
   }, [rollOpen, rollPrompt]);
+
+  async function submitRoll(value: number, source: "manual" | "digital") {
+    if (!selectedSessionId) return;
+    setSubmittingRoll(true);
+    const res = await submitRollResultAction({
+      sessionId: selectedSessionId,
+      rollValue: value,
+      source,
+    });
+    setSubmittingRoll(false);
+    if (!res.ok) {
+      alert(res.error ?? "Could not submit roll.");
+      return;
+    }
+    router.refresh();
+  }
 
   function launchRollFlight(fromRect: DOMRect, result: GuidedRoll) {
     const targetRect = promptBoxRef.current?.getBoundingClientRect();
@@ -210,7 +238,8 @@ export default function PlayerHubClient(props: {
     window.setTimeout(() => {
       setGuidedResult(result);
       setFlight((f) => (f && f.id === id ? null : f));
-    }, 760);
+      void submitRoll(result.total, "digital");
+    }, 1500);
   }
 
   async function handleLeaveFromHeader() {
@@ -235,16 +264,22 @@ export default function PlayerHubClient(props: {
   }
 
   function handleAbilityGuidedRoll(ability: AbilityKey, meta: { label: string; total: number; breakdown?: string }, fromRect: DOMRect) {
+    if (diceMode !== "digital") return;
+    if (rollLocked) return;
     if (!rollOpen || promptTarget?.kind !== "ability" || promptTarget.abilityKey !== ability) return;
     launchRollFlight(fromRect, { label: meta.label, total: meta.total, breakdown: meta.breakdown ?? "" });
   }
 
   function handleSkillGuidedRoll(skillKey: string, meta: { label: string; total: number; breakdown?: string }, fromRect: DOMRect) {
+    if (diceMode !== "digital") return;
+    if (rollLocked) return;
     if (!rollOpen || promptTarget?.kind !== "skill" || promptTarget.skillKey !== skillKey) return;
     launchRollFlight(fromRect, { label: meta.label, total: meta.total, breakdown: meta.breakdown ?? "" });
   }
 
   function handleRollPanelGuided(meta: { label: string; total: number; breakdown: string }, fromRect: DOMRect) {
+    if (diceMode !== "digital") return;
+    if (rollLocked) return;
     if (!rollOpen) return;
     if (promptTarget?.kind === "die" || promptTarget?.kind === "ability" || promptTarget?.kind === "skill") {
       launchRollFlight(fromRect, meta);
@@ -287,6 +322,7 @@ export default function PlayerHubClient(props: {
               stat={stat}
               highlightAbility={promptTarget?.kind === "ability" ? promptTarget.abilityKey : null}
               onAbilityRoll={handleAbilityGuidedRoll}
+              rollLocked={rollLocked || diceMode === "manual" || submittingRoll}
             />
             <SavesCard stat={stat} />
             <PassivesCard stat={stat} />
@@ -305,7 +341,26 @@ export default function PlayerHubClient(props: {
 
                 {rollOpen ? (
                   <div ref={promptBoxRef}>
-                    <RollRequestPanel prompt={rollPrompt} guidedResult={guidedResult} />
+                    <RollRequestPanel
+                      prompt={rollPrompt}
+                      guidedResult={guidedResult}
+                      diceMode={diceMode}
+                      setDiceMode={setDiceMode}
+                      manualValue={manualValue}
+                      setManualValue={setManualValue}
+                      onSubmitManual={async () => {
+                        if (rollLocked || submittingRoll) return;
+                        const v = Number(manualValue);
+                        if (!Number.isFinite(v)) {
+                          alert("Enter a valid roll value.");
+                          return;
+                        }
+                        setGuidedResult({ label: "Manual Roll", total: v, breakdown: "Real dice" });
+                        await submitRoll(v, "manual");
+                      }}
+                      rollLocked={rollLocked}
+                      submitting={submittingRoll}
+                    />
                   </div>
                 ) : null}
 
@@ -368,6 +423,7 @@ export default function PlayerHubClient(props: {
                     highlightSkill={promptTarget?.kind === "skill" ? promptTarget.skillKey : undefined}
                     highlightDie={promptTarget?.kind === "die" ? promptTarget.die : undefined}
                     onGuidedRoll={handleRollPanelGuided}
+                    lockRoll={rollLocked || diceMode === "manual" || submittingRoll}
                   />
                 </div>
               )}
@@ -380,6 +436,7 @@ export default function PlayerHubClient(props: {
                 stat={stat}
                 highlightSkill={promptTarget?.kind === "skill" ? promptTarget.skillKey : null}
                 onSkillRoll={handleSkillGuidedRoll}
+                rollLocked={rollLocked || diceMode === "manual" || submittingRoll}
               />
             </div>
           </aside>
@@ -388,7 +445,7 @@ export default function PlayerHubClient(props: {
 
       {flight ? (
         <div
-          className="pointer-events-none fixed z-[100] rounded-lg border border-green-200 bg-green-400/20 px-3 py-1 text-sm font-bold text-green-100 shadow-[0_0_0_2px_rgba(134,239,172,0.8),0_0_26px_rgba(34,197,94,0.95),0_0_48px_rgba(34,197,94,0.5)] transition-all duration-700 ease-out"
+          className="pointer-events-none fixed z-[100] rounded-lg border border-green-200 bg-green-400/20 px-3 py-1 text-sm font-bold text-green-100 shadow-[0_0_0_2px_rgba(134,239,172,0.8),0_0_26px_rgba(34,197,94,0.95),0_0_48px_rgba(34,197,94,0.5)] transition-all duration-[1400ms] ease-out"
           style={{
             left: flight.startX,
             top: flight.startY,
@@ -566,18 +623,65 @@ function StageImagePreview({
   );
 }
 
-function RollRequestPanel({ prompt, guidedResult }: { prompt: string; guidedResult: GuidedRoll | null }) {
+function RollRequestPanel(props: {
+  prompt: string;
+  guidedResult: GuidedRoll | null;
+  diceMode: "digital" | "manual";
+  setDiceMode: (mode: "digital" | "manual") => void;
+  manualValue: string;
+  setManualValue: (v: string) => void;
+  onSubmitManual: () => void;
+  rollLocked: boolean;
+  submitting: boolean;
+}) {
   return (
-    <div className="rounded-2xl border border-green-300/90 bg-green-500/10 p-4 shadow-[0_0_0_2px_rgba(74,222,128,0.65),0_0_24px_rgba(34,197,94,0.8)]">
-      <div className="text-sm font-semibold text-green-100">Roll Request</div>
-      <div className="mt-3 text-sm text-neutral-200">{prompt || "Follow the storyteller's roll instruction."}</div>
-      {guidedResult ? (
+    <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-sm font-semibold">Roll Request</div>
+        <label className="flex items-center gap-2 rounded-lg border border-neutral-700 px-2 py-1 text-xs text-neutral-200">
+          <input
+            type="checkbox"
+            checked={props.diceMode === "manual"}
+            onChange={(e) => props.setDiceMode(e.currentTarget.checked ? "manual" : "digital")}
+            className="accent-emerald-400"
+            disabled={props.rollLocked || props.submitting}
+          />
+          {props.diceMode === "manual" ? "Real Dice" : "Digital Dice"}
+        </label>
+      </div>
+
+      <div className="mt-3 text-sm text-neutral-200">{props.prompt || "Follow the storyteller's roll instruction."}</div>
+
+      {props.diceMode === "manual" ? (
+        <div className="mt-3 flex items-center gap-2">
+          <input
+            type="number"
+            value={props.manualValue}
+            onChange={(e) => props.setManualValue(e.currentTarget.value)}
+            placeholder="Type your total"
+            className="w-32 rounded-lg border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-sm"
+            disabled={props.rollLocked || props.submitting}
+          />
+          <button
+            type="button"
+            onClick={props.onSubmitManual}
+            disabled={props.rollLocked || props.submitting}
+            className="rounded-lg border border-neutral-700 px-3 py-1.5 text-sm hover:bg-neutral-900 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Submit
+          </button>
+        </div>
+      ) : (
+        <div className="mt-3 text-xs text-neutral-400">Digital Dice active: click the glowing target to roll once.</div>
+      )}
+
+      {props.guidedResult ? (
         <div className="mt-3 rounded-lg border border-green-300/70 bg-neutral-950/60 px-3 py-2 text-sm text-green-200">
-          Result: <span className="font-semibold">{guidedResult.total}</span> ({guidedResult.breakdown})
+          Result: <span className="font-semibold">{props.guidedResult.total}</span> ({props.guidedResult.breakdown})
         </div>
       ) : null}
       <div className="mt-2 text-xs text-neutral-400">
-        Example: Click <span className="text-neutral-200">Perception</span> in your Skills panel, then report your result.
+        Example: Click <span className="text-neutral-200">Perception</span> in your Skills panel, then submit your total.
       </div>
     </div>
   );

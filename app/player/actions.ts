@@ -92,7 +92,6 @@ export async function leaveSessionAction(sessionId: string): Promise<{ ok: boole
 
 export async function submitRollResultAction(input: {
   sessionId: string;
-  playerId: string;
   rollValue: number;
   source: "manual" | "digital";
 }): Promise<{ ok: boolean; error?: string }> {
@@ -104,20 +103,32 @@ export async function submitRollResultAction(input: {
 
   const { data: st, error: stErr } = await supabase
     .from("session_state")
-    .select("roll_results")
+    .select("roll_open,roll_target,roll_round_id,roll_results")
     .eq("session_id", input.sessionId)
     .single();
 
   if (stErr) return { ok: false, error: stErr.message };
+  if (!st || !(st as any).roll_open) return { ok: false, error: "No open roll request." };
+
+  const target = String((st as any).roll_target ?? "all");
+  if (target !== "all" && target !== user.id) {
+    return { ok: false, error: "This roll request targets a different player." };
+  }
+
+  const roundId = String((st as any).roll_round_id ?? "");
 
   const current = ((st as any)?.roll_results ?? {}) as Record<string, any>;
+  if (current[user.id]?.round_id && current[user.id].round_id === roundId) {
+    return { ok: false, error: "You already submitted a roll for this request." };
+  }
+
   const next = {
     ...current,
-    [input.playerId]: {
-      roll_value: input.rollValue,
+    [user.id]: {
+      value: input.rollValue,
       source: input.source,
-      updated_at: new Date().toISOString(),
-      entered_by: user.id,
+      round_id: roundId,
+      submitted_at: new Date().toISOString(),
     },
   };
 

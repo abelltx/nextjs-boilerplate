@@ -289,6 +289,7 @@ export default async function PlayerPage() {
 
   return (
     <PlayerHubClient
+      userId={user.id}
       userEmail={user.email ?? ""}
       accessLabel={accessLabel}
       character={character}
