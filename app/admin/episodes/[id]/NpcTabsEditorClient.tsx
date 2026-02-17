@@ -223,31 +223,37 @@ export default function NpcTabsEditorClient(props: {
                   value={trainingText}
                   onChange={(e) => setTrainingText(e.target.value)}
                 />
-                {(props.traitOptions ?? []).length ? (
-                  <div className="space-y-1">
-                    <div className="text-[11px] text-gray-600">Quick add from Traits Library:</div>
-                    <select
-                      className="w-full border rounded p-2 text-sm"
-                      defaultValue=""
-                      onChange={(e) => {
-                        const next = e.target.value;
-                        if (!next) return;
-                        setTrainingText((prev) => {
-                          const merged = Array.from(new Set([...normalizeUuidList(prev), next]));
-                          return merged.join("\n");
-                        });
-                        e.currentTarget.value = "";
-                      }}
-                    >
-                      <option value="">Select a training trait...</option>
-                      {(props.traitOptions ?? []).map((it) => (
-                        <option key={it.id} value={it.id}>
-                          {it.name} ({it.id})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ) : null}
+                <div className="space-y-1">
+                  <div className="text-[11px] text-gray-600">Quick add from Traits Library:</div>
+                  <select
+                    className="w-full border rounded p-2 text-sm disabled:bg-gray-100 disabled:text-gray-500"
+                    defaultValue=""
+                    disabled={(props.traitOptions ?? []).length === 0}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      if (!next) return;
+                      setTrainingText((prev) => {
+                        const merged = Array.from(new Set([...normalizeUuidList(prev), next]));
+                        return merged.join("\n");
+                      });
+                      e.currentTarget.value = "";
+                    }}
+                  >
+                    <option value="">
+                      {(props.traitOptions ?? []).length ? "Select a training trait..." : "No active training traits found"}
+                    </option>
+                    {(props.traitOptions ?? []).map((it) => (
+                      <option key={it.id} value={it.id}>
+                        {it.name} ({it.id})
+                      </option>
+                    ))}
+                  </select>
+                  {(props.traitOptions ?? []).length === 0 ? (
+                    <div className="text-[11px] text-amber-700">
+                      Create or activate a training trait in <span className="font-mono">/admin/traits</span>.
+                    </div>
+                  ) : null}
+                </div>
                 {trainingIds.length ? (
                   <div className="space-y-1">
                     {trainingIds.map((id) => {
