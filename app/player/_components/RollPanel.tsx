@@ -55,6 +55,9 @@ export default function RollPanel(props: {
   highlightDie?: number;
   onGuidedRoll?: (meta: { label: string; total: number; breakdown: string }, fromRect: DOMRect) => void;
   lockRoll?: boolean;
+  showAbilityChecks?: boolean;
+  showSkillChecks?: boolean;
+  showRollConsole?: boolean;
 }) {
   const [history, setHistory] = useState<RollEntry[]>([]);
   const [last, setLast] = useState<RollEntry | null>(null);
@@ -239,6 +242,7 @@ export default function RollPanel(props: {
       </div>
 
       {/* Ability Checks */}
+      {props.showAbilityChecks !== false ? (
       <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
         <div className="text-sm font-semibold">Ability Checks</div>
         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -263,8 +267,10 @@ export default function RollPanel(props: {
           })}
         </div>
       </div>
+      ) : null}
 
       {/* Skill Checks */}
+      {props.showSkillChecks !== false ? (
       <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
         <div className="flex items-center justify-between">
           <div className="text-sm font-semibold">Skill Checks</div>
@@ -297,8 +303,10 @@ export default function RollPanel(props: {
           </div>
         )}
       </div>
+      ) : null}
 
       {/* Result Console */}
+      {props.showRollConsole !== false ? (
       <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
         <div className="flex items-center justify-between">
           <div className="text-sm font-semibold">Roll Console</div>
@@ -369,6 +377,7 @@ export default function RollPanel(props: {
           </div>
         ) : null}
       </div>
+      ) : null}
     </div>
   );
 }

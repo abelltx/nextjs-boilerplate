@@ -524,11 +524,12 @@ export default function PlayerHubClient(props: {
                     highlightDie={promptTarget?.kind === "die" ? promptTarget.die : undefined}
                     onGuidedRoll={handleRollPanelGuided}
                     lockRoll={rollLocked || diceMode === "manual" || submittingRoll}
+                    showAbilityChecks={false}
+                    showSkillChecks={false}
+                    showRollConsole={false}
                   />
-                  <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-                    <ActionListPanel actions={props.playerActions ?? []} />
-                    <TraitListPanel traits={props.playerTraits ?? []} />
-                  </div>
+                  <ActionListPanel actions={props.playerActions ?? []} />
+                  <TraitListPanel traits={props.playerTraits ?? []} />
                 </div>
               )}
             </div>
@@ -717,18 +718,29 @@ function ActionListPanel(props: {
     <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
       <div className="text-sm font-semibold">Character Actions</div>
       {props.actions.length ? (
-        <div className="mt-3 space-y-2">
+        <div className="mt-3 overflow-hidden rounded-xl border border-neutral-800">
+          <div className="grid grid-cols-12 gap-2 border-b border-neutral-800 bg-neutral-900/50 px-3 py-2 text-[11px] uppercase tracking-wide text-neutral-400">
+            <div className="col-span-3">Attack</div>
+            <div className="col-span-2">Range</div>
+            <div className="col-span-2">Hit / DC</div>
+            <div className="col-span-2">Damage</div>
+            <div className="col-span-3">Notes</div>
+          </div>
           {props.actions.map((a) => (
-            <div key={a.id} className="rounded-lg border border-neutral-800 bg-neutral-900/40 p-3">
-              <div className="flex items-center justify-between gap-2">
-                <div className="text-sm font-semibold text-neutral-100">{a.name}</div>
+            <div key={a.id} className="grid grid-cols-12 gap-2 border-b border-neutral-800 px-3 py-2 text-sm last:border-b-0">
+              <div className="col-span-3 min-w-0">
+                <div className="truncate font-semibold text-neutral-100">{a.name}</div>
                 <div className="text-[11px] text-neutral-400">{a.type ?? "other"}</div>
               </div>
-              {a.summary ? <div className="mt-1 text-xs text-neutral-300">{a.summary}</div> : null}
-              <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-neutral-300">
-                {a.attack_bonus_override != null ? <span className="rounded border border-neutral-700 px-2 py-0.5">Hit +{a.attack_bonus_override}</span> : null}
-                {a.damage_dice ? <span className="rounded border border-neutral-700 px-2 py-0.5">Damage {a.damage_dice}</span> : null}
-                {a.damage_type ? <span className="rounded border border-neutral-700 px-2 py-0.5">{a.damage_type}</span> : null}
+              <div className="col-span-2 text-neutral-300">--</div>
+              <div className="col-span-2 text-neutral-300">
+                {a.attack_bonus_override != null ? `+${a.attack_bonus_override}` : "--"}
+              </div>
+              <div className="col-span-2 text-neutral-300">
+                {a.damage_dice ? `${a.damage_dice}${a.damage_type ? ` ${a.damage_type}` : ""}` : "--"}
+              </div>
+              <div className="col-span-3 text-xs text-neutral-300">
+                {a.summary?.trim() || "--"}
               </div>
             </div>
           ))}
