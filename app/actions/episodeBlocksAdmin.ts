@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 import { revalidatePath } from "next/cache";
 
 const EPISODE_ASSETS_BUCKET = "episode-assets";
@@ -26,9 +27,10 @@ async function maybeUploadBlockImage(
   const bt = String(blockType ?? "").trim().toLowerCase();
   const folder = bt === "npc" ? "episode-npcs" : "episode-maps";
   const path = `${folder}/${episodeId}/${Date.now()}-${safeName}`;
+  const storageClient = createAdminClient() ?? supabase;
 
   try {
-    const { error: upErr } = await supabase.storage
+    const { error: upErr } = await storageClient.storage
       .from(EPISODE_ASSETS_BUCKET)
       .upload(path, file, {
         upsert: true,
@@ -36,11 +38,13 @@ async function maybeUploadBlockImage(
       });
     if (upErr) throw new Error(upErr.message);
 
-    const { data: pub } = supabase.storage.from(EPISODE_ASSETS_BUCKET).getPublicUrl(path);
+    const { data: pub } = storageClient.storage.from(EPISODE_ASSETS_BUCKET).getPublicUrl(path);
     return pub?.publicUrl ?? null;
   } catch (e) {
     console.error("maybeUploadBlockImage failed:", e);
-    throw new Error("Image upload failed. Please try a smaller image or check episode-assets storage permissions.");
+    throw new Error(
+      "Image upload failed. Check episode-assets storage permissions or set SUPABASE_SERVICE_ROLE_KEY on the server."
+    );
   }
 }
 

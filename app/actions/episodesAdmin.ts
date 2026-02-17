@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 
 const EPISODE_ASSETS_BUCKET = "episode-assets";
 
@@ -89,8 +90,9 @@ async function maybeUploadAsset(
 
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
   const path = `${folderName}/${episodeId}/${Date.now()}-${safeName}`;
+  const storageClient = createAdminClient() ?? supabase;
 
-  const { error: upErr } = await supabase.storage
+  const { error: upErr } = await storageClient.storage
     .from(EPISODE_ASSETS_BUCKET)
     .upload(path, file, {
       upsert: true,
@@ -99,7 +101,7 @@ async function maybeUploadAsset(
 
   if (upErr) throw new Error(upErr.message);
 
-  const { data: pub } = supabase.storage.from(EPISODE_ASSETS_BUCKET).getPublicUrl(path);
+  const { data: pub } = storageClient.storage.from(EPISODE_ASSETS_BUCKET).getPublicUrl(path);
   return pub?.publicUrl ?? null;
 }
 
