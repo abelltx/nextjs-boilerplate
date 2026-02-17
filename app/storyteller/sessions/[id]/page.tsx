@@ -66,6 +66,16 @@ function formatTimerClock(totalSeconds: number) {
   return `${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}`;
 }
 
+function getBaseDurationSeconds(st: any, sessionRow: any) {
+  const stateBase = Number(st?.duration_seconds ?? NaN);
+  if (Number.isFinite(stateBase) && stateBase > 0) return Math.floor(stateBase);
+
+  const sessionBase = Number(sessionRow?.duration_seconds ?? NaN);
+  if (Number.isFinite(sessionBase) && sessionBase > 0) return Math.floor(sessionBase);
+
+  return 5400; // 90 min fallback
+}
+
 export default async function DmScreenPage({
   params,
 }: {
@@ -275,9 +285,11 @@ export default async function DmScreenPage({
               <form
                 action={async () => {
                   "use server";
+                  const base = getBaseDurationSeconds(state, session);
                   await updateState(session.id, {
                     timer_status: "stopped",
-                    remaining_seconds: (state as any).duration_seconds,
+                    duration_seconds: base,
+                    remaining_seconds: base,
                   });
                   redirect(`/storyteller/sessions/${session.id}`);
                 }}
