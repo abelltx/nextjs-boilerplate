@@ -76,7 +76,7 @@ export default function SceneMap(props: {
           <button
             type="button"
             className="rounded border border-neutral-700 px-2 py-0.5 hover:bg-neutral-900"
-            onClick={() => setZoom((z) => Math.min(5, Number((z + 0.5).toFixed(1))))}
+            onClick={() => setZoom((z) => Math.min(12, Number((z + 0.5).toFixed(1))))}
           >
             +
           </button>
@@ -88,4 +88,3 @@ export default function SceneMap(props: {
     </div>
   );
 }
-

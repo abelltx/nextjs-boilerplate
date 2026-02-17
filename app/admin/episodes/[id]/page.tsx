@@ -788,6 +788,9 @@ export default async function AdminEpisodeEditPage({
                       Map <span className="text-xs font-normal text-gray-500">| players can see</span>
                     </summary>
                     <div className="p-3 border-t space-y-2">
+                      <div className="text-xs text-gray-600">
+                        Add map first. Then open <b>Existing Steps</b>, expand that map block, and use <b>Map Marker Editor</b>.
+                      </div>
                       <form
                         className="space-y-2"
                         encType="multipart/form-data"
@@ -1146,6 +1149,10 @@ export default async function AdminEpisodeEditPage({
                                   title: `${x.block_type}${x.title ? ` - ${x.title}` : ""}`,
                                 }))}
                             />
+                          ) : String(b.block_type).toLowerCase() === "map" ? (
+                            <div className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800">
+                              Save an image URL or upload an image for this map block first, then reopen this block to place markers.
+                            </div>
                           ) : (
                             <textarea
                               name="meta_json"
