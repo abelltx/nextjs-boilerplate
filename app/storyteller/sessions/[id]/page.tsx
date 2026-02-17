@@ -3,7 +3,6 @@ export const revalidate = 0;
 export const fetchCache = "force-no-store";
 
 import { redirect } from "next/navigation";
-import TimerClient from "@/components/TimerClient";
 import { getDmSession, updateStoryText, updateState } from "./actions";
 import { createClient } from "@/utils/supabase/server";
 import { EpisodePicker } from "@/components/EpisodePicker";
@@ -45,6 +44,26 @@ function isEncounter(b: Block) {
 }
 function isPresentable(b: Block) {
   return b.audience !== "storyteller";
+}
+
+function getLiveRemainingSeconds(st: any) {
+  const remaining = Number(st?.remaining_seconds ?? 0);
+  const status = String(st?.timer_status ?? "").toLowerCase();
+  if (!Number.isFinite(remaining)) return 0;
+  if (status !== "running") return Math.max(0, Math.floor(remaining));
+
+  const updatedMs = Date.parse(String(st?.updated_at ?? ""));
+  if (!Number.isFinite(updatedMs)) return Math.max(0, Math.floor(remaining));
+
+  const elapsed = Math.max(0, Math.floor((Date.now() - updatedMs) / 1000));
+  return Math.max(0, Math.floor(remaining) - elapsed);
+}
+
+function formatTimerClock(totalSeconds: number) {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}`;
 }
 
 export default async function DmScreenPage({
@@ -140,6 +159,8 @@ export default async function DmScreenPage({
   for (const b of ordered) blockById.set(b.id, b);
   const runtimeSequence = buildRuntimeSequence(scenes as any);
   const activeSceneId = scenes[presentedSceneIdx]?.scene?.id ?? null;
+  const liveTimerSeconds = getLiveRemainingSeconds(state);
+  const timerStatusLabel = String((state as any).timer_status ?? "stopped");
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-4">
@@ -261,79 +282,81 @@ export default async function DmScreenPage({
                   redirect(`/storyteller/sessions/${session.id}`);
                 }}
               >
-                <button className="px-3 py-2 rounded border text-sm">Reset</button>
+                <button className="px-2 py-1 rounded border text-xs">Reset</button>
               </form>
             </div>
 
-            <TimerClient
-              remainingSeconds={(state as any).remaining_seconds}
-              status={(state as any).timer_status}
-              updatedAt={(state as any).updated_at}
-            />
-
-            <form
-              className="flex flex-wrap items-end gap-2"
-              action={async (fd) => {
-                "use server";
-                const mins = Number(fd.get("timer_mins"));
-                if (!Number.isFinite(mins) || mins <= 0) {
-                  redirect(`/storyteller/sessions/${session.id}`);
-                }
-                const seconds = Math.max(60, Math.floor(mins * 60));
-                await updateState(session.id, {
-                  duration_seconds: seconds,
-                  remaining_seconds: seconds,
-                  timer_status: "stopped",
-                });
-                redirect(`/storyteller/sessions/${session.id}`);
-              }}
-            >
-              <label className="space-y-1">
-                <div className="text-[11px] uppercase text-gray-500">Set Start Time (Minutes)</div>
-                <input
-                  name="timer_mins"
-                  type="number"
-                  min={1}
-                  step={1}
-                  defaultValue={Math.max(1, Math.round(Number((state as any).duration_seconds ?? 5400) / 60))}
-                  className="w-36 rounded border px-2 py-1.5 text-sm"
-                />
-              </label>
-              <button className="px-3 py-2 rounded border text-sm">Set Time</button>
-            </form>
+            <div className="flex items-center justify-between rounded-lg border px-3 py-2">
+              <div className="font-mono text-lg font-bold">{formatTimerClock(liveTimerSeconds)}</div>
+              <div className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] uppercase text-gray-600">{timerStatusLabel}</div>
+            </div>
 
             <div className="flex flex-wrap gap-2">
               <form
                 action={async () => {
                   "use server";
-                  await updateState(session.id, { timer_status: "running" });
+                  const frozen = getLiveRemainingSeconds(state);
+                  await updateState(session.id, { timer_status: "running", remaining_seconds: frozen });
                   redirect(`/storyteller/sessions/${session.id}`);
                 }}
               >
-                <button className="px-3 py-2 rounded bg-black text-white text-sm">Start</button>
+                <button className="px-2 py-1 rounded bg-black text-white text-xs">Start</button>
               </form>
 
               <form
                 action={async () => {
                   "use server";
-                  await updateState(session.id, { timer_status: "paused" });
+                  const frozen = getLiveRemainingSeconds(state);
+                  await updateState(session.id, { timer_status: "paused", remaining_seconds: frozen });
                   redirect(`/storyteller/sessions/${session.id}`);
                 }}
               >
-                <button className="px-3 py-2 rounded border text-sm">Pause</button>
+                <button className="px-2 py-1 rounded border text-xs">Pause</button>
               </form>
 
               <form
                 action={async () => {
                   "use server";
+                  const frozen = getLiveRemainingSeconds(state);
                   await updateState(session.id, {
-                    remaining_seconds: (state as any).remaining_seconds + 300,
+                    remaining_seconds: frozen + 300,
                   });
                   redirect(`/storyteller/sessions/${session.id}`);
                 }}
               >
-                <button className="px-3 py-2 rounded border text-sm">+5 min</button>
+                <button className="px-2 py-1 rounded border text-xs">+5</button>
               </form>
+
+              <details className="ml-auto">
+                <summary className="cursor-pointer text-xs underline underline-offset-2 text-gray-600">Adjust</summary>
+                <form
+                  className="mt-2 flex items-end gap-2"
+                  action={async (fd) => {
+                    "use server";
+                    const mins = Number(fd.get("timer_mins"));
+                    if (!Number.isFinite(mins) || mins <= 0) {
+                      redirect(`/storyteller/sessions/${session.id}`);
+                    }
+                    const seconds = Math.max(60, Math.floor(mins * 60));
+                    await updateState(session.id, {
+                      duration_seconds: seconds,
+                      remaining_seconds: seconds,
+                      timer_status: "stopped",
+                    });
+                    redirect(`/storyteller/sessions/${session.id}`);
+                  }}
+                >
+                  <input
+                    name="timer_mins"
+                    type="number"
+                    min={1}
+                    step={1}
+                    defaultValue={Math.max(1, Math.round(Number((state as any).duration_seconds ?? 5400) / 60))}
+                    className="w-24 rounded border px-2 py-1 text-xs"
+                  />
+                  <button className="px-2 py-1 rounded border text-xs">Set</button>
+                </form>
+              </details>
             </div>
           </div>
         </div>
