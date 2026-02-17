@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 import { updateActionAction, deleteActionAction } from "./actions";
 import DeleteActionButton from "./DeleteActionButton";
+import ActionDamageRollClient from "../ActionDamageRollClient";
 
 const COOKIE_KEY = "action_edit_id";
 
@@ -164,7 +165,7 @@ export default async function ActionEditPage({
             </label>
 
             <label className="grid gap-2">
-              <span className="text-sm font-medium">Damage dice</span>
+              <span className="text-sm font-medium">Damage dice formula</span>
               <input
                 name="damage_dice"
                 defaultValue={action.damage_dice ?? ""}
@@ -192,6 +193,18 @@ export default async function ActionEditPage({
                 placeholder="slashing"
               />
             </label>
+
+            <div className="md:col-span-2 rounded-lg border p-3">
+              <div className="mb-2 text-sm font-medium">Damage Roll Preview</div>
+              <ActionDamageRollClient
+                damageDice={action.damage_dice ?? null}
+                damageBonus={action.damage_bonus ?? null}
+                damageType={action.damage_type ?? null}
+              />
+              <div className="mt-2 text-xs text-muted-foreground">
+                Uses currently saved values. Click Save Changes first, then Roll.
+              </div>
+            </div>
 
             <label className="grid gap-2">
               <span className="text-sm font-medium">Save ability</span>
