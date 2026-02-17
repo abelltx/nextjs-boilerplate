@@ -508,16 +508,16 @@ export default async function DmScreenPage({
                                 const mapMarkers = extractMapMarkers(b.meta);
                                 return (
                               <RevealCard
-                                kind={b.block_type}
-                                audience={b.audience}
-                                mode={b.mode}
+                                kind={String(b.block_type).toLowerCase() === "npc" ? undefined : b.block_type}
+                                audience={String(b.block_type).toLowerCase() === "npc" ? undefined : b.audience}
+                                mode={String(b.block_type).toLowerCase() === "npc" ? undefined : b.mode}
                                 title={b.title}
                                 body={b.body}
                                 className="border-gray-200"
                                 hideBody={String(b.block_type).toLowerCase() === "npc"}
                                 childrenTop={
                                   String(b.block_type).toLowerCase() === "npc" ? (
-                                    <NpcTabsCard meta={b.meta} fallbackInfo={b.body ?? ""} imageUrl={b.image_url ?? null} />
+                                    <NpcTabsCard meta={b.meta} fallbackInfo={b.body ?? ""} imageUrl={b.image_url ?? null} embedded />
                                   ) : undefined
                                 }
                               >

@@ -519,14 +519,14 @@ function StagePanel({ block, linkedBlocks }: { block: any; linkedBlocks?: Record
       {block ? (
         <div className="mt-3 space-y-3">
           <RevealCard
-            kind={block.block_type ?? "presented"}
+            kind={String(block.block_type ?? "").toLowerCase() === "npc" ? undefined : block.block_type ?? "presented"}
             title={block.title ?? block.block_type ?? "Presented"}
             body={block.body ?? ""}
             className="border-neutral-800 bg-neutral-950/40 text-neutral-100"
             hideBody={String(block.block_type ?? "").toLowerCase() === "npc"}
             childrenTop={
               String(block.block_type ?? "").toLowerCase() === "npc" ? (
-                <NpcTabsCard meta={block.meta} fallbackInfo={block.body ?? ""} imageUrl={block.image_url ?? null} />
+                <NpcTabsCard meta={block.meta} fallbackInfo={block.body ?? ""} imageUrl={block.image_url ?? null} embedded />
               ) : undefined
             }
           >
@@ -550,7 +550,7 @@ function StagePanel({ block, linkedBlocks }: { block: any; linkedBlocks?: Record
               </summary>
               <div className="mt-3">
                 <RevealCard
-                  kind={selectedReveal.block_type ?? "reveal"}
+                  kind={String(selectedReveal.block_type ?? "").toLowerCase() === "npc" ? undefined : selectedReveal.block_type ?? "reveal"}
                   title={selectedReveal.title ?? selectedReveal.block_type ?? "Reveal"}
                   body={selectedReveal.body ?? ""}
                   className="border-neutral-700 bg-neutral-950/40 text-neutral-100"
@@ -561,6 +561,7 @@ function StagePanel({ block, linkedBlocks }: { block: any; linkedBlocks?: Record
                         meta={selectedReveal.meta}
                         fallbackInfo={selectedReveal.body ?? ""}
                         imageUrl={selectedReveal.image_url ?? null}
+                        embedded
                       />
                     ) : undefined
                   }
