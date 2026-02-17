@@ -262,3 +262,54 @@ export async function claimNpcTrainingTraitAction(input: {
   revalidatePath("/player");
   return { ok: true };
 }
+
+export async function claimNpcActionAction(input: {
+  characterId: string;
+  actionId: string;
+}): Promise<{ ok: boolean; alreadyOwned?: boolean; error?: string }> {
+  "use server";
+  const { user } = await getProfile();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const characterId = String(input.characterId ?? "").trim();
+  const actionId = String(input.actionId ?? "").trim();
+  if (!characterId || !actionId) return { ok: false, error: "Missing action or character." };
+
+  const supabase = await supabaseServer();
+
+  const { data: ch, error: chErr } = await supabase
+    .from("characters")
+    .select("id,user_id")
+    .eq("id", characterId)
+    .maybeSingle();
+  if (chErr) return { ok: false, error: chErr.message };
+  if (!ch?.id || ch.user_id !== user.id) return { ok: false, error: "Character not found." };
+
+  const { data: action, error: actionErr } = await supabase
+    .from("actions")
+    .select("id,is_active")
+    .eq("id", actionId)
+    .maybeSingle();
+  if (actionErr) return { ok: false, error: actionErr.message };
+  if (!action?.id || action.is_active === false) return { ok: false, error: "Action not available." };
+
+  const { data: existing, error: exErr } = await supabase
+    .from("player_action_links")
+    .select("id")
+    .eq("character_id", characterId)
+    .eq("action_id", actionId)
+    .limit(1)
+    .maybeSingle();
+  if (exErr) return { ok: false, error: exErr.message };
+  if (existing?.id) return { ok: true, alreadyOwned: true };
+
+  const { error: insErr } = await supabase.from("player_action_links").insert({
+    player_id: user.id,
+    character_id: characterId,
+    action_id: actionId,
+  });
+  if (insErr) return { ok: false, error: insErr.message };
+
+  revalidatePath("/player");
+  return { ok: true };
+}

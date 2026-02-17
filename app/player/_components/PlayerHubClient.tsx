@@ -9,6 +9,7 @@ import { AbilitiesCard, SavesCard, SkillsCard, PassivesCard, type AbilityKey } f
 import RollPanel from "./RollPanel";
 import PlayerInventoryPanel from "./PlayerInventoryPanel";
 import {
+  claimNpcActionAction,
   claimNpcGearItemAction,
   claimNpcTrainingTraitAction,
   leaveSessionAction,
@@ -98,6 +99,17 @@ export default function PlayerHubClient(props: {
   presentedBlocks: Record<string, any>;
   gameLog: any[];
   playerTraitIds?: string[];
+  playerTraits?: Array<{ id: string; name: string; summary?: string | null; type?: string | null }>;
+  playerActionIds?: string[];
+  playerActions?: Array<{
+    id: string;
+    name: string;
+    type?: string | null;
+    summary?: string | null;
+    damage_dice?: string | null;
+    attack_bonus_override?: number | null;
+    damage_type?: string | null;
+  }>;
 }) {
   const [tab, setTab] = useState<TabKey>("inventory");
   const [joinOpen, setJoinOpen] = useState(false);
@@ -121,6 +133,10 @@ export default function PlayerHubClient(props: {
   const ownedTraitIds = useMemo(
     () => (props.playerTraitIds ?? []).map((id) => String(id).trim().toLowerCase()).filter(Boolean),
     [props.playerTraitIds]
+  );
+  const ownedActionIds = useMemo(
+    () => (props.playerActionIds ?? []).map((id) => String(id).trim().toLowerCase()).filter(Boolean),
+    [props.playerActionIds]
   );
 
   const liveSession = useMemo(() => {
@@ -333,16 +349,22 @@ export default function PlayerHubClient(props: {
     window.dispatchEvent(new CustomEvent("inventory:refresh"));
     router.refresh();
   }
-  async function handleClaimNpcTraining(trait: { id: string; traitId: string; name: string }) {
+  async function handleClaimNpcTraining(trait: { id: string; traitId: string; name: string; source: "trait" | "action" }) {
     if (claimingTrainingId) return;
     setClaimingTrainingId(trait.id);
-    const res = await claimNpcTrainingTraitAction({
-      characterId: String(props.character?.id ?? ""),
-      traitId: trait.traitId,
-    });
+    const res =
+      trait.source === "action"
+        ? await claimNpcActionAction({
+            characterId: String(props.character?.id ?? ""),
+            actionId: trait.traitId,
+          })
+        : await claimNpcTrainingTraitAction({
+            characterId: String(props.character?.id ?? ""),
+            traitId: trait.traitId,
+          });
     setClaimingTrainingId(null);
     if (!res.ok) {
-      alert(res.error ?? "Could not learn training.");
+      alert(res.error ?? "Could not learn.");
       return;
     }
     router.refresh();
@@ -409,6 +431,7 @@ export default function PlayerHubClient(props: {
                     faithPoints,
                     ownedItems: ownedInventoryItemIds,
                     ownedTraits: ownedTraitIds,
+                    ownedActions: ownedActionIds,
                     claimingId: claimingGearId,
                     claimingTraitId: claimingTrainingId,
                     onClaim: handleClaimNpcGear,
@@ -502,6 +525,10 @@ export default function PlayerHubClient(props: {
                     onGuidedRoll={handleRollPanelGuided}
                     lockRoll={rollLocked || diceMode === "manual" || submittingRoll}
                   />
+                  <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                    <ActionListPanel actions={props.playerActions ?? []} />
+                    <TraitListPanel traits={props.playerTraits ?? []} />
+                  </div>
                 </div>
               )}
             </div>
@@ -580,10 +607,11 @@ function StagePanel({
     faithPoints: number;
     ownedItems: string[];
     ownedTraits?: string[];
+    ownedActions?: string[];
     claimingId?: string | null;
     claimingTraitId?: string | null;
     onClaim?: (item: { id: string; itemId: string; name: string; faithRequired: number }) => void | Promise<void>;
-    onClaimTraining?: (trait: { id: string; traitId: string; name: string }) => void | Promise<void>;
+    onClaimTraining?: (trait: { id: string; traitId: string; name: string; source: "trait" | "action" }) => void | Promise<void>;
   };
 }) {
   const markers = extractMapMarkers(block?.meta);
@@ -669,6 +697,67 @@ function StagePanel({
         <div className="mt-3 text-sm text-neutral-300">
           When the storyteller clicks <span className="text-neutral-100">Present to Players</span>, it will appear here.
         </div>
+      )}
+    </div>
+  );
+}
+
+function ActionListPanel(props: {
+  actions: Array<{
+    id: string;
+    name: string;
+    type?: string | null;
+    summary?: string | null;
+    damage_dice?: string | null;
+    attack_bonus_override?: number | null;
+    damage_type?: string | null;
+  }>;
+}) {
+  return (
+    <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
+      <div className="text-sm font-semibold">Character Actions</div>
+      {props.actions.length ? (
+        <div className="mt-3 space-y-2">
+          {props.actions.map((a) => (
+            <div key={a.id} className="rounded-lg border border-neutral-800 bg-neutral-900/40 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-sm font-semibold text-neutral-100">{a.name}</div>
+                <div className="text-[11px] text-neutral-400">{a.type ?? "other"}</div>
+              </div>
+              {a.summary ? <div className="mt-1 text-xs text-neutral-300">{a.summary}</div> : null}
+              <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-neutral-300">
+                {a.attack_bonus_override != null ? <span className="rounded border border-neutral-700 px-2 py-0.5">Hit +{a.attack_bonus_override}</span> : null}
+                {a.damage_dice ? <span className="rounded border border-neutral-700 px-2 py-0.5">Damage {a.damage_dice}</span> : null}
+                {a.damage_type ? <span className="rounded border border-neutral-700 px-2 py-0.5">{a.damage_type}</span> : null}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="mt-3 text-sm text-neutral-400">No learned actions yet.</div>
+      )}
+    </div>
+  );
+}
+
+function TraitListPanel(props: { traits: Array<{ id: string; name: string; summary?: string | null; type?: string | null }> }) {
+  return (
+    <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
+      <div className="text-sm font-semibold">Traits</div>
+      {props.traits.length ? (
+        <div className="mt-3 space-y-2">
+          {props.traits.map((t) => (
+            <div key={t.id} className="rounded-lg border border-neutral-800 bg-neutral-900/40 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-sm font-semibold text-neutral-100">{t.name}</div>
+                <div className="text-[11px] text-neutral-400">{t.type ?? "trait"}</div>
+              </div>
+              {t.summary ? <div className="mt-1 text-xs text-neutral-300">{t.summary}</div> : null}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="mt-3 text-sm text-neutral-400">No learned traits yet.</div>
       )}
     </div>
   );

@@ -22,6 +22,15 @@ type TraitEffectRow = {
   value: number | null;
   notes: string | null;
 };
+type PlayerActionRow = {
+  id: string;
+  name: string;
+  type: string | null;
+  summary: string | null;
+  damage_dice: string | null;
+  attack_bonus_override: number | null;
+  damage_type: string | null;
+};
 
 function n(v: unknown, fallback = 0) {
   const num = Number(v);
@@ -302,6 +311,40 @@ export default async function PlayerPage() {
         .filter((id: string | null): id is string => Boolean(id))
     )
   );
+  const { data: actionLinks, error: actionLinksErr } = await supabase
+    .from("player_action_links")
+    .select("action_id")
+    .eq("character_id", character.id);
+  if (actionLinksErr && !String(actionLinksErr.message ?? "").toLowerCase().includes("does not exist")) {
+    throw new Error(`Failed to load player actions: ${actionLinksErr.message}`);
+  }
+  const learnedActionIds = Array.from(
+    new Set(
+      (actionLinks ?? [])
+        .map((r: { action_id: string | null }) => r.action_id)
+        .filter((id: string | null): id is string => Boolean(id))
+    )
+  );
+  let learnedActions: PlayerActionRow[] = [];
+  if (learnedActionIds.length) {
+    const { data: actionRows, error: learnedActionsErr } = await supabase
+      .from("actions")
+      .select("id,name,type,summary,damage_dice,attack_bonus_override,damage_type")
+      .in("id", learnedActionIds)
+      .order("name", { ascending: true });
+    if (learnedActionsErr) throw new Error(`Failed to load action details: ${learnedActionsErr.message}`);
+    learnedActions = (actionRows ?? []) as PlayerActionRow[];
+  }
+  let learnedTraits: Array<{ id: string; name: string; summary: string | null; type: string | null }> = [];
+  if (learnedTraitIds.length) {
+    const { data: traitRows, error: learnedTraitsErr } = await supabase
+      .from("traits")
+      .select("id,name,summary,type")
+      .in("id", learnedTraitIds)
+      .order("name", { ascending: true });
+    if (learnedTraitsErr) throw new Error(`Failed to load trait details: ${learnedTraitsErr.message}`);
+    learnedTraits = (traitRows ?? []) as any[];
+  }
   let traitEffects: TraitEffectRow[] = [];
   if (learnedTraitIds.length) {
     const { data: traitEffectRows, error: traitEffectsErr } = await supabase
@@ -333,6 +376,9 @@ export default async function PlayerPage() {
       presentedBlocks={presentedBlocks ?? {}}
       gameLog={gameLog ?? []}
       playerTraitIds={learnedTraitIds}
+      playerTraits={learnedTraits}
+      playerActionIds={learnedActionIds}
+      playerActions={learnedActions}
     />
   );
 }

@@ -26,6 +26,7 @@ type TrainingTrait = {
   traitId: string;
   name: string;
   description: string;
+  source: "trait" | "action";
 };
 
 export default function NpcTabsCard(props: {
@@ -37,6 +38,7 @@ export default function NpcTabsCard(props: {
     faithPoints: number;
     ownedItems: string[];
     ownedTraits?: string[];
+    ownedActions?: string[];
     claimingId?: string | null;
     claimingTraitId?: string | null;
     onClaim?: (item: GearItem) => void | Promise<void>;
@@ -104,7 +106,14 @@ export default function NpcTabsCard(props: {
     }
     return [];
   }, [props.meta]);
-  const trainingTraitIdsKey = JSON.stringify(trainingTraitIds);
+  const trainingActionIds = useMemo<string[]>(() => {
+    const actionIds = props.meta?.npc_tabs?.training?.action_ids;
+    if (Array.isArray(actionIds)) {
+      return Array.from(new Set(actionIds.map((v: any) => String(v ?? "").trim()).filter(Boolean)));
+    }
+    return [];
+  }, [props.meta]);
+  const trainingIdsKey = JSON.stringify([...trainingTraitIds, ...trainingActionIds].sort());
   const snapshotItems = useMemo<GearItem[]>(() => {
     const raw = JSON.parse(snapshotRaw || "[]");
     const arr = Array.isArray(raw) ? raw : [];
@@ -135,18 +144,37 @@ export default function NpcTabsCard(props: {
           traitId,
           name: String(it?.name ?? "").trim(),
           description: "",
+          source: "trait",
         } as TrainingTrait;
       })
       .filter((it: any): it is TrainingTrait => Boolean(it?.name));
   }, [trainingSnapshotRaw]);
-  const [trainingTraits, setTrainingTraits] = useState<TrainingTrait[]>(trainingSnapshotItems);
+  const trainingActionSnapshotRaw = JSON.stringify(props.meta?.npc_tabs?.training?.action_snapshots ?? []);
+  const trainingActionSnapshotItems = useMemo<TrainingTrait[]>(() => {
+    const raw = JSON.parse(trainingActionSnapshotRaw || "[]");
+    const arr = Array.isArray(raw) ? raw : [];
+    return arr
+      .map((it: any, idx: number) => {
+        const actionId = String(it?.id ?? "").trim();
+        if (!actionId) return null;
+        return {
+          id: `training-action-snapshot-${actionId}-${idx + 1}`,
+          traitId: actionId,
+          name: String(it?.name ?? "").trim(),
+          description: "",
+          source: "action",
+        } as TrainingTrait;
+      })
+      .filter((it: any): it is TrainingTrait => Boolean(it?.name));
+  }, [trainingActionSnapshotRaw]);
+  const [trainingTraits, setTrainingTraits] = useState<TrainingTrait[]>([...trainingSnapshotItems, ...trainingActionSnapshotItems]);
 
   useEffect(() => {
     setGearItems(snapshotItems);
   }, [snapshotRaw]);
   useEffect(() => {
-    setTrainingTraits(trainingSnapshotItems);
-  }, [trainingSnapshotRaw]);
+    setTrainingTraits([...trainingSnapshotItems, ...trainingActionSnapshotItems]);
+  }, [trainingSnapshotRaw, trainingActionSnapshotRaw]);
 
   useEffect(() => {
     let alive = true;
@@ -189,40 +217,60 @@ export default function NpcTabsCard(props: {
   useEffect(() => {
     let alive = true;
     async function loadTraits() {
-      if (!trainingTraitIds.length) {
+      if (!trainingTraitIds.length && !trainingActionIds.length) {
         if (alive) setTrainingTraits([]);
         return;
       }
-      const { data, error } = await supabase
-        .from("traits")
-        .select("id,name,summary")
-        .in("id", trainingTraitIds);
+      const [{ data: traitData, error: traitErr }, { data: actionData, error: actionErr }] = await Promise.all([
+        trainingTraitIds.length
+          ? supabase.from("traits").select("id,name,summary").in("id", trainingTraitIds)
+          : Promise.resolve({ data: [], error: null } as any),
+        trainingActionIds.length
+          ? supabase.from("actions").select("id,name,summary").in("id", trainingActionIds)
+          : Promise.resolve({ data: [], error: null } as any),
+      ]);
       if (!alive) return;
-      if (error || !data) {
-        if (!trainingSnapshotItems.length) setTrainingTraits([]);
+      if (traitErr || actionErr) {
+        if (!trainingSnapshotItems.length && !trainingActionSnapshotItems.length) setTrainingTraits([]);
         return;
       }
-      const byId = new Map<string, any>();
-      for (const row of data as any[]) byId.set(String(row.id), row);
-      const mapped = trainingTraitIds
+      const traitById = new Map<string, any>();
+      for (const row of (traitData ?? []) as any[]) traitById.set(String(row.id), row);
+      const actionById = new Map<string, any>();
+      for (const row of (actionData ?? []) as any[]) actionById.set(String(row.id), row);
+      const mappedTraits = trainingTraitIds
         .map((traitId, idx) => {
-          const row = byId.get(traitId);
+          const row = traitById.get(traitId);
           if (!row) return null;
           return {
-            id: `training-${traitId}-${idx + 1}`,
+            id: `training-trait-${traitId}-${idx + 1}`,
             traitId,
             name: String(row.name ?? "").trim(),
             description: String(row.summary ?? "").trim(),
+            source: "trait",
           } as TrainingTrait;
         })
         .filter((it): it is TrainingTrait => Boolean(it?.name));
-      setTrainingTraits(mapped);
+      const mappedActions = trainingActionIds
+        .map((actionId, idx) => {
+          const row = actionById.get(actionId);
+          if (!row) return null;
+          return {
+            id: `training-action-${actionId}-${idx + 1}`,
+            traitId: actionId,
+            name: String(row.name ?? "").trim(),
+            description: String(row.summary ?? "").trim(),
+            source: "action",
+          } as TrainingTrait;
+        })
+        .filter((it): it is TrainingTrait => Boolean(it?.name));
+      setTrainingTraits([...mappedTraits, ...mappedActions]);
     }
     void loadTraits();
     return () => {
       alive = false;
     };
-  }, [supabase, trainingTraitIdsKey, trainingSnapshotRaw]);
+  }, [supabase, trainingIdsKey, trainingSnapshotRaw, trainingActionSnapshotRaw]);
 
   const ownedSet = useMemo(
     () => new Set((props.playerShop?.ownedItems ?? []).map((n) => String(n).trim().toLowerCase())),
@@ -231,6 +279,10 @@ export default function NpcTabsCard(props: {
   const ownedTraitSet = useMemo(
     () => new Set((props.playerShop?.ownedTraits ?? []).map((n) => String(n).trim().toLowerCase())),
     [props.playerShop?.ownedTraits]
+  );
+  const ownedActionSet = useMemo(
+    () => new Set((props.playerShop?.ownedActions ?? []).map((n) => String(n).trim().toLowerCase())),
+    [props.playerShop?.ownedActions]
   );
 
   const activeTab = tabs.find((t) => t.key === active) ?? tabs[0] ?? null;
@@ -308,12 +360,16 @@ export default function NpcTabsCard(props: {
       ) : activeTab.key === "training" && trainingTraits.length ? (
         <div className="mt-3 space-y-2">
           {trainingTraits
-            .filter((it) => !ownedTraitSet.has(it.traitId.toLowerCase()))
+            .filter((it) =>
+              it.source === "trait"
+                ? !ownedTraitSet.has(it.traitId.toLowerCase())
+                : !ownedActionSet.has(it.traitId.toLowerCase())
+            )
             .map((it) => (
               <div key={it.id} className="rounded-lg border border-neutral-700 bg-neutral-950/50 px-2 py-2">
                 <div className="flex items-center justify-between gap-2">
                   <div className="text-sm font-semibold text-neutral-100 truncate">{it.name}</div>
-                  <div className="text-[11px] text-neutral-400">Free</div>
+                  <div className="text-[11px] text-neutral-400">{it.source === "trait" ? "Trait" : "Action"}</div>
                 </div>
                 {it.description ? <div className="mt-1 text-xs text-neutral-300">{it.description}</div> : null}
                 <div className="mt-2 flex items-center justify-end gap-2">
@@ -330,7 +386,11 @@ export default function NpcTabsCard(props: {
                 </div>
               </div>
             ))}
-          {trainingTraits.filter((it) => !ownedTraitSet.has(it.traitId.toLowerCase())).length === 0 ? (
+          {trainingTraits.filter((it) =>
+            it.source === "trait"
+              ? !ownedTraitSet.has(it.traitId.toLowerCase())
+              : !ownedActionSet.has(it.traitId.toLowerCase())
+          ).length === 0 ? (
             <div className="text-sm text-neutral-400">You already learned all available training from this NPC.</div>
           ) : null}
         </div>
