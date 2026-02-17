@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 type Marker = {
   id: string;
@@ -32,6 +32,9 @@ export default function MapMarkerEditorClient(props: {
 }) {
   const [markers, setMarkers] = useState<Marker[]>(() => normalizeMarkers(props.initialMeta));
   const [selectedId, setSelectedId] = useState<string | null>(markers[0]?.id ?? null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [didDrag, setDidDrag] = useState(false);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
 
   const selected = markers.find((m) => m.id === selectedId) ?? null;
   const extraMeta = useMemo(() => {
@@ -68,16 +71,38 @@ export default function MapMarkerEditorClient(props: {
     });
   }
 
+  function moveMarkerByClient(clientX: number, clientY: number) {
+    if (!draggingId || !wrapRef.current) return;
+    const rect = wrapRef.current.getBoundingClientRect();
+    const x = ((clientX - rect.left) / rect.width) * 100;
+    const y = ((clientY - rect.top) / rect.height) * 100;
+    setMarkers((prev) => prev.map((m) => (m.id === draggingId ? { ...m, x: clamp(x), y: clamp(y) } : m)));
+    setDidDrag(true);
+  }
+
   const metaJson = JSON.stringify({ ...extraMeta, markers }, null, 2);
 
   return (
     <div className="space-y-2 rounded-lg border p-2">
       <div className="text-xs uppercase text-gray-500">Map Marker Editor</div>
-      <div className="text-xs text-gray-600">Click image to add marker, then label/link it.</div>
+      <div className="text-xs text-gray-600">
+        Click image to add marker. Drag marker to move. Use "No linked reveal card" dropdown to link what gets revealed.
+      </div>
 
       <div
+        ref={wrapRef}
         className="relative overflow-hidden rounded border bg-black/5"
+        onPointerMove={(e) => {
+          if (!draggingId) return;
+          moveMarkerByClient(e.clientX, e.clientY);
+        }}
+        onPointerUp={() => setDraggingId(null)}
+        onPointerLeave={() => setDraggingId(null)}
         onClick={(e) => {
+          if (didDrag) {
+            setDidDrag(false);
+            return;
+          }
           const rect = e.currentTarget.getBoundingClientRect();
           const x = ((e.clientX - rect.left) / rect.width) * 100;
           const y = ((e.clientY - rect.top) / rect.height) * 100;
@@ -99,6 +124,21 @@ export default function MapMarkerEditorClient(props: {
             onClick={(e) => {
               e.stopPropagation();
               setSelectedId(m.id);
+            }}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              setSelectedId(m.id);
+              setDraggingId(m.id);
+              setDidDrag(false);
+              e.currentTarget.setPointerCapture(e.pointerId);
+            }}
+            onPointerMove={(e) => {
+              if (draggingId !== m.id) return;
+              moveMarkerByClient(e.clientX, e.clientY);
+            }}
+            onPointerUp={(e) => {
+              if (draggingId === m.id) setDraggingId(null);
+              e.currentTarget.releasePointerCapture(e.pointerId);
             }}
             title={m.label}
           >
@@ -163,4 +203,3 @@ export default function MapMarkerEditorClient(props: {
     </div>
   );
 }
-
