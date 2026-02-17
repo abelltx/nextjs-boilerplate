@@ -7,7 +7,6 @@ import { getDmSession, updateStoryText, updateState } from "./actions";
 import { createClient } from "@/utils/supabase/server";
 import { EpisodePicker } from "@/components/EpisodePicker";
 import { presentBlockToPlayersAction, clearPresentedAction } from "@/app/actions/present";
-import DmRollResultsRealtime from "@/components/DmRollResultsRealtime";
 import DmPlayerRollLineRealtime from "@/components/DmPlayerRollLineRealtime";
 import { randomUUID } from "crypto";
 import SequenceRail from "@/components/episode-runtime/SequenceRail";
@@ -254,12 +253,6 @@ export default async function DmScreenPage({
             />
           </div>
 
-          {/* LIVE roll results (DM realtime feed) */}
-          <DmRollResultsRealtime
-            sessionId={sessionId}
-            joins={joins as any}
-            initialState={state as any}
-          />
         </div>     {/* end session box */}
 
 
