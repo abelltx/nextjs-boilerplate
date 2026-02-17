@@ -312,6 +312,9 @@ export default function PlayerHubClient(props: {
           effects={effects}
           liveSessionName={liveSessionNameForHeader}
           isSessionLive={isSessionLive}
+          timerStatus={String(stageState?.timer_status ?? "")}
+          timerRemainingSeconds={Number(stageState?.remaining_seconds ?? NaN)}
+          timerUpdatedAt={String(stageState?.updated_at ?? "")}
           onJoinClick={() => setJoinOpen(true)}
           onLeaveClick={handleLeaveFromHeader}
         />

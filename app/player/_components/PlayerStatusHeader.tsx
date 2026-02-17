@@ -1,5 +1,7 @@
 ﻿"use client";
 
+import { useEffect, useMemo, useState } from "react";
+
 export default function PlayerStatusHeader(props: {
   characterName: string;
   becomingLabel: string;
@@ -16,6 +18,9 @@ export default function PlayerStatusHeader(props: {
 
   liveSessionName: string | null;
   isSessionLive: boolean;
+  timerStatus?: string | null;
+  timerRemainingSeconds?: number | null;
+  timerUpdatedAt?: string | null;
   onJoinClick: () => void;
   onLeaveClick: () => void;
 }) {
@@ -45,6 +50,11 @@ export default function PlayerStatusHeader(props: {
           <StatPill label="Defense" value={defenseText} />
           <StatPill label="Speed" value={speedText} />
           <StatPill label="Faith" value={faithText} dim={props.faithAvailable === 0} />
+          <TimerPill
+            status={props.timerStatus ?? null}
+            remainingSeconds={props.timerRemainingSeconds ?? null}
+            updatedAt={props.timerUpdatedAt ?? null}
+          />
           <EffectsPill shown={shown} extra={extra} />
           <SessionPill
             liveSessionName={props.liveSessionName}
@@ -58,11 +68,60 @@ export default function PlayerStatusHeader(props: {
   );
 }
 
+function formatMmSs(totalSeconds: number) {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+}
+
+function computeRemaining(status: string | null, remaining: number | null, updatedAt: string | null, nowMs: number) {
+  if (!Number.isFinite(Number(remaining))) return null;
+  const base = Number(remaining ?? 0);
+  if (String(status ?? "").toLowerCase() !== "running") return Math.max(0, base);
+  const ts = updatedAt ? Date.parse(updatedAt) : NaN;
+  if (!Number.isFinite(ts)) return Math.max(0, base);
+  const elapsed = Math.max(0, Math.floor((nowMs - ts) / 1000));
+  return Math.max(0, base - elapsed);
+}
+
 function StatPill(props: { label: string; value: string; dim?: boolean }) {
   return (
     <div className={["rounded-xl border border-neutral-800 bg-neutral-950/40 px-3 py-2", props.dim ? "opacity-60" : ""].join(" ")}>
       <div className="text-[11px] uppercase tracking-wide text-neutral-400">{props.label}</div>
       <div className="text-sm font-semibold text-white">{props.value}</div>
+    </div>
+  );
+}
+
+function TimerPill(props: {
+  status: string | null;
+  remainingSeconds: number | null;
+  updatedAt: string | null;
+}) {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    const t = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(t);
+  }, []);
+
+  const remaining = useMemo(
+    () => computeRemaining(props.status, props.remainingSeconds, props.updatedAt, nowMs),
+    [props.status, props.remainingSeconds, props.updatedAt, nowMs]
+  );
+
+  const status = String(props.status ?? "").toLowerCase();
+  const statusText = status === "running" ? "Running" : status === "paused" ? "Paused" : status === "stopped" ? "Stopped" : "-";
+  const value = remaining == null ? "-" : formatMmSs(remaining);
+
+  return (
+    <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 px-3 py-2">
+      <div className="text-[11px] uppercase tracking-wide text-neutral-400">Timer</div>
+      <div className="mt-1 flex items-center gap-2">
+        <span className="text-sm font-semibold text-white">{value}</span>
+        <span className="rounded-full bg-neutral-800 px-2 py-0.5 text-[11px] text-neutral-300">{statusText}</span>
+      </div>
     </div>
   );
 }

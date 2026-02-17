@@ -271,6 +271,37 @@ export default async function DmScreenPage({
               updatedAt={(state as any).updated_at}
             />
 
+            <form
+              className="flex flex-wrap items-end gap-2"
+              action={async (fd) => {
+                "use server";
+                const mins = Number(fd.get("timer_mins"));
+                if (!Number.isFinite(mins) || mins <= 0) {
+                  redirect(`/storyteller/sessions/${session.id}`);
+                }
+                const seconds = Math.max(60, Math.floor(mins * 60));
+                await updateState(session.id, {
+                  duration_seconds: seconds,
+                  remaining_seconds: seconds,
+                  timer_status: "stopped",
+                });
+                redirect(`/storyteller/sessions/${session.id}`);
+              }}
+            >
+              <label className="space-y-1">
+                <div className="text-[11px] uppercase text-gray-500">Set Start Time (Minutes)</div>
+                <input
+                  name="timer_mins"
+                  type="number"
+                  min={1}
+                  step={1}
+                  defaultValue={Math.max(1, Math.round(Number((state as any).duration_seconds ?? 5400) / 60))}
+                  className="w-36 rounded border px-2 py-1.5 text-sm"
+                />
+              </label>
+              <button className="px-3 py-2 rounded border text-sm">Set Time</button>
+            </form>
+
             <div className="flex flex-wrap gap-2">
               <form
                 action={async () => {
