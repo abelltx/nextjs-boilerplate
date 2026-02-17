@@ -1,12 +1,16 @@
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/server";
-import { openActionEditAction } from "./edit/actions";
+import ActionDamageRollClient from "./ActionDamageRollClient";
+import { openActionEditAction, quickUpdateActionDamageAction } from "./edit/actions";
 
 type ActionRow = {
   id: string | null;
   name: string;
   type: string;
   summary: string | null;
+  damage_dice: string | null;
+  damage_type: string | null;
+  damage_bonus: number | null;
   tags: string[] | null;
   is_active: boolean;
   updated_at: string;
@@ -49,7 +53,7 @@ export default async function ActionsPage({
 
   let query = supabase
     .from("actions")
-    .select("id,name,type,summary,tags,is_active,updated_at")
+    .select("id,name,type,summary,damage_dice,damage_type,damage_bonus,tags,is_active,updated_at")
     .order("updated_at", { ascending: false });
 
   if (q) query = query.ilike("name", `%${q}%`);
@@ -64,7 +68,6 @@ export default async function ActionsPage({
 
   return (
     <div className="mx-auto w-full max-w-6xl p-6 space-y-4">
-      {/* Header (slimmer like Traits) */}
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Actions Designer</h1>
@@ -80,12 +83,11 @@ export default async function ActionsPage({
         </Link>
       </div>
 
-      {/* Alerts */}
       {saved ? (
-        <div className="rounded-lg border p-3 text-sm">✅ Saved.</div>
+        <div className="rounded-lg border p-3 text-sm">Saved.</div>
       ) : null}
       {deleted ? (
-        <div className="rounded-lg border p-3 text-sm">🗑️ Deleted.</div>
+        <div className="rounded-lg border p-3 text-sm">Deleted.</div>
       ) : null}
       {err ? (
         <div className="rounded-lg border p-3 text-sm">
@@ -93,7 +95,6 @@ export default async function ActionsPage({
         </div>
       ) : null}
 
-      {/* Slim filter bar */}
       <form method="get" className="flex flex-wrap items-end gap-2">
         <label className="grid gap-1">
           <span className="text-xs text-muted-foreground">Search</span>
@@ -101,7 +102,7 @@ export default async function ActionsPage({
             name="q"
             defaultValue={q}
             className="w-[260px] rounded-lg border px-3 py-2 text-sm"
-            placeholder="Action name…"
+            placeholder="Action name..."
           />
         </label>
 
@@ -138,19 +139,18 @@ export default async function ActionsPage({
         </div>
       </form>
 
-      {/* Compact library grid (like Traits) */}
       {rows.length === 0 ? (
         <div className="rounded-xl border p-6 text-sm text-muted-foreground">
           No actions yet. Create your first one.
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {rows.map((a) => {
+          {rows.map((a, idx) => {
             const idStr = typeof a.id === "string" ? a.id : "";
             const valid = isUuid(idStr);
 
-            const card = (
-              <div className="rounded-xl border bg-card p-3 shadow-sm hover:bg-muted/30 transition">
+            return (
+              <div key={valid ? idStr : `invalid-${a.name}-${idx}`} className="rounded-xl border bg-card p-3 shadow-sm hover:bg-muted/30 transition">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="font-semibold truncate text-sm">
@@ -165,16 +165,61 @@ export default async function ActionsPage({
                       ) : null}
                     </div>
                   </div>
-                  <div className="text-xs text-muted-foreground">
-                    {valid ? "Edit →" : "Invalid ID"}
-                  </div>
+                  {valid ? (
+                    <form action={openActionEditAction}>
+                      <input type="hidden" name="id" value={idStr} />
+                      <button type="submit" className="text-xs text-muted-foreground hover:text-foreground">
+                        Edit -&gt;
+                      </button>
+                    </form>
+                  ) : (
+                    <div className="text-xs text-muted-foreground">Invalid ID</div>
+                  )}
                 </div>
 
                 <p className="mt-2 text-xs text-muted-foreground line-clamp-2">
                   {a.summary || "No summary yet."}
                 </p>
 
-                {/* optional tiny tags (kept minimal) */}
+                {valid ? (
+                  <div className="mt-3 rounded-lg border bg-white/70 p-2">
+                    <div className="mb-1 text-[11px] uppercase text-muted-foreground">Damage Setup</div>
+                    <form action={quickUpdateActionDamageAction} className="grid grid-cols-1 gap-2">
+                      <input type="hidden" name="id" value={idStr} />
+                      <div className="grid grid-cols-3 gap-2">
+                        <input
+                          name="damage_dice"
+                          defaultValue={a.damage_dice ?? ""}
+                          className="rounded border px-2 py-1 text-xs"
+                          placeholder="1d8"
+                        />
+                        <input
+                          name="damage_bonus"
+                          defaultValue={a.damage_bonus ?? ""}
+                          className="rounded border px-2 py-1 text-xs"
+                          placeholder="+1"
+                        />
+                        <input
+                          name="damage_type"
+                          defaultValue={a.damage_type ?? ""}
+                          className="rounded border px-2 py-1 text-xs"
+                          placeholder="slashing"
+                        />
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <button type="submit" className="rounded border px-2 py-1 text-xs hover:bg-muted">
+                          Save
+                        </button>
+                        <ActionDamageRollClient
+                          damageDice={a.damage_dice}
+                          damageBonus={a.damage_bonus}
+                          damageType={a.damage_type}
+                        />
+                      </div>
+                    </form>
+                  </div>
+                ) : null}
+
                 {Array.isArray(a.tags) && a.tags.length ? (
                   <div className="mt-2 flex flex-wrap gap-1">
                     {a.tags.slice(0, 2).map((tag) => (
@@ -194,21 +239,10 @@ export default async function ActionsPage({
                 ) : null}
               </div>
             );
-
-            if (!valid) return <div key={a.name}>{card}</div>;
-
-            // ✅ POST FORM: sets cookie then redirects to /admin/actions/edit
-            return (
-              <form key={idStr} action={openActionEditAction}>
-                <input type="hidden" name="id" value={idStr} />
-                <button type="submit" className="block w-full text-left">
-                  {card}
-                </button>
-              </form>
-            );
           })}
         </div>
       )}
     </div>
   );
 }
+

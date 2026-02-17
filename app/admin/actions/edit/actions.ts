@@ -145,6 +145,38 @@ export async function updateActionAction(formData: FormData) {
 
   redirect("/admin/actions?saved=1");
 }
+
+export async function quickUpdateActionDamageAction(formData: FormData) {
+  const supabase = await createClient();
+
+  const id = String(formData.get("id") ?? "").trim();
+  if (!isUuid(id)) redirect("/admin/actions?err=invalid_id");
+
+  const damage_dice = String(formData.get("damage_dice") ?? "").trim() || null;
+  const damage_type = String(formData.get("damage_type") ?? "").trim() || null;
+  const damage_bonusRaw = String(formData.get("damage_bonus") ?? "").trim();
+  const damage_bonus = damage_bonusRaw === "" ? null : Number(damage_bonusRaw);
+
+  if (damage_bonus !== null && !Number.isFinite(damage_bonus)) {
+    redirect("/admin/actions?err=bad_damage_bonus");
+  }
+
+  const { error } = await supabase
+    .from("actions")
+    .update({
+      damage_dice,
+      damage_type,
+      damage_bonus,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+
+  if (error) {
+    redirect(`/admin/actions?err=${encodeURIComponent(error.message)}`);
+  }
+
+  redirect("/admin/actions?saved=1");
+}
 export async function deleteActionAction(formData: FormData) {
   const supabase = await createClient();
 
