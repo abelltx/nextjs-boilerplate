@@ -13,7 +13,8 @@ function requireUuid(id: string, label: string) {
 async function maybeUploadBlockImage(
   supabase: Awaited<ReturnType<typeof createClient>>,
   episodeId: string,
-  fd: FormData
+  fd: FormData,
+  blockType: string
 ): Promise<string | null> {
   const fileValue = fd.get("image_file");
   if (!fileValue || typeof fileValue !== "object" || !("arrayBuffer" in fileValue)) return null;
@@ -22,7 +23,9 @@ async function maybeUploadBlockImage(
   if (!file.size || file.size <= 0) return null;
 
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const path = `episode-blocks/${episodeId}/${Date.now()}-${safeName}`;
+  const bt = String(blockType ?? "").trim().toLowerCase();
+  const folder = bt === "npc" ? "episode-npcs" : "episode-maps";
+  const path = `${folder}/${episodeId}/${Date.now()}-${safeName}`;
 
   try {
     const { error: upErr } = await supabase.storage
@@ -64,7 +67,7 @@ export async function addEpisodeBlockAction(episodeId: string, fd: FormData) {
   const title = String(fd.get("title") ?? "").trim() || null;
   const body = String(fd.get("body") ?? "").trim() || null;
   const image_url = String(fd.get("image_url") ?? "").trim() || null;
-  const uploadedImageUrl = await maybeUploadBlockImage(supabase, episodeId, fd);
+  const uploadedImageUrl = await maybeUploadBlockImage(supabase, episodeId, fd, block_type);
   const finalImageUrl = uploadedImageUrl ?? image_url;
   const meta = parseMetaJson(fd.get("meta_json"));
   const sceneIdRaw = String(fd.get("scene_id") ?? "").trim();
@@ -150,7 +153,7 @@ export async function updateEpisodeBlockAction(blockId: string, episodeId: strin
     body: String(fd.get("body") ?? "").trim() || null,
     image_url: String(fd.get("image_url") ?? "").trim() || null,
   };
-  const uploadedImageUrl = await maybeUploadBlockImage(supabase, episodeId, fd);
+  const uploadedImageUrl = await maybeUploadBlockImage(supabase, episodeId, fd, patch.block_type);
   if (uploadedImageUrl) {
     patch.image_url = uploadedImageUrl;
   }
