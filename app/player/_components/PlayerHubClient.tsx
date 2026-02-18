@@ -644,81 +644,77 @@ function StagePanel({
   const revealMap = (linkedBlocks ?? {}) as Record<string, any>;
   const selectedReveal = selectedMarkerBlockId ? revealMap[selectedMarkerBlockId] ?? null : null;
   return (
-    <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
-      <div className="text-sm font-semibold">Stage</div>
-
-      {block ? (
-        <div className="mt-3 space-y-3">
-          <RevealCard
-            kind={String(block.block_type ?? "").toLowerCase() === "npc" ? undefined : block.block_type ?? "presented"}
-            title={block.title ?? block.block_type ?? "Presented"}
-            body={block.body ?? ""}
-            className="border-neutral-800 bg-neutral-950/40 text-neutral-100"
-            hideBody={String(block.block_type ?? "").toLowerCase() === "npc"}
-            childrenTop={
-              String(block.block_type ?? "").toLowerCase() === "npc" ? (
-                <NpcTabsCard
-                  meta={block.meta}
-                  fallbackInfo={block.body ?? ""}
-                  imageUrl={block.image_url ?? null}
-                  embedded
-                  playerShop={playerShop}
-                />
-              ) : undefined
-            }
-          >
-            {block.image_url && String(block.block_type ?? "").toLowerCase() === "map" ? (
-              <SceneMap
-                src={block.image_url}
-                alt={block.title ?? "Presented"}
-                markers={markers as any}
-                showMagnifier
-                onMarkerClick={(m) => {
-                  if (m.targetBlockId) setSelectedMarkerBlockId(m.targetBlockId);
-                }}
+    block ? (
+      <div className="space-y-3">
+        <RevealCard
+          kind={String(block.block_type ?? "").toLowerCase() === "npc" ? undefined : block.block_type ?? "presented"}
+          title={block.title ?? block.block_type ?? "Presented"}
+          body={block.body ?? ""}
+          className="border-neutral-800 bg-neutral-950/40 text-neutral-100"
+          hideBody={String(block.block_type ?? "").toLowerCase() === "npc"}
+          childrenTop={
+            String(block.block_type ?? "").toLowerCase() === "npc" ? (
+              <NpcTabsCard
+                meta={block.meta}
+                fallbackInfo={block.body ?? ""}
+                imageUrl={block.image_url ?? null}
+                embedded
+                playerShop={playerShop}
               />
-            ) : null}
-          </RevealCard>
-
-          {selectedReveal ? (
-            <details open className="rounded-xl border border-neutral-700 bg-neutral-950/60 p-3">
-              <summary className="cursor-pointer text-sm font-semibold">
-                Marker Reveal: {selectedReveal.title ?? selectedReveal.block_type ?? "Details"}
-              </summary>
-              <div className="mt-3">
-                <RevealCard
-                  kind={String(selectedReveal.block_type ?? "").toLowerCase() === "npc" ? undefined : selectedReveal.block_type ?? "reveal"}
-                  title={selectedReveal.title ?? selectedReveal.block_type ?? "Reveal"}
-                  body={selectedReveal.body ?? ""}
-                  className="border-neutral-700 bg-neutral-950/40 text-neutral-100"
-                  hideBody={String(selectedReveal.block_type ?? "").toLowerCase() === "npc"}
-                  childrenTop={
-                    String(selectedReveal.block_type ?? "").toLowerCase() === "npc" ? (
-                      <NpcTabsCard
-                        meta={selectedReveal.meta}
-                        fallbackInfo={selectedReveal.body ?? ""}
-                        imageUrl={selectedReveal.image_url ?? null}
-                        embedded
-                        playerShop={playerShop}
-                      />
-                    ) : undefined
-                  }
-                >
-                  {selectedReveal.image_url && String(selectedReveal.block_type ?? "").toLowerCase() !== "npc" ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={selectedReveal.image_url} alt={selectedReveal.title ?? "Reveal"} className="w-full rounded-lg border border-neutral-800" />
-                  ) : null}
-                </RevealCard>
-              </div>
-            </details>
+            ) : undefined
+          }
+        >
+          {block.image_url && String(block.block_type ?? "").toLowerCase() === "map" ? (
+            <SceneMap
+              src={block.image_url}
+              alt={block.title ?? "Presented"}
+              markers={markers as any}
+              showMagnifier
+              onMarkerClick={(m) => {
+                if (m.targetBlockId) setSelectedMarkerBlockId(m.targetBlockId);
+              }}
+            />
           ) : null}
-        </div>
-      ) : (
-        <div className="mt-3 text-sm text-neutral-300">
-          When the storyteller clicks <span className="text-neutral-100">Present to Players</span>, it will appear here.
-        </div>
-      )}
-    </div>
+        </RevealCard>
+
+        {selectedReveal ? (
+          <details open className="rounded-xl border border-neutral-700 bg-neutral-950/60 p-3">
+            <summary className="cursor-pointer text-sm font-semibold">
+              Marker Reveal: {selectedReveal.title ?? selectedReveal.block_type ?? "Details"}
+            </summary>
+            <div className="mt-3">
+              <RevealCard
+                kind={String(selectedReveal.block_type ?? "").toLowerCase() === "npc" ? undefined : selectedReveal.block_type ?? "reveal"}
+                title={selectedReveal.title ?? selectedReveal.block_type ?? "Reveal"}
+                body={selectedReveal.body ?? ""}
+                className="border-neutral-700 bg-neutral-950/40 text-neutral-100"
+                hideBody={String(selectedReveal.block_type ?? "").toLowerCase() === "npc"}
+                childrenTop={
+                  String(selectedReveal.block_type ?? "").toLowerCase() === "npc" ? (
+                    <NpcTabsCard
+                      meta={selectedReveal.meta}
+                      fallbackInfo={selectedReveal.body ?? ""}
+                      imageUrl={selectedReveal.image_url ?? null}
+                      embedded
+                      playerShop={playerShop}
+                    />
+                  ) : undefined
+                }
+              >
+                {selectedReveal.image_url && String(selectedReveal.block_type ?? "").toLowerCase() !== "npc" ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={selectedReveal.image_url} alt={selectedReveal.title ?? "Reveal"} className="w-full rounded-lg border border-neutral-800" />
+                ) : null}
+              </RevealCard>
+            </div>
+          </details>
+        ) : null}
+      </div>
+    ) : (
+      <div className="text-sm text-neutral-300">
+        When the storyteller clicks <span className="text-neutral-100">Present to Players</span>, it will appear here.
+      </div>
+    )
   );
 }
 
