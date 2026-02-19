@@ -129,6 +129,34 @@ export default function NpcTabsEditorClient(props: {
     return "";
   });
   const [quests, setQuests] = useState<QuestDraft[]>(() => parseQuestDrafts(props.initialMeta));
+  const safeItemOptions = useMemo(
+    () =>
+      (props.itemOptions ?? []).map((it: any) => ({
+        id: String(it?.id ?? "").trim(),
+        name: String(it?.name ?? "").trim() || "Unnamed item",
+        faith_required: Number.isFinite(Number(it?.faith_required)) ? Number(it.faith_required) : 0,
+        is_active: typeof it?.is_active === "boolean" ? it.is_active : null,
+      })),
+    [props.itemOptions]
+  );
+  const safeTraitOptions = useMemo(
+    () =>
+      (props.traitOptions ?? []).map((it: any) => ({
+        id: String(it?.id ?? "").trim(),
+        name: String(it?.name ?? "").trim() || "Unnamed trait",
+        is_active: typeof it?.is_active === "boolean" ? it.is_active : null,
+      })),
+    [props.traitOptions]
+  );
+  const safeActionOptions = useMemo(
+    () =>
+      (props.actionOptions ?? []).map((it: any) => ({
+        id: String(it?.id ?? "").trim(),
+        name: String(it?.name ?? "").trim() || "Unnamed action",
+        is_active: typeof it?.is_active === "boolean" ? it.is_active : null,
+      })),
+    [props.actionOptions]
+  );
   const safeQuests = useMemo(
     () =>
       (Array.isArray(quests) ? quests : []).map((q, idx) => ({
@@ -145,9 +173,9 @@ export default function NpcTabsEditorClient(props: {
   const trainingIds = useMemo(() => normalizeUuidList(trainingText), [trainingText]);
   const optionMap = useMemo(() => {
     const map = new Map<string, { id: string; name: string; faith_required?: number | null }>();
-    for (const it of props.itemOptions ?? []) map.set(String(it.id), it);
+    for (const it of safeItemOptions) map.set(String(it.id), it);
     return map;
-  }, [props.itemOptions]);
+  }, [safeItemOptions]);
   const itemSnapshots = useMemo(
     () =>
       gearIds
@@ -165,9 +193,9 @@ export default function NpcTabsEditorClient(props: {
   );
   const traitMap = useMemo(() => {
     const map = new Map<string, { id: string; name: string }>();
-    for (const it of props.traitOptions ?? []) map.set(String(it.id), it);
+    for (const it of safeTraitOptions) map.set(String(it.id), it);
     return map;
-  }, [props.traitOptions]);
+  }, [safeTraitOptions]);
   const trainingSnapshots = useMemo(
     () =>
       trainingIds
@@ -181,9 +209,9 @@ export default function NpcTabsEditorClient(props: {
   );
   const actionMap = useMemo(() => {
     const map = new Map<string, { id: string; name: string }>();
-    for (const it of props.actionOptions ?? []) map.set(String(it.id), it);
+    for (const it of safeActionOptions) map.set(String(it.id), it);
     return map;
-  }, [props.actionOptions]);
+  }, [safeActionOptions]);
   const actionTrainingSnapshots = useMemo(
     () =>
       trainingIds
@@ -204,26 +232,26 @@ export default function NpcTabsEditorClient(props: {
   );
   const combinedTrainingOptions = useMemo(
     () => [
-      ...(props.traitOptions ?? []).map((it) => ({
+      ...safeTraitOptions.map((it) => ({
         id: it.id,
         name: it.name,
         is_active: it.is_active,
         source: "trait" as const,
       })),
-      ...(props.actionOptions ?? []).map((it) => ({
+      ...safeActionOptions.map((it) => ({
         id: it.id,
         name: it.name,
         is_active: it.is_active,
         source: "action" as const,
       })),
     ],
-    [props.traitOptions, props.actionOptions]
+    [safeTraitOptions, safeActionOptions]
   );
   const itemLabelById = useMemo(() => {
     const m = new Map<string, string>();
-    for (const it of props.itemOptions ?? []) m.set(String(it.id), String(it.name ?? "").trim() || String(it.id));
+    for (const it of safeItemOptions) m.set(String(it.id), String(it.name ?? "").trim() || String(it.id));
     return m;
-  }, [props.itemOptions]);
+  }, [safeItemOptions]);
   const questDefs = useMemo(
     () =>
       safeQuests
@@ -475,7 +503,7 @@ export default function NpcTabsEditorClient(props: {
                             }
                             placeholder={"e0f49433-8461-4a74-85d8-efd3cd422cea"}
                           />
-                          {(props.itemOptions ?? []).length ? (
+                          {safeItemOptions.length ? (
                             <select
                               className="w-full border rounded p-2 text-sm"
                               defaultValue=""
@@ -495,7 +523,7 @@ export default function NpcTabsEditorClient(props: {
                               }}
                             >
                               <option value="">Quick add reward item...</option>
-                              {(props.itemOptions ?? []).map((it) => (
+                              {safeItemOptions.map((it) => (
                                 <option key={it.id} value={it.id}>
                                   {it.name} ({it.id})
                                 </option>
@@ -553,7 +581,7 @@ export default function NpcTabsEditorClient(props: {
                   value={gearText}
                   onChange={(e) => setGearText(e.target.value)}
                 />
-                {(props.itemOptions ?? []).length ? (
+                {safeItemOptions.length ? (
                   <div className="space-y-1">
                     <div className="text-[11px] text-gray-600">Quick add from Item Library:</div>
                     <select
@@ -570,7 +598,7 @@ export default function NpcTabsEditorClient(props: {
                       }}
                     >
                       <option value="">Select an item...</option>
-                      {(props.itemOptions ?? []).map((it) => (
+                      {safeItemOptions.map((it) => (
                         <option key={it.id} value={it.id}>
                           {it.name} ({it.id}){typeof it.faith_required === "number" ? ` - faith ${it.faith_required}` : ""}
                         </option>
