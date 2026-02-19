@@ -42,6 +42,7 @@ type PlayerActionRow = {
 };
 type QuestProgressRow = {
   quest_id: string | null;
+  quest_title: string | null;
   status: string | null;
   completed_task_ids: string[] | null;
   claimed_at: string | null;
@@ -394,9 +395,16 @@ export default async function PlayerPage() {
     string,
     { status: "available" | "active" | "completed" | "claimed"; completedTaskIds: string[]; claimedAt?: string | null }
   > = {};
+  let questEntries: Array<{
+    questId: string;
+    title: string;
+    status: "available" | "active" | "completed" | "claimed";
+    completedTaskIds: string[];
+    claimedAt?: string | null;
+  }> = [];
   const { data: questProgressRows, error: questProgressErr } = await supabase
     .from("player_quest_progress")
-    .select("quest_id,status,completed_task_ids,claimed_at")
+    .select("quest_id,quest_title,status,completed_task_ids,claimed_at,created_at")
     .eq("character_id", character.id);
   if (questProgressErr) {
     // Never block /player render for optional quest-progress data.
@@ -417,6 +425,15 @@ export default async function PlayerPage() {
           : [],
         claimedAt: row.claimed_at ?? null,
       };
+      questEntries.push({
+        questId,
+        title: String(row.quest_title ?? "").trim() || questId,
+        status,
+        completedTaskIds: Array.isArray(row.completed_task_ids)
+          ? row.completed_task_ids.map((v) => String(v ?? "").trim()).filter(Boolean)
+          : [],
+        claimedAt: row.claimed_at ?? null,
+      });
     }
   }
 
@@ -441,6 +458,7 @@ export default async function PlayerPage() {
       playerActionIds={learnedActionIds}
       playerActions={learnedActions}
       questProgress={questProgressById}
+      questEntries={questEntries}
     />
   );
 }

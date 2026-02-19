@@ -23,7 +23,7 @@ import SceneMap from "@/components/episode-runtime/SceneMap";
 import NpcTabsCard from "@/components/episode-runtime/NpcTabsCard";
 import { extractMapMarkers } from "@/lib/episodeRuntime";
 
-type TabKey = "inventory" | "actions" | "talents" | "journey";
+type TabKey = "inventory" | "quests" | "actions" | "talents" | "journey";
 
 type PromptTarget =
   | { kind: "skill"; skillKey: string }
@@ -128,6 +128,13 @@ export default function PlayerHubClient(props: {
     on_success?: string | null;
   }>;
   questProgress?: Record<string, QuestProgress>;
+  questEntries?: Array<{
+    questId: string;
+    title: string;
+    status: "available" | "active" | "completed" | "claimed";
+    completedTaskIds: string[];
+    claimedAt?: string | null;
+  }>;
 }) {
   const [tab, setTab] = useState<TabKey>("inventory");
   const [joinOpen, setJoinOpen] = useState(false);
@@ -596,6 +603,7 @@ export default function PlayerHubClient(props: {
 
             <div className="flex flex-wrap gap-2 rounded-2xl border border-neutral-800 bg-neutral-900/40 p-2">
               <Tab active={tab === "inventory"} onClick={() => setTab("inventory")}>Inventory</Tab>
+              <Tab active={tab === "quests"} onClick={() => setTab("quests")}>Quests</Tab>
               <Tab active={tab === "actions"} onClick={() => setTab("actions")}>Actions</Tab>
               <Tab
                 active={tab === "talents"}
@@ -607,18 +615,13 @@ export default function PlayerHubClient(props: {
               </Tab>
               <Tab active={tab === "journey"} onClick={() => setTab("journey")}>Journal</Tab>
 
-              <div className="ml-auto flex items-center gap-2 pr-2 text-xs text-neutral-300">
-                {isLiveMode ? (
-                  <span className="rounded-full bg-red-500/20 px-2 py-1 text-red-200">
-                    LIVE • {liveSessionNameForHeader}
-                  </span>
-                ) : null}
-              </div>
             </div>
 
             <div className="mt-4 rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4">
               {tab === "inventory" ? (
                 <PlayerInventoryPanel characterId={props.character.id} />
+              ) : tab === "quests" ? (
+                <QuestListPanel entries={props.questEntries ?? []} />
               ) : tab === "journey" ? (
                 <div>
                   <div className="text-sm font-semibold">Journal</div>
@@ -690,6 +693,75 @@ export default function PlayerHubClient(props: {
         }}
       />
     </main>
+  );
+}
+
+function QuestListPanel(props: {
+  entries: Array<{
+    questId: string;
+    title: string;
+    status: "available" | "active" | "completed" | "claimed";
+    completedTaskIds: string[];
+    claimedAt?: string | null;
+  }>;
+}) {
+  const active = props.entries.filter((q) => q.status === "active" || q.status === "completed");
+  const done = props.entries.filter((q) => q.status === "claimed");
+  return (
+    <div className="space-y-4">
+      <div>
+        <div className="text-sm font-semibold">Quests</div>
+        <div className="text-xs text-neutral-400">Accepted quests appear here and update as you progress.</div>
+      </div>
+
+      <div className="space-y-2">
+        <div className="text-xs uppercase tracking-wide text-neutral-400">Active</div>
+        {active.length ? (
+          active.map((q) => (
+            <div key={q.questId} className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-sm font-semibold text-neutral-100">{q.title}</div>
+                <span
+                  className={[
+                    "rounded px-2 py-0.5 text-[11px]",
+                    q.status === "completed" ? "bg-amber-500/20 text-amber-200" : "bg-blue-500/20 text-blue-200",
+                  ].join(" ")}
+                >
+                  {q.status === "completed" ? "Ready to claim" : "Active"}
+                </span>
+              </div>
+              <div className="mt-1 text-xs text-neutral-400 font-mono">{q.questId}</div>
+              <div className="mt-2 text-xs text-neutral-300">
+                Tasks done: {q.completedTaskIds.length}
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="text-sm text-neutral-400">No active quests.</div>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <div className="text-xs uppercase tracking-wide text-neutral-400">Completed</div>
+        {done.length ? (
+          done.map((q) => (
+            <div key={q.questId} className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-sm font-semibold text-neutral-100">{q.title}</div>
+                <span className="rounded bg-emerald-500/20 px-2 py-0.5 text-[11px] text-emerald-200">Claimed</span>
+              </div>
+              {q.claimedAt ? (
+                <div className="mt-1 text-xs text-neutral-400">
+                  Claimed {new Date(q.claimedAt).toLocaleString()}
+                </div>
+              ) : null}
+            </div>
+          ))
+        ) : (
+          <div className="text-sm text-neutral-400">No completed quests yet.</div>
+        )}
+      </div>
+    </div>
   );
 }
 

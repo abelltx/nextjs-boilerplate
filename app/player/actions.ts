@@ -39,6 +39,31 @@ function cleanQuestTaskIds(input: string[] | undefined) {
   );
 }
 
+async function appendGameLogSafe(
+  supabase: Awaited<ReturnType<typeof supabaseServer>>,
+  input: {
+    userId: string;
+    characterId: string;
+    eventType: string;
+    title: string;
+    summary?: string;
+  }
+) {
+  const payload = {
+    user_id: input.userId,
+    character_id: input.characterId,
+    event_type: input.eventType,
+    title: input.title,
+    summary: input.summary ?? null,
+  };
+  const { error } = await supabase.from("game_log").insert(payload as any);
+  if (error) {
+    const msg = String(error.message ?? "").toLowerCase();
+    if (msg.includes("does not exist") || msg.includes("schema cache")) return;
+    console.error("appendGameLogSafe failed:", error.message);
+  }
+}
+
 export async function joinSessionAction(
   joinCodeOrId: string
 ): Promise<{ ok: boolean; sessionId?: string; sessionName?: string; error?: string }> {
@@ -409,6 +434,14 @@ export async function startNpcQuestAction(input: {
     return { ok: false, error: insErr.message };
   }
 
+  await appendGameLogSafe(supabase, {
+    userId: user.id,
+    characterId,
+    eventType: "quest_started",
+    title: `Quest Started: ${questTitle || questId}`,
+    summary: "Quest accepted.",
+  });
+
   revalidatePath("/player");
   return { ok: true, status: "active" };
 }
@@ -473,6 +506,15 @@ export async function completeNpcQuestTaskAction(input: {
       }
       return { ok: false, error: insErr.message };
     }
+    if (nextStatus === "completed") {
+      await appendGameLogSafe(supabase, {
+        userId: user.id,
+        characterId,
+        eventType: "quest_complete",
+        title: `Quest Ready: ${String(input.questTitle ?? questId)}`,
+        summary: "All tasks completed. Claim your rewards.",
+      });
+    }
   } else {
     const { error: upErr } = await supabase
       .from("player_quest_progress")
@@ -484,6 +526,15 @@ export async function completeNpcQuestTaskAction(input: {
       })
       .eq("id", (row as any).id);
     if (upErr) return { ok: false, error: upErr.message };
+    if ((row as any)?.status !== "completed" && nextStatus === "completed") {
+      await appendGameLogSafe(supabase, {
+        userId: user.id,
+        characterId,
+        eventType: "quest_complete",
+        title: `Quest Ready: ${String(input.questTitle ?? questId)}`,
+        summary: "All tasks completed. Claim your rewards.",
+      });
+    }
   }
 
   revalidatePath("/player");
@@ -638,6 +689,41 @@ export async function claimNpcQuestRewardsAction(input: {
     })
     .eq("id", (row as any).id);
   if (claimErr) return { ok: false, error: claimErr.message };
+
+  const questTitle = String(input.questTitle ?? "").trim() || questId;
+  await appendGameLogSafe(supabase, {
+    userId: user.id,
+    characterId,
+    eventType: "quest_complete",
+    title: `Quest Completed: ${questTitle}`,
+    summary: "Rewards claimed.",
+  });
+  if (rewardFaith > 0) {
+    await appendGameLogSafe(supabase, {
+      userId: user.id,
+      characterId,
+      eventType: "faith_earned",
+      title: `Faith Earned: +${rewardFaith}`,
+      summary: `From quest: ${questTitle}`,
+    });
+  }
+  if (rewardItemIds.length) {
+    const { data: rewardItems } = await supabase
+      .from("items")
+      .select("id,name")
+      .in("id", rewardItemIds);
+    for (const itemId of rewardItemIds) {
+      const itemName =
+        (rewardItems ?? []).find((it: any) => String(it?.id) === itemId)?.name ?? itemId;
+      await appendGameLogSafe(supabase, {
+        userId: user.id,
+        characterId,
+        eventType: "item_acquired",
+        title: `Item Acquired: ${String(itemName)}`,
+        summary: `Quest reward from ${questTitle}`,
+      });
+    }
+  }
 
   revalidatePath("/player");
   return { ok: true, grantedItems, faithAwarded: rewardFaith };

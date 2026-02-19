@@ -8,6 +8,8 @@ function formatDay(ts: string) {
 
 function iconFor(type: string) {
   switch (type) {
+    case "quest_started": return "🧭";
+    case "quest_complete": return "✅";
     case "episode_complete": return "📜";
     case "faith_earned": return "✨";
     case "faith_spent": return "🕯️";
