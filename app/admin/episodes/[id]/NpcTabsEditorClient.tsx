@@ -12,6 +12,7 @@ const LABELS: Record<TabKey, string> = {
 };
 
 type QuestDraft = {
+  uiKey: string;
   id: string;
   title: string;
   directions: string;
@@ -20,6 +21,11 @@ type QuestDraft = {
   rewardItemIds: string;
   rewardFaith: number;
 };
+
+function makeUiKey(seed?: string) {
+  const base = String(seed ?? "").trim();
+  return base ? `q_${base}` : `q_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
 
 function toQuestId(value: unknown) {
   return String(value ?? "")
@@ -61,6 +67,7 @@ function parseQuestDrafts(initialMeta: any): QuestDraft[] {
       const rewardFaith = Number(rewards?.faith ?? 0);
 
       return {
+        uiKey: makeUiKey(`${raw?.id ?? ""}_${idx}`),
         id: String(raw?.id ?? "").trim() || `quest_${idx + 1}`,
         title: String(raw?.title ?? "").trim() || `Quest ${idx + 1}`,
         directions: String(raw?.directions ?? "").trim(),
@@ -180,6 +187,7 @@ export default function NpcTabsEditorClient(props: {
   const safeQuests = useMemo(
     () =>
       (Array.isArray(quests) ? quests : []).map((q, idx) => ({
+        uiKey: String((q as any)?.uiKey ?? makeUiKey(`${idx + 1}`)),
         id: String((q as any)?.id ?? `quest_${idx + 1}`),
         title: String((q as any)?.title ?? `Quest ${idx + 1}`),
         directions: String((q as any)?.directions ?? ""),
@@ -526,6 +534,7 @@ export default function NpcTabsEditorClient(props: {
                       setQuests((prev) => [
                         ...prev,
                         {
+                          uiKey: makeUiKey(`${prev.length + 1}`),
                           id: `quest_${prev.length + 1}`,
                           title: `Quest ${prev.length + 1}`,
                           directions: "",
@@ -549,7 +558,7 @@ export default function NpcTabsEditorClient(props: {
                 {safeQuests.map((q, idx) => {
                   const rewardItemIds = normalizeUuidList(q.rewardItemIds);
                   return (
-                    <div key={`${q.id}-${idx}`} className="rounded border bg-white p-2 space-y-2">
+                    <div key={q.uiKey} className="rounded border bg-white p-2 space-y-2">
                       <div className="flex items-center justify-between gap-2">
                         <div className="text-xs font-semibold text-gray-700">Quest {idx + 1}</div>
                         <button
