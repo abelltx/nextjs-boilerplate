@@ -266,6 +266,7 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
             const t = safeType(r);
             const stackable = safeStackable(r);
             const maxStack = safeMaxStack(r);
+            const isAtMax = Boolean(stackable && maxStack && r.quantity >= maxStack);
             const busy = busyId === r.id;
 
             return (
@@ -300,7 +301,14 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
                 <div className="col-span-2 truncate text-sm" title={t}>{t}</div>
 
                 <div className="col-span-1 text-center text-sm">
-                  {stackable && maxStack ? `${r.quantity}/${maxStack}` : r.quantity}
+                  <div className="inline-flex items-center gap-1">
+                    <span>{stackable && maxStack ? `${r.quantity}/${maxStack}` : r.quantity}</span>
+                    {isAtMax ? (
+                      <span className="rounded border border-amber-400/70 bg-amber-500/20 px-1 py-0 text-[10px] font-semibold text-amber-200">
+                        MAX
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
 
                 <div className="col-span-1 text-center text-sm">
@@ -389,6 +397,11 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
               </div>
 
               <div className="rounded-lg border p-3 grid grid-cols-2 gap-3">
+                {(() => {
+                  const selectedMax = safeMaxStack(selected);
+                  const selectedAtMax = Boolean(safeStackable(selected) && selectedMax && selected.quantity >= selectedMax);
+                  return (
+                    <>
                 <div>
                   <div className="text-xs opacity-70">Quantity</div>
                   <div className="text-sm">
@@ -397,6 +410,14 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
                       : selected.quantity}
                   </div>
                 </div>
+                {selectedAtMax ? (
+                  <div>
+                    <div className="text-xs opacity-70">Stack Status</div>
+                    <div className="inline-flex rounded border border-amber-400/70 bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-200">
+                      MAX
+                    </div>
+                  </div>
+                ) : null}
                 <div>
                   <div className="text-xs opacity-70">Equipped</div>
                   <div className="text-sm">{selected.equipped ? "Yes" : "No"}</div>
@@ -409,6 +430,9 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
                   <div className="text-xs opacity-70">Slot</div>
                   <div className="text-sm">{selected.equipped_slot ?? "-"}</div>
                 </div>
+                    </>
+                  );
+                })()}
               </div>
 
               <div className="flex gap-2">
