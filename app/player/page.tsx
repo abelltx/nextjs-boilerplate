@@ -443,6 +443,50 @@ export default async function PlayerPage() {
             .filter(([id, name]) => Boolean(id && name))
         );
       }
+      // Also resolve cases where task target uses episode_block_id (legacy/current talk task format).
+      const { data: bindingRows, error: bindErr } = await supabase
+        .from("episode_npc_bindings")
+        .select("episode_block_id,npc_id")
+        .in("episode_block_id", talkTargetIds);
+      if (!bindErr && (bindingRows ?? []).length) {
+        const blockToNpc = new Map<string, string>(
+          (bindingRows ?? [])
+            .map((b: any) => [String(b?.episode_block_id ?? "").trim().toLowerCase(), String(b?.npc_id ?? "").trim()] as const)
+            .filter(([blockId, npcId]) => Boolean(blockId && npcId))
+        );
+        const unresolvedNpcIds = Array.from(
+          new Set(
+            talkTargetIds
+              .map((id) => {
+                const lower = id.toLowerCase();
+                if (npcNameById.has(lower)) return null;
+                return blockToNpc.get(lower) ?? null;
+              })
+              .filter((v): v is string => Boolean(v))
+          )
+        );
+        if (unresolvedNpcIds.length) {
+          const { data: linkedNpcRows, error: linkedNpcErr } = await supabase
+            .from("npcs")
+            .select("id,name")
+            .in("id", unresolvedNpcIds);
+          if (!linkedNpcErr) {
+            const linkedNameByNpcId = new Map<string, string>(
+              (linkedNpcRows ?? [])
+                .map((n: any) => [String(n?.id ?? "").trim().toLowerCase(), String(n?.name ?? "").trim()] as const)
+                .filter(([id, name]) => Boolean(id && name))
+            );
+            for (const rawTargetId of talkTargetIds) {
+              const targetId = rawTargetId.toLowerCase();
+              if (npcNameById.has(targetId)) continue;
+              const npcId = blockToNpc.get(targetId);
+              if (!npcId) continue;
+              const linkedName = linkedNameByNpcId.get(npcId.toLowerCase());
+              if (linkedName) npcNameById.set(targetId, linkedName);
+            }
+          }
+        }
+      }
     }
     for (const row of (questProgressRows ?? []) as QuestProgressRow[]) {
       const questId = String(row.quest_id ?? "").trim();
