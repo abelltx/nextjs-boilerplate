@@ -21,8 +21,8 @@ type QuestDraft = {
   rewardFaith: number;
 };
 
-function toQuestId(value: string) {
-  return value
+function toQuestId(value: unknown) {
+  return String(value ?? "")
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9]+/g, "_")
@@ -30,10 +30,10 @@ function toQuestId(value: string) {
     .slice(0, 64);
 }
 
-function normalizeUuidList(text: string) {
+function normalizeUuidList(text: unknown) {
   return Array.from(
     new Set(
-      text
+      String(text ?? "")
         .split(/\r?\n|,/g)
         .map((s) => s.trim())
       .filter(Boolean)
@@ -42,33 +42,37 @@ function normalizeUuidList(text: string) {
 }
 
 function parseQuestDrafts(initialMeta: any): QuestDraft[] {
-  const defs = initialMeta?.npc_tabs?.quests?.quest_defs;
-  if (!Array.isArray(defs) || !defs.length) return [];
-  return defs.map((raw: any, idx: number) => {
-    const tasks = Array.isArray(raw?.tasks) ? raw.tasks : [];
-    const plainTasks = tasks
-      .filter((t: any) => String(t?.kind ?? "").trim().toLowerCase() !== "talk_to_npc")
-      .map((t: any) => String(t?.title ?? "").trim())
-      .filter(Boolean);
-    const npcTasks = tasks
-      .filter((t: any) => String(t?.kind ?? "").trim().toLowerCase() === "talk_to_npc")
-      .map((t: any) => String(t?.target_npc_block_id ?? "").trim())
-      .filter(Boolean);
+  try {
+    const defs = initialMeta?.npc_tabs?.quests?.quest_defs;
+    if (!Array.isArray(defs) || !defs.length) return [];
+    return defs.map((raw: any, idx: number) => {
+      const tasks = Array.isArray(raw?.tasks) ? raw.tasks : [];
+      const plainTasks = tasks
+        .filter((t: any) => String(t?.kind ?? "").trim().toLowerCase() !== "talk_to_npc")
+        .map((t: any) => String(t?.title ?? "").trim())
+        .filter(Boolean);
+      const npcTasks = tasks
+        .filter((t: any) => String(t?.kind ?? "").trim().toLowerCase() === "talk_to_npc")
+        .map((t: any) => String(t?.target_npc_block_id ?? "").trim())
+        .filter(Boolean);
 
-    const rewards = raw?.rewards ?? {};
-    const rewardItems = Array.isArray(rewards?.item_ids) ? rewards.item_ids : [];
-    const rewardFaith = Number(rewards?.faith ?? 0);
+      const rewards = raw?.rewards ?? {};
+      const rewardItems = Array.isArray(rewards?.item_ids) ? rewards.item_ids : [];
+      const rewardFaith = Number(rewards?.faith ?? 0);
 
-    return {
-      id: String(raw?.id ?? "").trim() || `quest_${idx + 1}`,
-      title: String(raw?.title ?? "").trim() || `Quest ${idx + 1}`,
-      directions: String(raw?.directions ?? "").trim(),
-      taskLines: plainTasks.join("\n"),
-      talkNpcIds: npcTasks.join("\n"),
-      rewardItemIds: rewardItems.map((v: any) => String(v ?? "").trim()).filter(Boolean).join("\n"),
-      rewardFaith: Number.isFinite(rewardFaith) ? Math.max(0, Math.floor(rewardFaith)) : 0,
-    } satisfies QuestDraft;
-  });
+      return {
+        id: String(raw?.id ?? "").trim() || `quest_${idx + 1}`,
+        title: String(raw?.title ?? "").trim() || `Quest ${idx + 1}`,
+        directions: String(raw?.directions ?? "").trim(),
+        taskLines: plainTasks.join("\n"),
+        talkNpcIds: npcTasks.join("\n"),
+        rewardItemIds: rewardItems.map((v: any) => String(v ?? "").trim()).filter(Boolean).join("\n"),
+        rewardFaith: Number.isFinite(rewardFaith) ? Math.max(0, Math.floor(rewardFaith)) : 0,
+      } satisfies QuestDraft;
+    });
+  } catch {
+    return [];
+  }
 }
 
 export default function NpcTabsEditorClient(props: {
@@ -125,6 +129,19 @@ export default function NpcTabsEditorClient(props: {
     return "";
   });
   const [quests, setQuests] = useState<QuestDraft[]>(() => parseQuestDrafts(props.initialMeta));
+  const safeQuests = useMemo(
+    () =>
+      (Array.isArray(quests) ? quests : []).map((q, idx) => ({
+        id: String((q as any)?.id ?? `quest_${idx + 1}`),
+        title: String((q as any)?.title ?? `Quest ${idx + 1}`),
+        directions: String((q as any)?.directions ?? ""),
+        taskLines: String((q as any)?.taskLines ?? ""),
+        talkNpcIds: String((q as any)?.talkNpcIds ?? ""),
+        rewardItemIds: String((q as any)?.rewardItemIds ?? ""),
+        rewardFaith: Math.max(0, Math.floor(Number((q as any)?.rewardFaith ?? 0) || 0)),
+      })),
+    [quests]
+  );
   const trainingIds = useMemo(() => normalizeUuidList(trainingText), [trainingText]);
   const optionMap = useMemo(() => {
     const map = new Map<string, { id: string; name: string; faith_required?: number | null }>();
@@ -209,7 +226,7 @@ export default function NpcTabsEditorClient(props: {
   }, [props.itemOptions]);
   const questDefs = useMemo(
     () =>
-      quests
+      safeQuests
         .map((q, idx) => {
           const id = toQuestId(q.id) || toQuestId(q.title) || `quest_${idx + 1}`;
           const title = q.title.trim() || `Quest ${idx + 1}`;
@@ -250,7 +267,7 @@ export default function NpcTabsEditorClient(props: {
           };
         })
         .filter((q) => q.title.length > 0),
-    [quests, itemLabelById]
+    [safeQuests, itemLabelById]
   );
 
   const extraMeta = useMemo(() => {
@@ -259,34 +276,52 @@ export default function NpcTabsEditorClient(props: {
     return copy;
   }, [props.initialMeta]);
 
-  const metaJson = JSON.stringify(
-    {
-      ...extraMeta,
-      npc_tabs: {
-        ...tabs,
-        gear: {
-          ...tabs.gear,
-          item_ids: gearIds,
-          item_snapshots: itemSnapshots,
+  const metaJson = useMemo(() => {
+    try {
+      return JSON.stringify(
+        {
+          ...extraMeta,
+          npc_tabs: {
+            ...tabs,
+            gear: {
+              ...tabs.gear,
+              item_ids: gearIds,
+              item_snapshots: itemSnapshots,
+            },
+            training: {
+              ...tabs.training,
+              training_ids: trainingIds,
+              trait_ids: trainingIds.filter((id) => traitMap.has(id)),
+              action_ids: trainingIds.filter((id) => actionMap.has(id)),
+              trait_snapshots: trainingSnapshots,
+              action_snapshots: actionTrainingSnapshots,
+              unknown_snapshots: unknownTrainingSnapshots,
+            },
+            quests: {
+              ...tabs.quests,
+              quest_defs: questDefs,
+            },
+          },
         },
-        training: {
-          ...tabs.training,
-          training_ids: trainingIds,
-          trait_ids: trainingIds.filter((id) => traitMap.has(id)),
-          action_ids: trainingIds.filter((id) => actionMap.has(id)),
-          trait_snapshots: trainingSnapshots,
-          action_snapshots: actionTrainingSnapshots,
-          unknown_snapshots: unknownTrainingSnapshots,
-        },
-        quests: {
-          ...tabs.quests,
-          quest_defs: questDefs,
-        },
-      },
-    },
-    null,
-    2
-  );
+        null,
+        2
+      );
+    } catch {
+      return "{}";
+    }
+  }, [
+    actionMap,
+    actionTrainingSnapshots,
+    extraMeta,
+    gearIds,
+    itemSnapshots,
+    questDefs,
+    tabs,
+    traitMap,
+    trainingIds,
+    trainingSnapshots,
+    unknownTrainingSnapshots,
+  ]);
 
   return (
     <div className="space-y-2 rounded-lg border p-2">
@@ -338,10 +373,10 @@ export default function NpcTabsEditorClient(props: {
                 <div className="text-[11px] text-gray-600">
                   Quests can include manual task lines, talk-to-NPC tasks, and rewards (items + faith).
                 </div>
-                {quests.length === 0 ? (
+                {safeQuests.length === 0 ? (
                   <div className="text-xs text-gray-500">No quests yet. Click Add Quest.</div>
                 ) : null}
-                {quests.map((q, idx) => {
+                {safeQuests.map((q, idx) => {
                   const rewardItemIds = normalizeUuidList(q.rewardItemIds);
                   return (
                     <div key={`${q.id}-${idx}`} className="rounded border bg-white p-2 space-y-2">
