@@ -37,6 +37,8 @@ export default async function EditNpcByQueryPage({
   const id = (Array.isArray(raw) ? raw[0] : raw ?? "").trim();
   const returnToRaw = sp?.return_to;
   const returnTo = (Array.isArray(returnToRaw) ? returnToRaw[0] : returnToRaw ?? "").trim();
+  const episodeScopeRaw = sp?.episode_scope;
+  const episodeScopeId = (Array.isArray(episodeScopeRaw) ? episodeScopeRaw[0] : episodeScopeRaw ?? "").trim();
 
   // Helpful debug instead of mystery 404 while you validate
   if (!id) {
@@ -80,6 +82,9 @@ let passives: any[] = [];
 let effectiveActions: any[] = [];
 let itemOptions: any[] = [];
 let runtimeMeta: any = { npc_tabs: {} };
+let runtimeMetaRaw: any = {};
+let episodeOptions: Array<{ id: string; title: string; episode_code?: string | null }> = [];
+let scopedRuntimeMeta: any = { npc_tabs: {} };
 
 try {
   [
@@ -98,12 +103,29 @@ try {
     getNpcEffectiveActions(npcId),
   ]);
   const supabase = await createClient();
-  const [{ data: items }, { data: runtime }] = await Promise.all([
+  const [{ data: items }, { data: runtime }, { data: episodes }] = await Promise.all([
     supabase.from("items").select("id,name,faith_required,is_active").eq("is_active", true).order("name", { ascending: true }),
     supabase.from("npc_runtime_configs").select("meta_json").eq("npc_id", npcId).maybeSingle(),
+    supabase.from("episodes").select("id,title,episode_code").order("created_at", { ascending: false }).limit(200),
   ]);
   itemOptions = items ?? [];
-  runtimeMeta = (runtime as any)?.meta_json ?? { npc_tabs: {} };
+  runtimeMetaRaw = (runtime as any)?.meta_json ?? {};
+  runtimeMeta = runtimeMetaRaw;
+  episodeOptions = (episodes ?? []) as any[];
+  const scopedTabs =
+    episodeScopeId &&
+    runtimeMetaRaw?.npc_tabs_by_episode &&
+    typeof runtimeMetaRaw.npc_tabs_by_episode === "object"
+      ? runtimeMetaRaw.npc_tabs_by_episode[episodeScopeId]
+      : null;
+  scopedRuntimeMeta = {
+    npc_tabs:
+      scopedTabs && typeof scopedTabs === "object"
+        ? scopedTabs
+        : runtimeMetaRaw?.npc_tabs && typeof runtimeMetaRaw.npc_tabs === "object"
+          ? runtimeMetaRaw.npc_tabs
+          : {},
+  };
 } catch (err) {
   console.error("Failed to load traits/actions for NPC", err);
 }
@@ -334,12 +356,34 @@ try {
   <div>
     <h2 className="font-semibold">Player Runtime (Tabs, Quests, Gear, Training)</h2>
     <p className="text-sm text-muted-foreground">
-      Configure this NPC once here. Episode scenes should only link/select the NPC.
+      Configure global runtime, or scope settings to one episode.
     </p>
   </div>
+  <form method="get" className="rounded-lg border p-3 space-y-2">
+    <input type="hidden" name="id" value={npcId} />
+    {returnTo ? <input type="hidden" name="return_to" value={returnTo} /> : null}
+    <label className="text-xs uppercase text-muted-foreground">Episode Scope</label>
+    <select
+      name="episode_scope"
+      defaultValue={episodeScopeId}
+      className="w-full border rounded-lg p-2 text-sm"
+    >
+      <option value="">Global (all episodes)</option>
+      {episodeOptions.map((ep) => (
+        <option key={ep.id} value={ep.id}>
+          {ep.title}
+          {ep.episode_code ? ` (${ep.episode_code})` : ""}
+        </option>
+      ))}
+    </select>
+    <button className="rounded-lg border px-3 py-2 text-sm hover:bg-muted/40" type="submit">
+      Load Scope
+    </button>
+  </form>
   <form action={saveRuntime} className="space-y-3">
+    <input type="hidden" name="episode_scope_id" value={episodeScopeId} />
     <NpcTabsEditorClient
-      initialMeta={runtimeMeta}
+      initialMeta={scopedRuntimeMeta}
       fallbackInfo={npc.description ?? ""}
       itemOptions={itemOptions}
       traitOptions={allTraits.map((t: any) => ({ id: t.id, name: t.name, is_active: !t.is_archived }))}

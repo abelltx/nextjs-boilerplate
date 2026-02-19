@@ -21,13 +21,39 @@ export async function saveNpcRuntimeConfigAction(npcId: string, formData: FormDa
       throw new Error("Invalid runtime JSON.");
     }
   }
-  const meta = parsed?.npc_tabs ? { npc_tabs: parsed.npc_tabs } : { npc_tabs: {} };
+  const nextTabs = parsed?.npc_tabs && typeof parsed.npc_tabs === "object" ? parsed.npc_tabs : {};
+  const scopeIdRaw = String(formData.get("episode_scope_id") ?? "").trim();
+  const scopeId = scopeIdRaw && isUuid(scopeIdRaw) ? scopeIdRaw : "";
 
   const supabase = createAdminClient() ?? (await createClient());
+  const { data: current, error: readErr } = await supabase
+    .from("npc_runtime_configs")
+    .select("meta_json")
+    .eq("npc_id", id)
+    .maybeSingle();
+  if (readErr) throw new Error(readErr.message);
+
+  const existingMeta =
+    current?.meta_json && typeof current.meta_json === "object"
+      ? (current.meta_json as Record<string, any>)
+      : {};
+  const mergedMeta: Record<string, any> = { ...existingMeta };
+  if (scopeId) {
+    const byEpisode =
+      existingMeta.npc_tabs_by_episode && typeof existingMeta.npc_tabs_by_episode === "object"
+        ? { ...(existingMeta.npc_tabs_by_episode as Record<string, any>) }
+        : {};
+    byEpisode[scopeId] = nextTabs;
+    mergedMeta.npc_tabs_by_episode = byEpisode;
+  } else {
+    mergedMeta.npc_tabs = nextTabs;
+  }
+
   const { error } = await supabase
     .from("npc_runtime_configs")
-    .upsert({ npc_id: id, meta_json: meta }, { onConflict: "npc_id" });
+    .upsert({ npc_id: id, meta_json: mergedMeta }, { onConflict: "npc_id" });
   if (error) throw new Error(error.message);
 
-  revalidatePath(`/admin/designer/npcs/edit?id=${id}`);
+  const suffix = scopeId ? `&episode_scope=${encodeURIComponent(scopeId)}` : "";
+  revalidatePath(`/admin/designer/npcs/edit?id=${id}${suffix}`);
 }

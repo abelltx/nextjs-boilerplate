@@ -69,7 +69,8 @@ async function resolveNpcBlock(
     .select("id,name,description,image_base_path,image_updated_at")
     .eq("id", npcId)
     .maybeSingle();
-  let runtimeTabs: Record<string, any> = {};
+  let runtimeTabsGlobal: Record<string, any> = {};
+  let runtimeTabsScoped: Record<string, any> = {};
   const runtimeQuery = await supabase
     .from("npc_runtime_configs")
     .select("meta_json")
@@ -79,9 +80,18 @@ async function resolveNpcBlock(
     console.error("resolveNpcBlock runtime config load failed:", runtimeQuery.error.message);
   }
   if (runtimeQuery?.data && typeof (runtimeQuery.data as any)?.meta_json === "object") {
-    const maybeTabs = (runtimeQuery.data as any).meta_json?.npc_tabs;
-    if (maybeTabs && typeof maybeTabs === "object") {
-      runtimeTabs = maybeTabs as Record<string, any>;
+    const runtimeMeta = (runtimeQuery.data as any).meta_json ?? {};
+    const maybeGlobal = runtimeMeta?.npc_tabs;
+    if (maybeGlobal && typeof maybeGlobal === "object") {
+      runtimeTabsGlobal = maybeGlobal as Record<string, any>;
+    }
+    const episodeId = String(block?.episode_id ?? "").trim();
+    const maybeScoped =
+      episodeId && runtimeMeta?.npc_tabs_by_episode && typeof runtimeMeta.npc_tabs_by_episode === "object"
+        ? runtimeMeta.npc_tabs_by_episode[episodeId]
+        : null;
+    if (maybeScoped && typeof maybeScoped === "object") {
+      runtimeTabsScoped = maybeScoped as Record<string, any>;
     }
   }
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
@@ -95,8 +105,8 @@ async function resolveNpcBlock(
       ? bindingRow.tab_overrides_json
       : null;
   const mergedNpcTabs = bindingTabs
-    ? { ...(meta?.npc_tabs ?? {}), ...runtimeTabs, ...(bindingTabs ?? {}) }
-    : { ...(meta?.npc_tabs ?? {}), ...runtimeTabs };
+    ? { ...(meta?.npc_tabs ?? {}), ...runtimeTabsGlobal, ...runtimeTabsScoped, ...(bindingTabs ?? {}) }
+    : { ...(meta?.npc_tabs ?? {}), ...runtimeTabsGlobal, ...runtimeTabsScoped };
   const questsOverride = Array.isArray(bindingRow?.quests_override_json) ? bindingRow.quests_override_json : null;
   if (questsOverride) {
     const questsPrev = (mergedNpcTabs?.quests ?? {}) as Record<string, any>;
@@ -177,7 +187,7 @@ export async function GET(req: Request) {
   if (typeof presentedId === "string" && presentedId.length) {
     const { data: b } = await supabase
       .from("episode_blocks")
-      .select("id,block_type,title,body,image_url,meta")
+      .select("id,episode_id,block_type,title,body,image_url,meta")
       .eq("id", presentedId)
       .maybeSingle();
     block = b ?? null;
@@ -196,7 +206,7 @@ export async function GET(req: Request) {
       if (targetIds.length) {
         const { data: linked } = await supabase
           .from("episode_blocks")
-          .select("id,block_type,audience,mode,title,body,image_url,meta")
+          .select("id,episode_id,block_type,audience,mode,title,body,image_url,meta")
           .in("id", targetIds);
 
         for (const row of linked ?? []) {

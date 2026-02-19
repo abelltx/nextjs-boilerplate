@@ -89,6 +89,7 @@ export default function NpcTabsEditorClient(props: {
     designer_url?: string | null;
   }>;
   returnTo?: string;
+  episodeScopeId?: string;
   libraryOnly?: boolean;
   showLibraryLink?: boolean;
   showAdvancedMeta?: boolean;
@@ -469,9 +470,13 @@ export default function NpcTabsEditorClient(props: {
                     const withReturn = props.returnTo
                       ? `${linkedNpc.designer_url}${hasQuery ? "&" : "?"}return_to=${encodeURIComponent(props.returnTo)}`
                       : linkedNpc.designer_url;
+                    const withScope =
+                      props.episodeScopeId && /^[0-9a-f-]{36}$/i.test(props.episodeScopeId)
+                        ? `${withReturn}${withReturn.includes("?") ? "&" : "?"}episode_scope=${encodeURIComponent(props.episodeScopeId)}`
+                        : withReturn;
                     return (
                   <a
-                    href={withReturn}
+                    href={withScope}
                     target="_blank"
                     rel="noreferrer"
                     className="rounded border bg-white px-2 py-1 text-xs hover:bg-gray-100"
