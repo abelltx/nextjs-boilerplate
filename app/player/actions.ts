@@ -629,13 +629,15 @@ export async function claimNpcQuestRewardsAction(input: {
   if (rewardItemIds.length) {
     const { data: itemRows, error: itemErr } = await supabase
       .from("items")
-      .select("id,name,is_active,stackable")
+      .select("id,name,is_active,stackable,max_stack")
       .in("id", rewardItemIds);
     if (itemErr) return { ok: false, error: itemErr.message };
     const validItems = (itemRows ?? []).filter((row: any) => row?.id && row.is_active !== false);
     for (const it of validItems as any[]) {
       const itemId = String(it.id);
       const isStackable = Boolean((it as any).stackable ?? true);
+      const maxStack = Number((it as any).max_stack ?? NaN);
+      const stackCap = Number.isFinite(maxStack) && maxStack > 0 ? Math.floor(maxStack) : null;
       const { data: existing, error: exErr } = await supabase
         .from("inventory_items")
         .select("id,quantity")
@@ -647,9 +649,12 @@ export async function claimNpcQuestRewardsAction(input: {
       if (exErr) return { ok: false, error: exErr.message };
       if (existing?.id && isStackable) {
         const qty = Math.max(1, Number((existing as any).quantity ?? 1));
+        if (stackCap && qty >= stackCap) {
+          continue;
+        }
         const { error: upErr } = await supabase
           .from("inventory_items")
-          .update({ quantity: qty + 1 })
+          .update({ quantity: stackCap ? Math.min(stackCap, qty + 1) : qty + 1 })
           .eq("id", (existing as any).id);
         if (upErr) return { ok: false, error: upErr.message };
       } else {

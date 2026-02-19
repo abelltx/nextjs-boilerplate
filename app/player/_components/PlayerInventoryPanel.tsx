@@ -20,6 +20,7 @@ type ItemRow = {
     type: string | null;
     description: string | null;
     stackable: boolean;
+    max_stack: number | null;
     image_url: string | null;
     image_base_path: string | null;
   };
@@ -39,6 +40,10 @@ function safeDesc(row: ItemRow) {
 }
 function safeStackable(row: ItemRow) {
   return row.item?.stackable ?? true;
+}
+function safeMaxStack(row: ItemRow) {
+  const v = Number(row.item?.max_stack ?? NaN);
+  return Number.isFinite(v) && v > 0 ? Math.floor(v) : null;
 }
 function safeImageUrl(row: ItemRow) {
   const v = row.item?.image_url;
@@ -78,6 +83,7 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
           type,
           description,
           stackable,
+          max_stack,
           image_url,
           image_base_path
         )
@@ -259,6 +265,7 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
             const name = safeName(r);
             const t = safeType(r);
             const stackable = safeStackable(r);
+            const maxStack = safeMaxStack(r);
             const busy = busyId === r.id;
 
             return (
@@ -284,7 +291,7 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
                     <div>
                       <div className="font-medium">{name}</div>
                       <div className="text-xs opacity-70">
-                        {stackable ? "Stackable" : "Not stackable"}
+                        {stackable ? (maxStack ? `Stackable (Max ${maxStack})` : "Stackable") : "Not stackable"}
                       </div>
                     </div>
                   </div>
@@ -292,7 +299,9 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
 
                 <div className="col-span-2 truncate text-sm" title={t}>{t}</div>
 
-                <div className="col-span-1 text-center text-sm">{r.quantity}</div>
+                <div className="col-span-1 text-center text-sm">
+                  {stackable && maxStack ? `${r.quantity}/${maxStack}` : r.quantity}
+                </div>
 
                 <div className="col-span-1 text-center text-sm">
                   {r.equipped ? "Yes" : "-"}
@@ -382,7 +391,11 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
               <div className="rounded-lg border p-3 grid grid-cols-2 gap-3">
                 <div>
                   <div className="text-xs opacity-70">Quantity</div>
-                  <div className="text-sm">{selected.quantity}</div>
+                  <div className="text-sm">
+                    {safeStackable(selected) && safeMaxStack(selected)
+                      ? `${selected.quantity}/${safeMaxStack(selected)}`
+                      : selected.quantity}
+                  </div>
                 </div>
                 <div>
                   <div className="text-xs opacity-70">Equipped</div>

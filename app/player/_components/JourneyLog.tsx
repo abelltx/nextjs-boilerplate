@@ -52,25 +52,29 @@ export default function JourneyLog(props: {
           <div className="space-y-2">
             {groups[day].slice(0, props.compact ? 5 : 999).map((it) => (
               <div key={it.id ?? `${it.created_at}-${it.title}`} className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-3">
+                {(() => {
+                  const summaryRaw = String(it.summary ?? "");
+                  const itemMatch = summaryRaw.match(/\[item_id:([0-9a-f-]{36})\]/i);
+                  const summaryText = summaryRaw.replace(/\s*\[item_id:[0-9a-f-]{36}\]\s*/gi, "").trim();
+                  return (
                 <div className="flex items-start gap-2">
                   <div className="mt-0.5 w-5 text-center text-sm">{iconFor(it.event_type ?? "")}</div>
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-semibold text-white">
                       {it.title ?? "Update"}
                     </div>
-                    {it.summary ? (
+                    {summaryText ? (
                       <div className="mt-1 text-sm text-neutral-300">
-                        {it.summary}
+                        {summaryText}
                       </div>
                     ) : null}
-                    {typeof it.summary === "string" && it.summary.includes("[item_id:") && props.onOpenItem ? (
+                    {itemMatch?.[1] && props.onOpenItem ? (
                       <div className="mt-2">
                         <button
                           type="button"
                           className="rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-200 hover:bg-neutral-900"
                           onClick={() => {
-                            const m = it.summary.match(/\[item_id:([0-9a-f-]{36})\]/i);
-                            if (m?.[1]) props.onOpenItem?.(m[1]);
+                            props.onOpenItem?.(itemMatch[1]);
                           }}
                         >
                           Examine Item
@@ -93,6 +97,8 @@ export default function JourneyLog(props: {
                     </div>
                   ) : null}
                 </div>
+                  );
+                })()}
               </div>
             ))}
           </div>
