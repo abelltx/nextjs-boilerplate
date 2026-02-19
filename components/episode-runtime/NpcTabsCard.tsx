@@ -74,12 +74,15 @@ export default function NpcTabsCard(props: {
     onQuestClaim?: (quest: QuestDef) => void | Promise<void>;
   };
 }) {
+  const linkedNpc = (props.meta?.npc_library ?? null) as any;
+  const mergedImageUrl = String(props.imageUrl ?? linkedNpc?.image_url ?? "").trim() || null;
+  const mergedFallbackInfo = String(props.fallbackInfo ?? linkedNpc?.description ?? "").trim();
   const tabs = useMemo<TabDef[]>(() => {
     const raw = (props.meta?.npc_tabs ?? {}) as Record<string, any>;
     const base: Record<TabKey, { enabled: boolean; content: string }> = {
       information: {
         enabled: raw?.information?.enabled !== false,
-        content: String(raw?.information?.content ?? props.fallbackInfo ?? "").trim(),
+        content: String(raw?.information?.content ?? mergedFallbackInfo ?? "").trim(),
       },
       gear: {
         enabled: Boolean(raw?.gear?.enabled),
@@ -98,11 +101,11 @@ export default function NpcTabsCard(props: {
     const coreTabs = (Object.keys(TAB_LABELS) as TabKey[])
       .filter((k) => base[k].enabled)
       .map((k) => ({ key: k, label: TAB_LABELS[k], content: base[k].content || "No details yet." }));
-    if (props.imageUrl) {
+    if (mergedImageUrl) {
       return [{ key: "image" as RuntimeTabKey, label: "Image", content: "" }, ...coreTabs];
     }
     return coreTabs;
-  }, [props.meta, props.fallbackInfo]);
+  }, [props.meta, mergedFallbackInfo, mergedImageUrl]);
 
   const [active, setActive] = useState<RuntimeTabKey>(
     (tabs.find((t) => t.key === "information")?.key ?? tabs[0]?.key ?? "information") as RuntimeTabKey
@@ -411,10 +414,10 @@ export default function NpcTabsCard(props: {
                 : "border-neutral-700 text-neutral-300 hover:bg-neutral-900",
             ].join(" ")}
           >
-            {t.key === "image" && props.imageUrl ? (
+            {t.key === "image" && mergedImageUrl ? (
               <span className="inline-flex items-center gap-1">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={props.imageUrl} alt="NPC thumbnail" className="h-4 w-4 rounded object-cover" />
+                <img src={mergedImageUrl} alt="NPC thumbnail" className="h-4 w-4 rounded object-cover" />
                 <span>{t.label}</span>
               </span>
             ) : (
@@ -423,10 +426,10 @@ export default function NpcTabsCard(props: {
           </button>
         ))}
       </div>
-      {activeTab.key === "image" && props.imageUrl ? (
+      {activeTab.key === "image" && mergedImageUrl ? (
         <div className="mt-3 rounded-lg border border-neutral-700 overflow-hidden">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={props.imageUrl} alt="NPC portrait" className="w-full h-auto" />
+          <img src={mergedImageUrl} alt="NPC portrait" className="w-full h-auto" />
         </div>
       ) : activeTab.key === "gear" && gearItems.length ? (
         <div className="mt-3 space-y-2">

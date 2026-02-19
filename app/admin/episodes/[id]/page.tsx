@@ -43,6 +43,16 @@ function safeJsonStringify(value: any) {
   }
 }
 
+function buildNpcMediumUrl(
+  supabaseUrl: string,
+  npcId: string,
+  imageUpdatedAt?: string | null
+) {
+  if (!supabaseUrl || !npcId) return null;
+  const version = imageUpdatedAt ? `?v=${encodeURIComponent(imageUpdatedAt)}` : "";
+  return `${supabaseUrl}/storage/v1/object/public/npc-images/${npcId}/medium.webp${version}`;
+}
+
 export default async function AdminEpisodeEditPage({
   params,
   searchParams,
@@ -98,12 +108,63 @@ export default async function AdminEpisodeEditPage({
     .from("actions")
     .select("id,name,is_active")
     .order("name", { ascending: true });
+  const { data: npcRows } = await supabase
+    .from("npcs")
+    .select("id,name,description,image_base_path,image_updated_at,is_archived")
+    .eq("is_archived", false)
+    .order("name", { ascending: true });
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+  const npcOptions = (npcRows ?? []).map((n: any) => ({
+    id: String(n.id),
+    name: String(n.name ?? "NPC"),
+    description: String(n.description ?? "").trim() || null,
+    medium_url: n.image_base_path ? buildNpcMediumUrl(supabaseUrl, String(n.id), n.image_updated_at ?? null) : null,
+    designer_url: `/admin/designer/npcs/edit?id=${encodeURIComponent(String(n.id))}`,
+  }));
+  const npcOptionById = new Map<string, any>();
+  for (const n of npcOptions) npcOptionById.set(String(n.id), n);
+  let npcBindingsByBlockId = new Map<string, any>();
+  const { data: npcBindings, error: npcBindErr } = await supabase
+    .from("episode_npc_bindings")
+    .select("id,episode_block_id,npc_id")
+    .eq("episode_id", id);
+  if (npcBindErr) {
+    const msg = String(npcBindErr.message ?? "").toLowerCase();
+    if (!msg.includes("does not exist")) throw new Error(npcBindErr.message);
+  } else {
+    npcBindingsByBlockId = new Map<string, any>(
+      (npcBindings ?? [])
+        .filter((r: any) => String(r?.episode_block_id ?? "").length > 0)
+        .map((r: any) => [String(r.episode_block_id), r])
+    );
+  }
+  const blocksResolved = (blocks ?? []).map((b: any) => {
+    if (String(b?.block_type ?? "").trim().toLowerCase() !== "npc") return b;
+    const binding = npcBindingsByBlockId.get(String(b.id)) ?? null;
+    if (!binding?.npc_id) return b;
+    const libNpc = npcOptionById.get(String(binding.npc_id)) ?? null;
+    const meta = { ...((b.meta ?? {}) as Record<string, any>) };
+    meta.npc_binding = {
+      binding_id: String(binding.id),
+      npc_id: String(binding.npc_id),
+    };
+    if (libNpc) {
+      meta.npc_library = {
+        npc_id: String(libNpc.id),
+        name: String(libNpc.name ?? "NPC"),
+        description: String(libNpc.description ?? "").trim() || null,
+        image_url: libNpc.medium_url ?? null,
+        designer_url: libNpc.designer_url ?? null,
+      };
+    }
+    return { ...b, meta };
+  });
 
   // Group blocks into scenes (scene blocks become headers)
   const sceneGroups: Array<{ scene: any | null; items: any[] }> = [];
   let current = { scene: null as any | null, items: [] as any[] };
 
-  for (const b of blocks ?? []) {
+  for (const b of blocksResolved) {
     if (String(b.block_type ?? "").trim().toLowerCase() === "scene") {
       if (current.scene || current.items.length) sceneGroups.push(current);
       current = { scene: b, items: [] };
@@ -116,13 +177,13 @@ export default async function AdminEpisodeEditPage({
   const mins = Math.round((episode.default_duration_seconds ?? 0) / 60);
 
   // Progression: count only NON-scene blocks for "Block X of Y"
-  const nonSceneBlocks = (blocks ?? []).filter((b: any) => String(b.block_type ?? "").trim().toLowerCase() !== "scene");
+  const nonSceneBlocks = blocksResolved.filter((b: any) => String(b.block_type ?? "").trim().toLowerCase() !== "scene");
   const nonSceneIndexById = new Map<string, number>();
   nonSceneBlocks.forEach((b: any, idx: number) => nonSceneIndexById.set(b.id, idx + 1));
   const nonSceneTotal = nonSceneBlocks.length;
 
   // Optional: generated player-facing preview (no DB changes)
-  const playerScript = (blocks ?? [])
+  const playerScript = blocksResolved
     .filter((b: any) => b.audience === "players" || b.audience === "both")
     .map((b: any) => {
       const isScene = String(b.block_type ?? "").trim().toLowerCase() === "scene";
@@ -138,7 +199,7 @@ export default async function AdminEpisodeEditPage({
     .trim();
 
   const storytellerFlow =
-    sceneGroups.length > 0 ? sceneGroups : [{ scene: null as any, items: (blocks ?? []) as any[] }];
+    sceneGroups.length > 0 ? sceneGroups : [{ scene: null as any, items: blocksResolved as any[] }];
   const playerFlow = storytellerFlow
     .map((g) => {
       const sceneAudience = String(g.scene?.audience ?? "both");
@@ -1085,7 +1146,7 @@ export default async function AdminEpisodeEditPage({
                     const idx = nonSceneIndexById.get(b.id) ?? 0;
 
                     return (
-                      <details key={b.id} className="border rounded-lg p-3">
+                      <details key={b.id} id={`block-${b.id}`} className="border rounded-lg p-3">
                         <summary className="cursor-pointer text-sm">
                           <span className="font-semibold">{b.block_type}</span>
                           {b.title ? ` - ${b.title}` : ""}
@@ -1175,7 +1236,7 @@ export default async function AdminEpisodeEditPage({
                             <MapMarkerEditorClient
                               imageUrl={b.image_url as string}
                               initialMeta={b.meta ?? {}}
-                              revealCandidates={(blocks ?? [])
+                              revealCandidates={blocksResolved
                                 .filter((x: any) => x.id !== b.id && x.block_type !== "scene")
                                 .map((x: any) => ({
                                   id: x.id,
@@ -1193,6 +1254,8 @@ export default async function AdminEpisodeEditPage({
                               itemOptions={(itemOptions ?? []) as any[]}
                               traitOptions={(traitOptions ?? []) as any[]}
                               actionOptions={(actionOptions ?? []) as any[]}
+                              npcOptions={npcOptions as any[]}
+                              returnTo={`/admin/episodes/${episode.id}#block-${b.id}`}
                             />
                           ) : (
                             <textarea

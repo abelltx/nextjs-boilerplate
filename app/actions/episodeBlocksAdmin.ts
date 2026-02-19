@@ -10,6 +10,23 @@ function requireUuid(id: string, label: string) {
   const ok = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
   if (!ok) throw new Error(`Invalid ${label}`);
 }
+function isUuid(id: unknown): id is string {
+  if (typeof id !== "string") return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id.trim());
+}
+function isMissingRelationError(err: any, relation: string) {
+  const msg = String(err?.message ?? "").toLowerCase();
+  return msg.includes(`relation "${relation}" does not exist`) || msg.includes(`relation "public.${relation}" does not exist`);
+}
+function buildNpcMediumUrl(
+  supabaseUrl: string,
+  npcId: string,
+  imageUpdatedAt?: string | null
+) {
+  if (!supabaseUrl || !npcId) return null;
+  const version = imageUpdatedAt ? `?v=${encodeURIComponent(imageUpdatedAt)}` : "";
+  return `${supabaseUrl}/storage/v1/object/public/npc-images/${npcId}/medium.webp${version}`;
+}
 
 async function maybeUploadBlockImage(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -59,6 +76,97 @@ function parseMetaJson(raw: FormDataEntryValue | null): any {
     // Store an error wrapper so you can see what went wrong.
     return { __meta_error: "Invalid JSON", __raw: s };
   }
+}
+
+async function upsertNpcBindingForBlock(input: {
+  supabase: Awaited<ReturnType<typeof createClient>>;
+  episodeId: string;
+  blockId: string;
+  title: string | null;
+  body: string | null;
+  imageUrl: string | null;
+  meta: any;
+}) {
+  const supabase = input.supabase;
+  const meta = { ...(input.meta ?? {}) } as Record<string, any>;
+  const bindingMeta = (meta.npc_binding ?? {}) as Record<string, any>;
+  let npcId = String(bindingMeta.npc_id ?? meta?.npc_library?.npc_id ?? "").trim();
+  const createFromBlock = Boolean(bindingMeta.create_from_block);
+
+  if (!npcId && createFromBlock) {
+    const { data: createdNpc, error: createNpcErr } = await supabase
+      .from("npcs")
+      .insert({
+        name: String(input.title ?? "NPC").trim() || "NPC",
+        description: String(input.body ?? "").trim() || null,
+        default_role: "neutral",
+        npc_type: "human",
+      })
+      .select("id,name,description,image_base_path,image_updated_at")
+      .single();
+    if (!createNpcErr && createdNpc?.id) {
+      npcId = String(createdNpc.id);
+    } else if (createNpcErr) {
+      console.error("Failed to auto-create NPC from block:", createNpcErr.message);
+    }
+  }
+
+  if (!isUuid(npcId)) {
+    delete meta.npc_binding;
+    return meta;
+  }
+
+  const tabOverrides = (meta?.npc_tabs ?? {}) as Record<string, any>;
+  const questsOverrides = Array.isArray(tabOverrides?.quests?.quest_defs) ? tabOverrides.quests.quest_defs : [];
+
+  const { data: binding, error: bindErr } = await supabase
+    .from("episode_npc_bindings")
+    .upsert(
+      {
+        episode_id: input.episodeId,
+        episode_block_id: input.blockId,
+        npc_id: npcId,
+        title_override: input.title,
+        body_override: input.body,
+        image_override: input.imageUrl,
+        tab_overrides_json: tabOverrides,
+        quests_override_json: questsOverrides,
+      },
+      { onConflict: "episode_block_id" }
+    )
+    .select("id,npc_id")
+    .single();
+
+  if (bindErr) {
+    if (!isMissingRelationError(bindErr, "episode_npc_bindings")) {
+      console.error("NPC binding upsert failed:", bindErr.message);
+    }
+    return meta;
+  }
+
+  const { data: npc } = await supabase
+    .from("npcs")
+    .select("id,name,description,image_base_path,image_updated_at")
+    .eq("id", npcId)
+    .maybeSingle();
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+  const mediumUrl =
+    npc?.image_base_path && supabaseUrl
+      ? buildNpcMediumUrl(supabaseUrl, String(npc.id), npc.image_updated_at ?? null)
+      : null;
+
+  meta.npc_binding = {
+    binding_id: String(binding?.id ?? ""),
+    npc_id: npcId,
+  };
+  meta.npc_library = {
+    npc_id: npcId,
+    name: String(npc?.name ?? "NPC"),
+    description: String(npc?.description ?? "").trim() || null,
+    image_url: mediumUrl,
+    designer_url: `/admin/designer/npcs/edit?id=${encodeURIComponent(npcId)}`,
+  };
+  return meta;
 }
 
 export async function addEpisodeBlockAction(episodeId: string, fd: FormData) {
@@ -127,19 +235,42 @@ export async function addEpisodeBlockAction(episodeId: string, fd: FormData) {
     }
   }
 
-  const { error } = await supabase.from("episode_blocks").insert({
-    episode_id: episodeId,
-    sort_order: nextOrder,
-    block_type,
-    audience,
-    mode,
-    title,
-    body,
-    image_url: finalImageUrl,
-    meta,
-  });
+  const { data: inserted, error } = await supabase
+    .from("episode_blocks")
+    .insert({
+      episode_id: episodeId,
+      sort_order: nextOrder,
+      block_type,
+      audience,
+      mode,
+      title,
+      body,
+      image_url: finalImageUrl,
+      meta,
+    })
+    .select("id")
+    .single();
 
   if (error) throw new Error(error.message);
+
+  if (String(block_type).trim().toLowerCase() === "npc" && inserted?.id) {
+    const boundMeta = await upsertNpcBindingForBlock({
+      supabase,
+      episodeId,
+      blockId: String(inserted.id),
+      title,
+      body,
+      imageUrl: finalImageUrl,
+      meta,
+    });
+    if (boundMeta && JSON.stringify(boundMeta) !== JSON.stringify(meta)) {
+      const { error: upMetaErr } = await supabase
+        .from("episode_blocks")
+        .update({ meta: boundMeta })
+        .eq("id", String(inserted.id));
+      if (upMetaErr) throw new Error(upMetaErr.message);
+    }
+  }
 
   revalidatePath(`/admin/episodes/${episodeId}`);
 }
@@ -165,6 +296,17 @@ export async function updateEpisodeBlockAction(blockId: string, episodeId: strin
   // Only update meta if the field is present (prevents wiping meta accidentally)
   if (fd.has("meta_json")) {
     patch.meta = parseMetaJson(fd.get("meta_json"));
+  }
+  if (String(patch.block_type).trim().toLowerCase() === "npc" && fd.has("meta_json")) {
+    patch.meta = await upsertNpcBindingForBlock({
+      supabase,
+      episodeId,
+      blockId,
+      title: patch.title,
+      body: patch.body,
+      imageUrl: patch.image_url,
+      meta: patch.meta,
+    });
   }
 
   const { error } = await supabase.from("episode_blocks").update(patch).eq("id", blockId);

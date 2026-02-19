@@ -81,6 +81,14 @@ export default function NpcTabsEditorClient(props: {
   itemOptions?: Array<{ id: string; name: string; faith_required?: number | null; is_active?: boolean | null }>;
   traitOptions?: Array<{ id: string; name: string; is_active?: boolean | null }>;
   actionOptions?: Array<{ id: string; name: string; is_active?: boolean | null }>;
+  npcOptions?: Array<{
+    id: string;
+    name: string;
+    description?: string | null;
+    medium_url?: string | null;
+    designer_url?: string | null;
+  }>;
+  returnTo?: string;
 }) {
   const rawTabs = (props.initialMeta?.npc_tabs ?? {}) as Record<string, any>;
   const [tabs, setTabs] = useState<Record<TabKey, { enabled: boolean; content: string }>>({
@@ -129,6 +137,12 @@ export default function NpcTabsEditorClient(props: {
     return "";
   });
   const [quests, setQuests] = useState<QuestDraft[]>(() => parseQuestDrafts(props.initialMeta));
+  const [linkedNpcId, setLinkedNpcId] = useState<string>(() =>
+    String(props.initialMeta?.npc_library?.npc_id ?? "").trim()
+  );
+  const [createNpcFromBlock, setCreateNpcFromBlock] = useState<boolean>(() =>
+    Boolean(props.initialMeta?.npc_binding?.create_from_block)
+  );
   const safeItemOptions = useMemo(
     () =>
       (props.itemOptions ?? []).map((it: any) => ({
@@ -252,6 +266,22 @@ export default function NpcTabsEditorClient(props: {
     for (const it of safeItemOptions) m.set(String(it.id), String(it.name ?? "").trim() || String(it.id));
     return m;
   }, [safeItemOptions]);
+  const npcMap = useMemo(() => {
+    const m = new Map<string, { id: string; name: string; description?: string | null; medium_url?: string | null; designer_url?: string | null }>();
+    for (const n of props.npcOptions ?? []) {
+      const id = String(n?.id ?? "").trim();
+      if (!id) continue;
+      m.set(id, {
+        id,
+        name: String(n?.name ?? "").trim() || id,
+        description: n?.description ?? null,
+        medium_url: n?.medium_url ?? null,
+        designer_url: n?.designer_url ?? null,
+      });
+    }
+    return m;
+  }, [props.npcOptions]);
+  const linkedNpc = linkedNpcId ? npcMap.get(linkedNpcId) ?? null : null;
   const questDefs = useMemo(
     () =>
       safeQuests
@@ -329,6 +359,25 @@ export default function NpcTabsEditorClient(props: {
               ...tabs.quests,
               quest_defs: questDefs,
             },
+            npc_binding: linkedNpc
+              ? {
+                  binding_id: String(props.initialMeta?.npc_binding?.binding_id ?? "").trim() || null,
+                  npc_id: linkedNpc.id,
+                }
+              : createNpcFromBlock
+                ? {
+                    create_from_block: true,
+                  }
+                : null,
+            npc_library: linkedNpc
+              ? {
+                  npc_id: linkedNpc.id,
+                  name: linkedNpc.name,
+                  description: linkedNpc.description ?? null,
+                  image_url: linkedNpc.medium_url ?? null,
+                  designer_url: linkedNpc.designer_url ?? null,
+                }
+              : null,
           },
         },
         null,
@@ -357,6 +406,65 @@ export default function NpcTabsEditorClient(props: {
       <div className="text-xs text-gray-600">Enable only the tabs you need for this NPC.</div>
 
       <div className="space-y-2">
+        <div className="rounded border p-2 space-y-2">
+          <div className="text-sm font-semibold">NPC Library Link</div>
+          <div className="text-xs text-gray-600">
+            Link this scene NPC to a Designer NPC so image/description stay reusable across episodes.
+          </div>
+          <select
+            className="w-full border rounded p-2 text-sm"
+            value={linkedNpcId}
+            onChange={(e) => setLinkedNpcId(String(e.currentTarget.value ?? "").trim())}
+          >
+            <option value="">No linked library NPC</option>
+            {(props.npcOptions ?? []).map((npc) => (
+              <option key={npc.id} value={npc.id}>
+                {npc.name} ({npc.id})
+              </option>
+            ))}
+          </select>
+          {!linkedNpc ? (
+            <label className="flex items-center gap-2 text-xs text-gray-700">
+              <input
+                type="checkbox"
+                checked={createNpcFromBlock}
+                onChange={(e) => setCreateNpcFromBlock(e.currentTarget.checked)}
+              />
+              Create a new library NPC from this block on save (for legacy inline NPCs)
+            </label>
+          ) : null}
+          {linkedNpc ? (
+            <div className="rounded border bg-gray-50 px-2 py-2 text-xs text-gray-700">
+              <div className="font-semibold">{linkedNpc.name}</div>
+              <div className="mt-1 font-mono">{linkedNpc.id}</div>
+              {linkedNpc.designer_url ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {(() => {
+                    const hasQuery = linkedNpc.designer_url.includes("?");
+                    const withReturn = props.returnTo
+                      ? `${linkedNpc.designer_url}${hasQuery ? "&" : "?"}return_to=${encodeURIComponent(props.returnTo)}`
+                      : linkedNpc.designer_url;
+                    return (
+                  <a
+                    href={withReturn}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded border bg-white px-2 py-1 text-xs hover:bg-gray-100"
+                  >
+                    Open in NPC Designer
+                  </a>
+                    );
+                  })()}
+                  {props.returnTo ? (
+                    <a href={props.returnTo} className="rounded border bg-white px-2 py-1 text-xs hover:bg-gray-100">
+                      Return to Episode
+                    </a>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
         {KEYS.map((k) => (
           <div key={k} className="rounded border p-2">
             <label className="flex items-center gap-2 text-sm font-semibold">

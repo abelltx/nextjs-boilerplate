@@ -32,6 +32,8 @@ export default async function EditNpcByQueryPage({
   const sp = await Promise.resolve(searchParams);
   const raw = sp?.id;
   const id = (Array.isArray(raw) ? raw[0] : raw ?? "").trim();
+  const returnToRaw = sp?.return_to;
+  const returnTo = (Array.isArray(returnToRaw) ? returnToRaw[0] : returnToRaw ?? "").trim();
 
   // Helpful debug instead of mystery 404 while you validate
   if (!id) {
@@ -119,6 +121,11 @@ try {
         </div>
 
         <div className="flex items-center gap-2">
+          {returnTo ? (
+            <Link href={returnTo} className="px-3 py-2 rounded-lg border hover:bg-muted/40">
+              Back to Episode
+            </Link>
+          ) : null}
           <Link href="/admin/designer/" className="px-3 py-2 rounded-lg border hover:bg-muted/40">
             Back
           </Link>
