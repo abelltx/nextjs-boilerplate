@@ -60,6 +60,7 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
 
   const [selected, setSelected] = useState<ItemRow | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [selectedLargeUrl, setSelectedLargeUrl] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -158,6 +159,29 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
       window.removeEventListener("inventory:open-item", onOpenItem as EventListener);
     };
   }, [rows]);
+
+  useEffect(() => {
+    let alive = true;
+    async function loadSelectedLarge() {
+      if (!selected) {
+        if (alive) setSelectedLargeUrl(null);
+        return;
+      }
+      const base = String(selected.item?.image_base_path ?? "");
+      if (!base) {
+        if (alive) setSelectedLargeUrl(safeImageUrl(selected));
+        return;
+      }
+      const path = base.endsWith("/") ? `${base}medium.webp` : `${base}/medium.webp`;
+      const { data: signed } = await supabase.storage.from("item-images").createSignedUrl(path, 60 * 30);
+      if (!alive) return;
+      setSelectedLargeUrl(signed?.signedUrl ?? safeImageUrl(selected));
+    }
+    void loadSelectedLarge();
+    return () => {
+      alive = false;
+    };
+  }, [selected, supabase]);
 
   const filtered = rows;
 
@@ -391,6 +415,16 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
             </div>
 
             <div className="mt-4 space-y-3">
+              {selectedLargeUrl ? (
+                <div className="rounded-lg border p-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={selectedLargeUrl}
+                    alt={safeName(selected)}
+                    className="mx-auto max-h-72 w-full rounded object-contain bg-neutral-100"
+                  />
+                </div>
+              ) : null}
               <div className="rounded-lg border p-3">
                 <div className="text-xs opacity-70">Description</div>
                 <div className="text-sm mt-1 whitespace-pre-wrap">{safeDesc(selected)}</div>
