@@ -11,8 +11,11 @@ import PlayerInventoryPanel from "./PlayerInventoryPanel";
 import {
   claimNpcActionAction,
   claimNpcGearItemAction,
+  claimNpcQuestRewardsAction,
   claimNpcTrainingTraitAction,
+  completeNpcQuestTaskAction,
   leaveSessionAction,
+  startNpcQuestAction,
   submitRollResultAction,
 } from "../actions";
 import RevealCard from "@/components/episode-runtime/RevealCard";
@@ -32,6 +35,11 @@ type GuidedRoll = {
   label: string;
   total: number;
   breakdown: string;
+};
+type QuestProgress = {
+  status: "available" | "active" | "completed" | "claimed";
+  completedTaskIds: string[];
+  claimedAt?: string | null;
 };
 
 const SKILL_ALIASES: Array<{ key: string; aliases: string[] }> = [
@@ -119,12 +127,14 @@ export default function PlayerHubClient(props: {
     on_fail?: string | null;
     on_success?: string | null;
   }>;
+  questProgress?: Record<string, QuestProgress>;
 }) {
   const [tab, setTab] = useState<TabKey>("inventory");
   const [joinOpen, setJoinOpen] = useState(false);
   const [optimisticLiveSession, setOptimisticLiveSession] = useState<{ id: string; name?: string | null } | null>(null);
   const [claimingGearId, setClaimingGearId] = useState<string | null>(null);
   const [claimingTrainingId, setClaimingTrainingId] = useState<string | null>(null);
+  const [claimingQuestId, setClaimingQuestId] = useState<string | null>(null);
   const router = useRouter();
 
   const stat = (props.character?.stat_block ?? {}) as any;
@@ -388,6 +398,90 @@ export default function PlayerHubClient(props: {
       setClaimingTrainingId(null);
     }
   }
+  async function handleStartNpcQuest(quest: {
+    id: string;
+    title: string;
+    tasks?: Array<{ id: string }>;
+    rewards?: { faith?: number; itemIds?: string[] };
+  }) {
+    if (claimingQuestId) return;
+    setClaimingQuestId(quest.id);
+    try {
+      const res = await startNpcQuestAction({
+        characterId: String(props.character?.id ?? ""),
+        questId: String(quest.id ?? ""),
+        questTitle: String(quest.title ?? ""),
+        taskIds: Array.isArray(quest.tasks) ? quest.tasks.map((t) => String(t?.id ?? "").trim()).filter(Boolean) : [],
+        rewardFaith: Number(quest.rewards?.faith ?? 0),
+        rewardItemIds: Array.isArray(quest.rewards?.itemIds) ? quest.rewards?.itemIds : [],
+      });
+      if (!res.ok) {
+        alert(res.error ?? "Could not start quest.");
+        return;
+      }
+      router.refresh();
+    } catch (e: any) {
+      alert(e?.message ?? "Could not start quest.");
+    } finally {
+      setClaimingQuestId(null);
+    }
+  }
+  async function handleCompleteNpcQuestTask(
+    quest: { id: string; title: string; tasks?: Array<{ id: string }> },
+    task: { id: string }
+  ) {
+    if (claimingQuestId) return;
+    setClaimingQuestId(quest.id);
+    try {
+      const res = await completeNpcQuestTaskAction({
+        characterId: String(props.character?.id ?? ""),
+        questId: String(quest.id ?? ""),
+        questTitle: String(quest.title ?? ""),
+        taskId: String(task.id ?? ""),
+        allTaskIds: Array.isArray(quest.tasks) ? quest.tasks.map((t) => String(t?.id ?? "").trim()).filter(Boolean) : [],
+      });
+      if (!res.ok) {
+        alert(res.error ?? "Could not update quest task.");
+        return;
+      }
+      router.refresh();
+    } catch (e: any) {
+      alert(e?.message ?? "Could not update quest task.");
+    } finally {
+      setClaimingQuestId(null);
+    }
+  }
+  async function handleClaimNpcQuestRewards(quest: {
+    id: string;
+    title: string;
+    tasks?: Array<{ id: string }>;
+    rewards?: { faith?: number; itemIds?: string[] };
+  }) {
+    if (claimingQuestId) return;
+    setClaimingQuestId(quest.id);
+    try {
+      const res = await claimNpcQuestRewardsAction({
+        characterId: String(props.character?.id ?? ""),
+        questId: String(quest.id ?? ""),
+        questTitle: String(quest.title ?? ""),
+        allTaskIds: Array.isArray(quest.tasks) ? quest.tasks.map((t) => String(t?.id ?? "").trim()).filter(Boolean) : [],
+        rewardFaith: Number(quest.rewards?.faith ?? 0),
+        rewardItemIds: Array.isArray(quest.rewards?.itemIds) ? quest.rewards?.itemIds : [],
+      });
+      if (!res.ok) {
+        alert(res.error ?? "Could not claim rewards.");
+        return;
+      }
+      if (res.faithAwarded || res.grantedItems) {
+        window.dispatchEvent(new CustomEvent("inventory:refresh"));
+      }
+      router.refresh();
+    } catch (e: any) {
+      alert(e?.message ?? "Could not claim rewards.");
+    } finally {
+      setClaimingQuestId(null);
+    }
+  }
 
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100">
@@ -447,14 +541,20 @@ export default function PlayerHubClient(props: {
                   block={stageBlock}
                   linkedBlocks={stage?.linkedBlocks ?? {}}
                   playerShop={{
+                    characterId: String(props.character?.id ?? ""),
                     faithPoints,
                     ownedItems: ownedInventoryItemIds,
                     ownedTraits: ownedTraitIds,
                     ownedActions: ownedActionIds,
+                    questProgress: props.questProgress ?? {},
                     claimingId: claimingGearId,
                     claimingTraitId: claimingTrainingId,
+                    claimingQuestId,
                     onClaim: handleClaimNpcGear,
                     onClaimTraining: handleClaimNpcTraining,
+                    onQuestStart: handleStartNpcQuest,
+                    onQuestTask: handleCompleteNpcQuestTask,
+                    onQuestClaim: handleClaimNpcQuestRewards,
                   }}
                 />
 
@@ -624,14 +724,37 @@ function StagePanel({
   block: any;
   linkedBlocks?: Record<string, any>;
   playerShop?: {
+    characterId?: string;
     faithPoints: number;
     ownedItems: string[];
     ownedTraits?: string[];
     ownedActions?: string[];
+    questProgress?: Record<string, QuestProgress>;
     claimingId?: string | null;
     claimingTraitId?: string | null;
+    claimingQuestId?: string | null;
     onClaim?: (item: { id: string; itemId: string; name: string; faithRequired: number }) => void | Promise<void>;
     onClaimTraining?: (trait: { id: string; traitId: string; name: string; source: "trait" | "action" }) => void | Promise<void>;
+    onQuestStart?: (quest: {
+      id: string;
+      title: string;
+      tasks?: Array<{ id: string }>;
+      rewards?: { faith?: number; itemIds?: string[] };
+    }) => void | Promise<void>;
+    onQuestTask?: (
+      quest: {
+        id: string;
+        title: string;
+        tasks?: Array<{ id: string }>;
+      },
+      task: { id: string }
+    ) => void | Promise<void>;
+    onQuestClaim?: (quest: {
+      id: string;
+      title: string;
+      tasks?: Array<{ id: string }>;
+      rewards?: { faith?: number; itemIds?: string[] };
+    }) => void | Promise<void>;
   };
 }) {
   const markers = extractMapMarkers(block?.meta);

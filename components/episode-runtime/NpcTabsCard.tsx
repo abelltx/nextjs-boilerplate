@@ -28,6 +28,29 @@ type TrainingTrait = {
   description: string;
   source: "trait" | "action";
 };
+type QuestTask = {
+  id: string;
+  title: string;
+  kind: "task" | "talk_to_npc";
+  targetNpcBlockId?: string | null;
+};
+type QuestReward = {
+  faith: number;
+  itemIds: string[];
+  itemSnapshots: Array<{ id: string; name: string }>;
+};
+type QuestDef = {
+  id: string;
+  title: string;
+  directions: string;
+  tasks: QuestTask[];
+  rewards: QuestReward;
+};
+type QuestProgress = {
+  status: "available" | "active" | "completed" | "claimed";
+  completedTaskIds: string[];
+  claimedAt?: string | null;
+};
 
 export default function NpcTabsCard(props: {
   meta: any;
@@ -35,14 +58,20 @@ export default function NpcTabsCard(props: {
   imageUrl?: string | null;
   embedded?: boolean;
   playerShop?: {
+    characterId?: string;
     faithPoints: number;
     ownedItems: string[];
     ownedTraits?: string[];
     ownedActions?: string[];
+    questProgress?: Record<string, QuestProgress>;
     claimingId?: string | null;
     claimingTraitId?: string | null;
+    claimingQuestId?: string | null;
     onClaim?: (item: GearItem) => void | Promise<void>;
     onClaimTraining?: (trait: TrainingTrait) => void | Promise<void>;
+    onQuestStart?: (quest: QuestDef) => void | Promise<void>;
+    onQuestTask?: (quest: QuestDef, task: QuestTask) => void | Promise<void>;
+    onQuestClaim?: (quest: QuestDef) => void | Promise<void>;
   };
 }) {
   const tabs = useMemo<TabDef[]>(() => {
@@ -162,6 +191,7 @@ export default function NpcTabsCard(props: {
   }, [trainingSnapshotRaw]);
   const trainingActionSnapshotRaw = JSON.stringify(props.meta?.npc_tabs?.training?.action_snapshots ?? []);
   const trainingUnknownSnapshotRaw = JSON.stringify(props.meta?.npc_tabs?.training?.unknown_snapshots ?? []);
+  const questDefsRaw = JSON.stringify(props.meta?.npc_tabs?.quests?.quest_defs ?? []);
   const trainingActionSnapshotItems = useMemo<TrainingTrait[]>(() => {
     const raw = JSON.parse(trainingActionSnapshotRaw || "[]");
     const arr = Array.isArray(raw) ? raw : [];
@@ -197,6 +227,54 @@ export default function NpcTabsCard(props: {
       })
       .filter((it: any): it is TrainingTrait => Boolean(it?.name));
   }, [trainingUnknownSnapshotRaw]);
+  const questDefs = useMemo<QuestDef[]>(() => {
+    const raw = JSON.parse(questDefsRaw || "[]");
+    const arr = Array.isArray(raw) ? raw : [];
+    return arr
+      .map((q: any, idx: number) => {
+        const questId = String(q?.id ?? "").trim() || `quest_${idx + 1}`;
+        const title = String(q?.title ?? "").trim() || `Quest ${idx + 1}`;
+        const directions = String(q?.directions ?? "").trim();
+        const tasksRaw = Array.isArray(q?.tasks) ? q.tasks : [];
+        const tasks = tasksRaw
+          .map((t: any, tIdx: number) => {
+            const taskId = String(t?.id ?? "").trim() || `${questId}_task_${tIdx + 1}`;
+            const taskTitle = String(t?.title ?? "").trim();
+            if (!taskTitle) return null;
+            const kind = String(t?.kind ?? "").trim().toLowerCase() === "talk_to_npc" ? "talk_to_npc" : "task";
+            return {
+              id: taskId,
+              title: taskTitle,
+              kind,
+              targetNpcBlockId: String(t?.target_npc_block_id ?? "").trim() || null,
+            } as QuestTask;
+          })
+          .filter((t: any): t is QuestTask => Boolean(t?.title));
+        const rewards = q?.rewards ?? {};
+        const itemIds = Array.isArray(rewards?.item_ids)
+          ? Array.from(new Set(rewards.item_ids.map((v: any) => String(v ?? "").trim()).filter(Boolean)))
+          : [];
+        const itemSnapshotsRaw = Array.isArray(rewards?.item_snapshots) ? rewards.item_snapshots : [];
+        const itemSnapshots = itemSnapshotsRaw
+          .map((it: any) => ({
+            id: String(it?.id ?? "").trim(),
+            name: String(it?.name ?? "").trim(),
+          }))
+          .filter((it: any) => Boolean(it.id));
+        return {
+          id: questId,
+          title,
+          directions,
+          tasks,
+          rewards: {
+            faith: Math.max(0, Number(rewards?.faith ?? 0) || 0),
+            itemIds,
+            itemSnapshots,
+          },
+        } as QuestDef;
+      })
+      .filter((q: any): q is QuestDef => Boolean(q?.id && q?.title));
+  }, [questDefsRaw]);
 
   useEffect(() => {
     setGearItems(snapshotItems);
@@ -313,6 +391,7 @@ export default function NpcTabsCard(props: {
     () => new Set((props.playerShop?.ownedActions ?? []).map((n) => String(n).trim().toLowerCase())),
     [props.playerShop?.ownedActions]
   );
+  const questProgress = props.playerShop?.questProgress ?? {};
 
   const activeTab = tabs.find((t) => t.key === active) ?? tabs[0] ?? null;
   if (!activeTab) return null;
@@ -422,6 +501,116 @@ export default function NpcTabsCard(props: {
           ).length === 0 ? (
             <div className="text-sm text-neutral-400">You already learned all available training from this NPC.</div>
           ) : null}
+        </div>
+      ) : activeTab.key === "quests" && questDefs.length ? (
+        <div className="mt-3 space-y-2">
+          {questDefs.map((quest) => {
+            const progress = questProgress[quest.id];
+            const status = String(progress?.status ?? "available").toLowerCase() as QuestProgress["status"];
+            const completedSet = new Set((progress?.completedTaskIds ?? []).map((id) => String(id).trim()));
+            const allTasksDone = quest.tasks.length > 0 && quest.tasks.every((t) => completedSet.has(t.id));
+            const claimable = status === "completed" || (status === "active" && allTasksDone);
+            const rewardItems = quest.rewards.itemIds
+              .map((itemId) => {
+                const snap = quest.rewards.itemSnapshots.find((s) => s.id === itemId);
+                return { id: itemId, name: snap?.name || itemId };
+              })
+              .filter((it) => !ownedSet.has(it.id.toLowerCase()));
+
+            return (
+              <div key={quest.id} className="rounded-lg border border-neutral-700 bg-neutral-950/50 p-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-sm font-semibold text-neutral-100">{quest.title}</div>
+                  <div
+                    className={[
+                      "rounded px-2 py-0.5 text-[11px]",
+                      status === "claimed"
+                        ? "bg-emerald-500/20 text-emerald-200"
+                        : claimable
+                          ? "bg-amber-500/20 text-amber-200"
+                          : status === "active"
+                            ? "bg-blue-500/20 text-blue-200"
+                            : "bg-neutral-800 text-neutral-300",
+                    ].join(" ")}
+                  >
+                    {status === "claimed" ? "Claimed" : claimable ? "Ready to claim" : status === "active" ? "Active" : "Available"}
+                  </div>
+                </div>
+                {quest.directions ? <div className="mt-1 text-xs text-neutral-300">{quest.directions}</div> : null}
+
+                {quest.tasks.length ? (
+                  <div className="mt-2 space-y-1">
+                    {quest.tasks.map((task) => {
+                      const done = completedSet.has(task.id);
+                      const canMark =
+                        !done &&
+                        (status === "active" || status === "completed") &&
+                        props.playerShop?.onQuestTask &&
+                        props.playerShop?.claimingQuestId !== quest.id;
+                      return (
+                        <div key={task.id} className="flex items-center justify-between gap-2 rounded border border-neutral-800 px-2 py-1">
+                          <div className={["text-xs", done ? "text-emerald-200" : "text-neutral-300"].join(" ")}>
+                            <span className="mr-1">{done ? "✓" : "○"}</span>
+                            {task.title}
+                            {task.kind === "talk_to_npc" ? (
+                              <span className="ml-2 text-[10px] uppercase text-neutral-400">Talk</span>
+                            ) : null}
+                          </div>
+                          {canMark ? (
+                            <button
+                              type="button"
+                              className="rounded border border-neutral-700 px-2 py-0.5 text-[11px] hover:bg-neutral-900"
+                              onClick={() => props.playerShop?.onQuestTask?.(quest, task)}
+                            >
+                              Done
+                            </button>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
+
+                <div className="mt-2 rounded border border-neutral-800 p-2 text-xs text-neutral-300">
+                  <div className="font-semibold text-neutral-200">Rewards</div>
+                  {quest.rewards.faith > 0 ? <div>Faith: +{quest.rewards.faith}</div> : null}
+                  {rewardItems.length ? (
+                    <div className="mt-1">
+                      Items: {rewardItems.map((it) => it.name).join(", ")}
+                    </div>
+                  ) : quest.rewards.itemIds.length ? (
+                    <div className="mt-1 text-neutral-400">Items already owned.</div>
+                  ) : null}
+                  {quest.rewards.faith <= 0 && quest.rewards.itemIds.length === 0 ? (
+                    <div className="mt-1 text-neutral-400">No rewards configured.</div>
+                  ) : null}
+                </div>
+
+                <div className="mt-2 flex items-center justify-end gap-2">
+                  {status === "available" ? (
+                    <button
+                      type="button"
+                      className="rounded border border-neutral-700 px-2 py-1 text-xs hover:bg-neutral-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={props.playerShop?.claimingQuestId === quest.id || !props.playerShop?.onQuestStart}
+                      onClick={() => props.playerShop?.onQuestStart?.(quest)}
+                    >
+                      {props.playerShop?.claimingQuestId === quest.id ? "Starting..." : "Start Quest"}
+                    </button>
+                  ) : null}
+                  {claimable ? (
+                    <button
+                      type="button"
+                      className="rounded border border-emerald-500/60 bg-emerald-500/20 px-2 py-1 text-xs text-emerald-100 hover:bg-emerald-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={props.playerShop?.claimingQuestId === quest.id || !props.playerShop?.onQuestClaim}
+                      onClick={() => props.playerShop?.onQuestClaim?.(quest)}
+                    >
+                      {props.playerShop?.claimingQuestId === quest.id ? "Claiming..." : "Claim Rewards"}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
         </div>
       ) : (
         <div className="mt-3 whitespace-pre-wrap text-sm text-neutral-200">{activeTab.content}</div>

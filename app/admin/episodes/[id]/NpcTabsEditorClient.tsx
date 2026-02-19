@@ -11,15 +11,64 @@ const LABELS: Record<TabKey, string> = {
   training: "Training",
 };
 
+type QuestDraft = {
+  id: string;
+  title: string;
+  directions: string;
+  taskLines: string;
+  talkNpcIds: string;
+  rewardItemIds: string;
+  rewardFaith: number;
+};
+
+function toQuestId(value: string) {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 64);
+}
+
 function normalizeUuidList(text: string) {
   return Array.from(
     new Set(
       text
         .split(/\r?\n|,/g)
         .map((s) => s.trim())
-        .filter(Boolean)
+      .filter(Boolean)
     )
   );
+}
+
+function parseQuestDrafts(initialMeta: any): QuestDraft[] {
+  const defs = initialMeta?.npc_tabs?.quests?.quest_defs;
+  if (!Array.isArray(defs) || !defs.length) return [];
+  return defs.map((raw: any, idx: number) => {
+    const tasks = Array.isArray(raw?.tasks) ? raw.tasks : [];
+    const plainTasks = tasks
+      .filter((t: any) => String(t?.kind ?? "").trim().toLowerCase() !== "talk_to_npc")
+      .map((t: any) => String(t?.title ?? "").trim())
+      .filter(Boolean);
+    const npcTasks = tasks
+      .filter((t: any) => String(t?.kind ?? "").trim().toLowerCase() === "talk_to_npc")
+      .map((t: any) => String(t?.target_npc_block_id ?? "").trim())
+      .filter(Boolean);
+
+    const rewards = raw?.rewards ?? {};
+    const rewardItems = Array.isArray(rewards?.item_ids) ? rewards.item_ids : [];
+    const rewardFaith = Number(rewards?.faith ?? 0);
+
+    return {
+      id: String(raw?.id ?? "").trim() || `quest_${idx + 1}`,
+      title: String(raw?.title ?? "").trim() || `Quest ${idx + 1}`,
+      directions: String(raw?.directions ?? "").trim(),
+      taskLines: plainTasks.join("\n"),
+      talkNpcIds: npcTasks.join("\n"),
+      rewardItemIds: rewardItems.map((v: any) => String(v ?? "").trim()).filter(Boolean).join("\n"),
+      rewardFaith: Number.isFinite(rewardFaith) ? Math.max(0, Math.floor(rewardFaith)) : 0,
+    } satisfies QuestDraft;
+  });
 }
 
 export default function NpcTabsEditorClient(props: {
@@ -75,6 +124,7 @@ export default function NpcTabsEditorClient(props: {
     if (merged.length) return merged.map((v: any) => String(v ?? "").trim()).filter(Boolean).join("\n");
     return "";
   });
+  const [quests, setQuests] = useState<QuestDraft[]>(() => parseQuestDrafts(props.initialMeta));
   const trainingIds = useMemo(() => normalizeUuidList(trainingText), [trainingText]);
   const optionMap = useMemo(() => {
     const map = new Map<string, { id: string; name: string; faith_required?: number | null }>();
@@ -152,6 +202,56 @@ export default function NpcTabsEditorClient(props: {
     ],
     [props.traitOptions, props.actionOptions]
   );
+  const itemLabelById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const it of props.itemOptions ?? []) m.set(String(it.id), String(it.name ?? "").trim() || String(it.id));
+    return m;
+  }, [props.itemOptions]);
+  const questDefs = useMemo(
+    () =>
+      quests
+        .map((q, idx) => {
+          const id = toQuestId(q.id) || toQuestId(q.title) || `quest_${idx + 1}`;
+          const title = q.title.trim() || `Quest ${idx + 1}`;
+          const directions = q.directions.trim();
+          const taskLines = q.taskLines
+            .split(/\r?\n/g)
+            .map((v) => v.trim())
+            .filter(Boolean);
+          const npcIds = normalizeUuidList(q.talkNpcIds);
+          const rewardItemIds = normalizeUuidList(q.rewardItemIds);
+          const rewardFaith = Math.max(0, Math.floor(Number(q.rewardFaith ?? 0) || 0));
+          const tasks = [
+            ...taskLines.map((line, taskIdx) => ({
+              id: `${id}_task_${taskIdx + 1}`,
+              kind: "task",
+              title: line,
+            })),
+            ...npcIds.map((npcId, npcIdx) => ({
+              id: `${id}_talk_${npcIdx + 1}`,
+              kind: "talk_to_npc",
+              title: `Talk to NPC (${npcId.slice(0, 8)}...)`,
+              target_npc_block_id: npcId,
+            })),
+          ];
+          return {
+            id,
+            title,
+            directions,
+            tasks,
+            rewards: {
+              faith: rewardFaith,
+              item_ids: rewardItemIds,
+              item_snapshots: rewardItemIds.map((itemId) => ({
+                id: itemId,
+                name: itemLabelById.get(itemId) ?? itemId,
+              })),
+            },
+          };
+        })
+        .filter((q) => q.title.length > 0),
+    [quests, itemLabelById]
+  );
 
   const extraMeta = useMemo(() => {
     const copy = { ...(props.initialMeta ?? {}) } as Record<string, any>;
@@ -177,6 +277,10 @@ export default function NpcTabsEditorClient(props: {
           trait_snapshots: trainingSnapshots,
           action_snapshots: actionTrainingSnapshots,
           unknown_snapshots: unknownTrainingSnapshots,
+        },
+        quests: {
+          ...tabs.quests,
+          quest_defs: questDefs,
         },
       },
     },
@@ -206,6 +310,203 @@ export default function NpcTabsEditorClient(props: {
               value={tabs[k].content}
               onChange={(e) => setTabs((prev) => ({ ...prev, [k]: { ...prev[k], content: e.target.value } }))}
             />
+            {k === "quests" ? (
+              <div className="mt-2 space-y-2 rounded border border-dashed p-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-xs font-semibold text-gray-700">Quest Builder</div>
+                  <button
+                    type="button"
+                    className="rounded border px-2 py-1 text-xs"
+                    onClick={() =>
+                      setQuests((prev) => [
+                        ...prev,
+                        {
+                          id: `quest_${prev.length + 1}`,
+                          title: `Quest ${prev.length + 1}`,
+                          directions: "",
+                          taskLines: "",
+                          talkNpcIds: "",
+                          rewardItemIds: "",
+                          rewardFaith: 0,
+                        },
+                      ])
+                    }
+                  >
+                    Add Quest
+                  </button>
+                </div>
+                <div className="text-[11px] text-gray-600">
+                  Quests can include manual task lines, talk-to-NPC tasks, and rewards (items + faith).
+                </div>
+                {quests.length === 0 ? (
+                  <div className="text-xs text-gray-500">No quests yet. Click Add Quest.</div>
+                ) : null}
+                {quests.map((q, idx) => {
+                  const rewardItemIds = normalizeUuidList(q.rewardItemIds);
+                  return (
+                    <div key={`${q.id}-${idx}`} className="rounded border bg-white p-2 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-xs font-semibold text-gray-700">Quest {idx + 1}</div>
+                        <button
+                          type="button"
+                          className="rounded border px-2 py-1 text-xs text-red-700"
+                          onClick={() => setQuests((prev) => prev.filter((_, i) => i !== idx))}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                        <label className="space-y-1">
+                          <div className="text-[11px] text-gray-600">Quest ID</div>
+                          <input
+                            className="w-full border rounded p-2 text-xs font-mono"
+                            value={q.id}
+                            onChange={(e) =>
+                              setQuests((prev) =>
+                                prev.map((row, i) => (i === idx ? { ...row, id: e.currentTarget.value } : row))
+                              )
+                            }
+                            placeholder="welcome_olives"
+                          />
+                        </label>
+                        <label className="space-y-1">
+                          <div className="text-[11px] text-gray-600">Quest Title</div>
+                          <input
+                            className="w-full border rounded p-2 text-sm"
+                            value={q.title}
+                            onChange={(e) =>
+                              setQuests((prev) =>
+                                prev.map((row, i) => (i === idx ? { ...row, title: e.currentTarget.value } : row))
+                              )
+                            }
+                            placeholder="Gather Church Supplies"
+                          />
+                        </label>
+                      </div>
+
+                      <label className="space-y-1 block">
+                        <div className="text-[11px] text-gray-600">Directions (shown to player)</div>
+                        <textarea
+                          className="w-full border rounded p-2 text-sm h-16"
+                          value={q.directions}
+                          onChange={(e) =>
+                            setQuests((prev) =>
+                              prev.map((row, i) => (i === idx ? { ...row, directions: e.currentTarget.value } : row))
+                            )
+                          }
+                          placeholder="Speak with Gabriel, then check in with the supply table."
+                        />
+                      </label>
+
+                      <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                        <label className="space-y-1">
+                          <div className="text-[11px] text-gray-600">Task Steps (one per line)</div>
+                          <textarea
+                            className="w-full border rounded p-2 text-xs h-20"
+                            value={q.taskLines}
+                            onChange={(e) =>
+                              setQuests((prev) =>
+                                prev.map((row, i) => (i === idx ? { ...row, taskLines: e.currentTarget.value } : row))
+                              )
+                            }
+                            placeholder={"Find Gabriel\nAsk about class mentors\nReturn to the front table"}
+                          />
+                        </label>
+                        <label className="space-y-1">
+                          <div className="text-[11px] text-gray-600">Talk To NPC Block IDs (UUID, one per line)</div>
+                          <textarea
+                            className="w-full border rounded p-2 text-xs h-20 font-mono"
+                            value={q.talkNpcIds}
+                            onChange={(e) =>
+                              setQuests((prev) =>
+                                prev.map((row, i) => (i === idx ? { ...row, talkNpcIds: e.currentTarget.value } : row))
+                              )
+                            }
+                            placeholder={"e0f49433-8461-4a74-85d8-efd3cd422cea"}
+                          />
+                        </label>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                        <label className="space-y-1">
+                          <div className="text-[11px] text-gray-600">Reward Item IDs (UUID, one per line)</div>
+                          <textarea
+                            className="w-full border rounded p-2 text-xs h-20 font-mono"
+                            value={q.rewardItemIds}
+                            onChange={(e) =>
+                              setQuests((prev) =>
+                                prev.map((row, i) => (i === idx ? { ...row, rewardItemIds: e.currentTarget.value } : row))
+                              )
+                            }
+                            placeholder={"e0f49433-8461-4a74-85d8-efd3cd422cea"}
+                          />
+                          {(props.itemOptions ?? []).length ? (
+                            <select
+                              className="w-full border rounded p-2 text-sm"
+                              defaultValue=""
+                              onChange={(e) => {
+                                const next = e.target.value;
+                                if (!next) return;
+                                setQuests((prev) =>
+                                  prev.map((row, i) => {
+                                    if (i !== idx) return row;
+                                    const merged = Array.from(
+                                      new Set([...normalizeUuidList(row.rewardItemIds), next])
+                                    );
+                                    return { ...row, rewardItemIds: merged.join("\n") };
+                                  })
+                                );
+                                e.currentTarget.value = "";
+                              }}
+                            >
+                              <option value="">Quick add reward item...</option>
+                              {(props.itemOptions ?? []).map((it) => (
+                                <option key={it.id} value={it.id}>
+                                  {it.name} ({it.id})
+                                </option>
+                              ))}
+                            </select>
+                          ) : null}
+                          {rewardItemIds.length ? (
+                            <div className="space-y-1">
+                              {rewardItemIds.map((id) => (
+                                <div key={id} className="rounded border px-2 py-1 text-[11px]">
+                                  <span className="font-mono">{id}</span>
+                                  <span className="ml-2 text-gray-600">{itemLabelById.get(id) ?? "Unknown item"}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
+                        </label>
+
+                        <label className="space-y-1">
+                          <div className="text-[11px] text-gray-600">Reward Faith Points</div>
+                          <input
+                            type="number"
+                            min={0}
+                            step={1}
+                            className="w-full border rounded p-2 text-sm"
+                            value={String(q.rewardFaith)}
+                            onChange={(e) =>
+                              setQuests((prev) =>
+                                prev.map((row, i) =>
+                                  i === idx
+                                    ? {
+                                        ...row,
+                                        rewardFaith: Math.max(0, Math.floor(Number(e.currentTarget.value || 0))),
+                                      }
+                                    : row
+                                )
+                              )
+                            }
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
             {k === "gear" ? (
               <div className="mt-2 space-y-2 rounded border border-dashed p-2">
                 <div className="text-xs font-semibold text-gray-600">

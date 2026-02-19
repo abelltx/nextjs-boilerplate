@@ -9,6 +9,36 @@ function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
 }
 
+function hasMissingTableError(err: any, table: string) {
+  const msg = String(err?.message ?? "").toLowerCase();
+  return msg.includes(`relation "${table}" does not exist`) || msg.includes(`relation "public.${table}" does not exist`);
+}
+
+async function requireOwnedCharacter(
+  supabase: Awaited<ReturnType<typeof supabaseServer>>,
+  userId: string,
+  characterId: string
+) {
+  const { data: ch, error: chErr } = await supabase
+    .from("characters")
+    .select("id,user_id,stat_block")
+    .eq("id", characterId)
+    .maybeSingle();
+  if (chErr) return { ok: false as const, error: chErr.message };
+  if (!ch?.id || ch.user_id !== userId) return { ok: false as const, error: "Character not found." };
+  return { ok: true as const, character: ch };
+}
+
+function cleanQuestTaskIds(input: string[] | undefined) {
+  return Array.from(
+    new Set(
+      (Array.isArray(input) ? input : [])
+        .map((v) => String(v ?? "").trim())
+        .filter(Boolean)
+    )
+  );
+}
+
 export async function joinSessionAction(
   joinCodeOrId: string
 ): Promise<{ ok: boolean; sessionId?: string; sessionName?: string; error?: string }> {
@@ -311,4 +341,304 @@ export async function claimNpcActionAction(input: {
 
   revalidatePath("/player");
   return { ok: true };
+}
+
+export async function startNpcQuestAction(input: {
+  characterId: string;
+  questId: string;
+  questTitle?: string;
+  taskIds?: string[];
+  rewardFaith?: number;
+  rewardItemIds?: string[];
+}): Promise<{ ok: boolean; status?: string; error?: string }> {
+  "use server";
+  const { user } = await getProfile();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const characterId = String(input.characterId ?? "").trim();
+  const questId = String(input.questId ?? "").trim();
+  const questTitle = String(input.questTitle ?? "").trim();
+  if (!characterId || !questId) return { ok: false, error: "Missing quest or character." };
+
+  const supabase = await supabaseServer();
+  const owner = await requireOwnedCharacter(supabase, user.id, characterId);
+  if (!owner.ok) return { ok: false, error: owner.error };
+
+  const taskIds = cleanQuestTaskIds(input.taskIds);
+  const rewardItemIds = Array.from(
+    new Set(
+      (Array.isArray(input.rewardItemIds) ? input.rewardItemIds : [])
+        .map((v) => String(v ?? "").trim())
+        .filter((v) => isUuid(v))
+    )
+  ).slice(0, 25);
+  const rewardFaith = Math.max(0, Math.min(100, Math.floor(Number(input.rewardFaith ?? 0) || 0)));
+
+  const { data: existing, error: exErr } = await supabase
+    .from("player_quest_progress")
+    .select("id,status")
+    .eq("character_id", characterId)
+    .eq("quest_id", questId)
+    .maybeSingle();
+  if (exErr) {
+    if (hasMissingTableError(exErr, "player_quest_progress")) {
+      return { ok: false, error: "Quest table missing. Run scripts/player-quest-progress.sql in Supabase SQL editor." };
+    }
+    return { ok: false, error: exErr.message };
+  }
+  if (existing?.status === "claimed") return { ok: true, status: "claimed" };
+  if (existing?.id) return { ok: true, status: String(existing.status ?? "active") };
+
+  const { error: insErr } = await supabase.from("player_quest_progress").insert({
+    player_id: user.id,
+    character_id: characterId,
+    quest_id: questId,
+    quest_title: questTitle || null,
+    status: "active",
+    completed_task_ids: [],
+    reward_meta: {
+      faith: rewardFaith,
+      item_ids: rewardItemIds,
+      task_ids: taskIds,
+    },
+  });
+  if (insErr) {
+    if (hasMissingTableError(insErr, "player_quest_progress")) {
+      return { ok: false, error: "Quest table missing. Run scripts/player-quest-progress.sql in Supabase SQL editor." };
+    }
+    return { ok: false, error: insErr.message };
+  }
+
+  revalidatePath("/player");
+  return { ok: true, status: "active" };
+}
+
+export async function completeNpcQuestTaskAction(input: {
+  characterId: string;
+  questId: string;
+  questTitle?: string;
+  taskId: string;
+  allTaskIds?: string[];
+}): Promise<{ ok: boolean; status?: string; completedTaskIds?: string[]; error?: string }> {
+  "use server";
+  const { user } = await getProfile();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const characterId = String(input.characterId ?? "").trim();
+  const questId = String(input.questId ?? "").trim();
+  const taskId = String(input.taskId ?? "").trim();
+  if (!characterId || !questId || !taskId) return { ok: false, error: "Missing quest task details." };
+
+  const supabase = await supabaseServer();
+  const owner = await requireOwnedCharacter(supabase, user.id, characterId);
+  if (!owner.ok) return { ok: false, error: owner.error };
+
+  const allTaskIds = cleanQuestTaskIds(input.allTaskIds);
+  const { data: row, error: rowErr } = await supabase
+    .from("player_quest_progress")
+    .select("id,status,completed_task_ids,reward_meta")
+    .eq("character_id", characterId)
+    .eq("quest_id", questId)
+    .maybeSingle();
+  if (rowErr) {
+    if (hasMissingTableError(rowErr, "player_quest_progress")) {
+      return { ok: false, error: "Quest table missing. Run scripts/player-quest-progress.sql in Supabase SQL editor." };
+    }
+    return { ok: false, error: rowErr.message };
+  }
+
+  const currentDone = Array.isArray((row as any)?.completed_task_ids) ? (row as any).completed_task_ids : [];
+  const nextDone = Array.from(new Set([...currentDone.map((v: any) => String(v)), taskId]));
+  const isCompleted = allTaskIds.length > 0 && allTaskIds.every((id) => nextDone.includes(id));
+  const nextStatus = (row as any)?.status === "claimed" ? "claimed" : isCompleted ? "completed" : "active";
+  if ((row as any)?.status === "claimed") {
+    return { ok: false, error: "Quest already claimed." };
+  }
+
+  if (!(row as any)?.id) {
+    const { error: insErr } = await supabase.from("player_quest_progress").insert({
+      player_id: user.id,
+      character_id: characterId,
+      quest_id: questId,
+      quest_title: String(input.questTitle ?? "").trim() || null,
+      status: nextStatus,
+      completed_task_ids: nextDone,
+      completed_at: nextStatus === "completed" ? new Date().toISOString() : null,
+      reward_meta: { task_ids: allTaskIds },
+      last_task_at: new Date().toISOString(),
+    });
+    if (insErr) {
+      if (hasMissingTableError(insErr, "player_quest_progress")) {
+        return { ok: false, error: "Quest table missing. Run scripts/player-quest-progress.sql in Supabase SQL editor." };
+      }
+      return { ok: false, error: insErr.message };
+    }
+  } else {
+    const { error: upErr } = await supabase
+      .from("player_quest_progress")
+      .update({
+        completed_task_ids: nextDone,
+        status: nextStatus,
+        completed_at: nextStatus === "completed" ? new Date().toISOString() : (row as any)?.completed_at ?? null,
+        last_task_at: new Date().toISOString(),
+      })
+      .eq("id", (row as any).id);
+    if (upErr) return { ok: false, error: upErr.message };
+  }
+
+  revalidatePath("/player");
+  return { ok: true, status: nextStatus, completedTaskIds: nextDone };
+}
+
+export async function claimNpcQuestRewardsAction(input: {
+  characterId: string;
+  questId: string;
+  questTitle?: string;
+  allTaskIds?: string[];
+  rewardFaith?: number;
+  rewardItemIds?: string[];
+}): Promise<{ ok: boolean; alreadyClaimed?: boolean; grantedItems?: number; faithAwarded?: number; error?: string }> {
+  "use server";
+  const { user } = await getProfile();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const characterId = String(input.characterId ?? "").trim();
+  const questId = String(input.questId ?? "").trim();
+  if (!characterId || !questId) return { ok: false, error: "Missing quest or character." };
+
+  const supabase = await supabaseServer();
+  const owner = await requireOwnedCharacter(supabase, user.id, characterId);
+  if (!owner.ok) return { ok: false, error: owner.error };
+
+  const allTaskIds = cleanQuestTaskIds(input.allTaskIds);
+  const fallbackRewardItemIds = Array.from(
+    new Set(
+      (Array.isArray(input.rewardItemIds) ? input.rewardItemIds : [])
+        .map((v) => String(v ?? "").trim())
+        .filter((v) => isUuid(v))
+    )
+  ).slice(0, 25);
+  const fallbackRewardFaith = Math.max(0, Math.min(100, Math.floor(Number(input.rewardFaith ?? 0) || 0)));
+
+  const { data: row, error: rowErr } = await supabase
+    .from("player_quest_progress")
+    .select("id,status,completed_task_ids,reward_meta")
+    .eq("character_id", characterId)
+    .eq("quest_id", questId)
+    .maybeSingle();
+  if (rowErr) {
+    if (hasMissingTableError(rowErr, "player_quest_progress")) {
+      return { ok: false, error: "Quest table missing. Run scripts/player-quest-progress.sql in Supabase SQL editor." };
+    }
+    return { ok: false, error: rowErr.message };
+  }
+
+  if (!(row as any)?.id) {
+    return { ok: false, error: "Start the quest first." };
+  }
+  if ((row as any)?.status === "claimed") return { ok: true, alreadyClaimed: true };
+
+  const doneSet = new Set(
+    (Array.isArray((row as any)?.completed_task_ids) ? (row as any).completed_task_ids : []).map((v: any) =>
+      String(v).trim()
+    )
+  );
+  const canComplete = allTaskIds.length > 0 ? allTaskIds.every((id) => doneSet.has(id)) : true;
+  if (!canComplete) return { ok: false, error: "Complete all quest tasks first." };
+
+  const rewardMeta = ((row as any)?.reward_meta ?? {}) as any;
+  const rewardFaith = Math.max(
+    0,
+    Math.min(100, Math.floor(Number(rewardMeta?.faith ?? fallbackRewardFaith) || 0))
+  );
+  const rewardItemIds = Array.from(
+    new Set(
+      (Array.isArray(rewardMeta?.item_ids) ? rewardMeta.item_ids : fallbackRewardItemIds)
+        .map((v: any) => String(v ?? "").trim())
+        .filter((v: string) => isUuid(v))
+    )
+  ).slice(0, 25);
+
+  let grantedItems = 0;
+  if (rewardItemIds.length) {
+    const { data: itemRows, error: itemErr } = await supabase
+      .from("items")
+      .select("id,name,is_active")
+      .in("id", rewardItemIds);
+    if (itemErr) return { ok: false, error: itemErr.message };
+    const validItems = (itemRows ?? []).filter((row: any) => row?.id && row.is_active !== false);
+    for (const it of validItems as any[]) {
+      const itemId = String(it.id);
+      const { data: existing, error: exErr } = await supabase
+        .from("inventory_items")
+        .select("id")
+        .eq("character_id", characterId)
+        .eq("item_id", itemId)
+        .limit(1)
+        .maybeSingle();
+      if (exErr) return { ok: false, error: exErr.message };
+      if (existing?.id) continue;
+      const { error: insErr } = await supabase.from("inventory_items").insert({
+        character_id: characterId,
+        item_id: itemId,
+        name: String((it as any).name ?? "Quest Reward"),
+        quantity: 1,
+      });
+      if (insErr) return { ok: false, error: insErr.message };
+      grantedItems += 1;
+    }
+  }
+
+  if (rewardFaith > 0) {
+    const { data: cur, error: curErr } = await supabase
+      .from("character_stats_current")
+      .select("id,stat_block_current")
+      .eq("character_id", characterId)
+      .maybeSingle();
+    if (curErr) return { ok: false, error: curErr.message };
+
+    if (cur?.id) {
+      const sb = ((cur as any).stat_block_current ?? {}) as any;
+      const resources = { ...(sb.resources ?? {}) };
+      const before = Number(resources.faith_available ?? 0);
+      resources.faith_available = (Number.isFinite(before) ? before : 0) + rewardFaith;
+      const nextStat = { ...sb, resources };
+      const { error: upErr } = await supabase
+        .from("character_stats_current")
+        .update({ stat_block_current: nextStat })
+        .eq("id", (cur as any).id);
+      if (upErr) return { ok: false, error: upErr.message };
+    } else {
+      const sb = ((owner as any).character?.stat_block ?? {}) as any;
+      const resources = { ...(sb.resources ?? {}) };
+      const before = Number(resources.faith_available ?? 0);
+      resources.faith_available = (Number.isFinite(before) ? before : 0) + rewardFaith;
+      const nextStat = { ...sb, resources };
+      const { error: upErr } = await supabase
+        .from("characters")
+        .update({ stat_block: nextStat })
+        .eq("id", characterId);
+      if (upErr) return { ok: false, error: upErr.message };
+    }
+  }
+
+  const { error: claimErr } = await supabase
+    .from("player_quest_progress")
+    .update({
+      quest_title: String(input.questTitle ?? "").trim() || null,
+      status: "claimed",
+      completed_at: new Date().toISOString(),
+      claimed_at: new Date().toISOString(),
+      reward_meta: {
+        ...rewardMeta,
+        faith: rewardFaith,
+        item_ids: rewardItemIds,
+        task_ids: allTaskIds.length ? allTaskIds : rewardMeta?.task_ids ?? [],
+      },
+    })
+    .eq("id", (row as any).id);
+  if (claimErr) return { ok: false, error: claimErr.message };
+
+  revalidatePath("/player");
+  return { ok: true, grantedItems, faithAwarded: rewardFaith };
 }

@@ -1,0 +1,940 @@
+   1: "use client";
+   2: 
+   3: import { useEffect, useMemo, useRef, useState } from "react";
+   4: import { useRouter } from "next/navigation";
+   5: import PlayerStatusHeader from "./PlayerStatusHeader";
+   6: import JourneyLog from "./JourneyLog";
+   7: import JoinSessionModal from "./JoinSessionModal";
+   8: import { AbilitiesCard, SavesCard, SkillsCard, PassivesCard, type AbilityKey } from "./PlayerSheetPanels";
+   9: import RollPanel from "./RollPanel";
+  10: import PlayerInventoryPanel from "./PlayerInventoryPanel";
+  11: import {
+  12:   claimNpcActionAction,
+  13:   claimNpcGearItemAction,
+  14:   claimNpcTrainingTraitAction,
+  15:   leaveSessionAction,
+  16:   submitRollResultAction,
+  17: } from "../actions";
+  18: import RevealCard from "@/components/episode-runtime/RevealCard";
+  19: import SceneMap from "@/components/episode-runtime/SceneMap";
+  20: import NpcTabsCard from "@/components/episode-runtime/NpcTabsCard";
+  21: import { extractMapMarkers } from "@/lib/episodeRuntime";
+  22: 
+  23: type TabKey = "inventory" | "actions" | "talents" | "journey";
+  24: 
+  25: type PromptTarget =
+  26:   | { kind: "skill"; skillKey: string }
+  27:   | { kind: "ability"; abilityKey: AbilityKey }
+  28:   | { kind: "die"; die: number }
+  29:   | null;
+  30: 
+  31: type GuidedRoll = {
+  32:   label: string;
+  33:   total: number;
+  34:   breakdown: string;
+  35: };
+  36: 
+  37: const SKILL_ALIASES: Array<{ key: string; aliases: string[] }> = [
+  38:   { key: "acrobatics", aliases: ["acrobatics"] },
+  39:   { key: "animal_handling", aliases: ["animal handling", "animal_handling"] },
+  40:   { key: "arcana", aliases: ["arcana"] },
+  41:   { key: "athletics", aliases: ["athletics"] },
+  42:   { key: "deception", aliases: ["deception"] },
+  43:   { key: "history", aliases: ["history"] },
+  44:   { key: "insight", aliases: ["insight"] },
+  45:   { key: "intimidation", aliases: ["intimidation"] },
+  46:   { key: "investigation", aliases: ["investigation"] },
+  47:   { key: "medicine", aliases: ["medicine"] },
+  48:   { key: "nature", aliases: ["nature"] },
+  49:   { key: "perception", aliases: ["perception"] },
+  50:   { key: "performance", aliases: ["performance"] },
+  51:   { key: "persuasion", aliases: ["persuasion"] },
+  52:   { key: "religion", aliases: ["religion"] },
+  53:   { key: "sleight_of_hand", aliases: ["sleight of hand", "sleight_of_hand"] },
+  54:   { key: "stealth", aliases: ["stealth"] },
+  55:   { key: "survival", aliases: ["survival"] },
+  56: ];
+  57: 
+  58: function detectPromptTarget(prompt: string): PromptTarget {
+  59:   const lower = String(prompt ?? "").toLowerCase();
+  60:   if (!lower.trim()) return null;
+  61: 
+  62:   const dieMatch = lower.match(/\bd\s*(4|6|8|10|12|20|100)\b/);
+  63:   if (dieMatch) return { kind: "die", die: Number(dieMatch[1]) };
+  64: 
+  65:   if (/\bstrength\b|\bstr\b/.test(lower)) return { kind: "ability", abilityKey: "str" };
+  66:   if (/\bdexterity\b|\bdex\b/.test(lower)) return { kind: "ability", abilityKey: "dex" };
+  67:   if (/\bconstitution\b|\bcon\b/.test(lower)) return { kind: "ability", abilityKey: "con" };
+  68:   if (/\bintelligence\b|\bint\b/.test(lower)) return { kind: "ability", abilityKey: "int" };
+  69:   if (/\bwisdom\b|\bwis\b/.test(lower)) return { kind: "ability", abilityKey: "wis" };
+  70:   if (/\bcharisma\b|\bcha\b/.test(lower)) return { kind: "ability", abilityKey: "cha" };
+  71: 
+  72:   for (const skill of SKILL_ALIASES) {
+  73:     for (const alias of skill.aliases) {
+  74:       if (lower.includes(alias)) return { kind: "skill", skillKey: skill.key };
+  75:     }
+  76:   }
+  77: 
+  78:   return null;
+  79: }
+  80: 
+  81: function isLiveState(state: any) {
+  82:   if (!state) return false;
+  83:   if (state.player_view === true) return true;
+  84:   if (state.is_live === true) return true;
+  85:   if (state.live === true) return true;
+  86:   if (state.roll_open === true) return true;
+  87:   if (typeof state.presented_block_id === "string" && state.presented_block_id.trim().length > 0) return true;
+  88:   return false;
+  89: }
+  90: 
+  91: export default function PlayerHubClient(props: {
+  92:   userId: string;
+  93:   userEmail: string;
+  94:   accessLabel: string;
+  95:   character: any;
+  96:   inventory: any[];
+  97:   sessions: any[];
+  98:   sessionStates: Record<string, any>;
+  99:   presentedBlocks: Record<string, any>;
+ 100:   gameLog: any[];
+ 101:   playerTraitIds?: string[];
+ 102:   playerTraits?: Array<{ id: string; name: string; summary?: string | null; type?: string | null }>;
+ 103:   playerActionIds?: string[];
+ 104:   playerActions?: Array<{
+ 105:     id: string;
+ 106:     name: string;
+ 107:     type?: string | null;
+ 108:     summary?: string | null;
+ 109:     rules_text?: string | null;
+ 110:     range_normal?: number | null;
+ 111:     range_max?: number | null;
+ 112:     uses_attack_roll?: boolean | null;
+ 113:     save_ability?: string | null;
+ 114:     save_dc_override?: number | null;
+ 115:     damage_dice?: string | null;
+ 116:     damage_bonus?: number | null;
+ 117:     attack_bonus_override?: number | null;
+ 118:     damage_type?: string | null;
+ 119:     on_fail?: string | null;
+ 120:     on_success?: string | null;
+ 121:   }>;
+ 122: }) {
+ 123:   const [tab, setTab] = useState<TabKey>("inventory");
+ 124:   const [joinOpen, setJoinOpen] = useState(false);
+ 125:   const [optimisticLiveSession, setOptimisticLiveSession] = useState<{ id: string; name?: string | null } | null>(null);
+ 126:   const [claimingGearId, setClaimingGearId] = useState<string | null>(null);
+ 127:   const [claimingTrainingId, setClaimingTrainingId] = useState<string | null>(null);
+ 128:   const router = useRouter();
+ 129: 
+ 130:   const stat = (props.character?.stat_block ?? {}) as any;
+ 131:   const derived = stat?.derived ?? {};
+ 132:   const resources = stat?.resources ?? {};
+ 133:   const effects = stat?.effects ?? [];
+ 134:   const faithPoints = Number(resources.faith_available ?? 0);
+ 135:   const ownedInventoryItemIds = useMemo(
+ 136:     () =>
+ 137:       (props.inventory ?? [])
+ 138:         .map((it) => String(it?.item_id ?? "").trim().toLowerCase())
+ 139:         .filter((id) => id.length > 0),
+ 140:     [props.inventory]
+ 141:   );
+ 142:   const ownedTraitIds = useMemo(
+ 143:     () => (props.playerTraitIds ?? []).map((id) => String(id).trim().toLowerCase()).filter(Boolean),
+ 144:     [props.playerTraitIds]
+ 145:   );
+ 146:   const ownedActionIds = useMemo(
+ 147:     () => (props.playerActionIds ?? []).map((id) => String(id).trim().toLowerCase()).filter(Boolean),
+ 148:     [props.playerActionIds]
+ 149:   );
+ 150: 
+ 151:   const liveSession = useMemo(() => {
+ 152:     const candidates = (props.sessions ?? [])
+ 153:       .map((s) => ({ session: s, state: props.sessionStates?.[s.id] }))
+ 154:       .filter(({ state }) => Boolean(state));
+ 155:     return candidates.find(({ state }) => isLiveState(state))?.session ?? null;
+ 156:   }, [props.sessions, props.sessionStates]);
+ 157: 
+ 158:   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+ 159:   useEffect(() => {
+ 160:     if (liveSession?.id && liveSession.id !== selectedSessionId) {
+ 161:       setSelectedSessionId(liveSession.id);
+ 162:       return;
+ 163:     }
+ 164:     if (!selectedSessionId && props.sessions?.[0]?.id) {
+ 165:       setSelectedSessionId(props.sessions[0].id);
+ 166:     }
+ 167:   }, [selectedSessionId, liveSession, props.sessions]);
+ 168: 
+ 169:   const [stage, setStage] = useState<{
+ 170:     ok: boolean;
+ 171:     session?: any;
+ 172:     state?: any;
+ 173:     block?: any;
+ 174:     linkedBlocks?: Record<string, any>;
+ 175:     players?: string[];
+ 176:   } | null>(null);
+ 177:   const stageHashRef = useRef<string>("");
+ 178: 
+ 179:   const selectedSession = props.sessions.find((s) => s.id === selectedSessionId) ?? null;
+ 180:   const optimisticLiveSessionName =
+ 181:     (optimisticLiveSession?.id
+ 182:       ? props.sessions.find((s) => s.id === optimisticLiveSession.id)?.name
+ 183:       : null) ??
+ 184:     optimisticLiveSession?.name ??
+ 185:     null;
+ 186: 
+ 187:   useEffect(() => {
+ 188:     if (!selectedSessionId) return;
+ 189: 
+ 190:     let alive = true;
+ 191:     let t: any = null;
+ 192: 
+ 193:     const tick = async () => {
+ 194:       try {
+ 195:         const res = await fetch(`/api/player/session-stage?session_id=${selectedSessionId}`, { cache: "no-store" });
+ 196:         const json = await res.json();
+ 197:         if (!alive) return;
+ 198:         const nextHash = JSON.stringify(json ?? {});
+ 199:         if (nextHash !== stageHashRef.current) {
+ 200:           stageHashRef.current = nextHash;
+ 201:           setStage(json);
+ 202:         }
+ 203:       } catch {
+ 204:         if (!alive) return;
+ 205:         setStage((s) => s ?? { ok: false });
+ 206:       }
+ 207:     };
+ 208: 
+ 209:     tick();
+ 210:     t = setInterval(tick, 1500);
+ 211: 
+ 212:     return () => {
+ 213:       alive = false;
+ 214:       if (t) clearInterval(t);
+ 215:     };
+ 216:   }, [selectedSessionId]);
+ 217: 
+ 218:   const stageState = stage?.state ?? (selectedSessionId ? props.sessionStates?.[selectedSessionId] : null);
+ 219:   const stageBlock = stage?.block ?? null;
+ 220:   const stageIsLive = isLiveState(stageState);
+ 221:   const liveSessionNameForHeader =
+ 222:     stage?.session?.name ??
+ 223:     selectedSession?.name ??
+ 224:     optimisticLiveSessionName ??
+ 225:     liveSession?.name ??
+ 226:     (selectedSessionId ? "Current session" : null);
+ 227:   const isSessionLive = Boolean(optimisticLiveSession?.id || liveSession?.id || (selectedSessionId && stageIsLive));
+ 228:   const isLiveMode = isSessionLive;
+ 229: 
+ 230:   const rollOpen = Boolean(stageState?.roll_open);
+ 231:   const rollPrompt = String(stageState?.roll_prompt ?? "");
+ 232:   const promptTarget = useMemo(() => (rollOpen ? detectPromptTarget(rollPrompt) : null), [rollOpen, rollPrompt]);
+ 233:   const stageStoryText = String(stage?.session?.story_text ?? selectedSession?.story_text ?? "");
+ 234:   const [diceMode, setDiceMode] = useState<"digital" | "manual">("digital");
+ 235:   const [manualValue, setManualValue] = useState("");
+ 236:   const [submittingRoll, setSubmittingRoll] = useState(false);
+ 237:   const promptBoxRef = useRef<HTMLDivElement | null>(null);
+ 238:   const [guidedResult, setGuidedResult] = useState<GuidedRoll | null>(null);
+ 239:   const [flight, setFlight] = useState<{
+ 240:     id: number;
+ 241:     text: string;
+ 242:     startX: number;
+ 243:     startY: number;
+ 244:     dx: number;
+ 245:     dy: number;
+ 246:     active: boolean;
+ 247:   } | null>(null);
+ 248:   const currentRoundId = String(stageState?.roll_round_id ?? "");
+ 249:   const myExistingResult = (stageState?.roll_results?.[props.userId] ?? null) as any;
+ 250:   const alreadySubmittedRound = Boolean(
+ 251:     rollOpen && currentRoundId && myExistingResult?.round_id && String(myExistingResult.round_id) === currentRoundId
+ 252:   );
+ 253:   const rollLocked = rollOpen && (Boolean(guidedResult) || Boolean(flight) || alreadySubmittedRound);
+ 254: 
+ 255:   useEffect(() => {
+ 256:     if (!rollOpen) {
+ 257:       setGuidedResult(null);
+ 258:       setFlight(null);
+ 259:       setManualValue("");
+ 260:       setSubmittingRoll(false);
+ 261:     }
+ 262:   }, [rollOpen, rollPrompt]);
+ 263: 
+ 264:   async function submitRoll(value: number, source: "manual" | "digital") {
+ 265:     if (!selectedSessionId) return;
+ 266:     setSubmittingRoll(true);
+ 267:     const res = await submitRollResultAction({
+ 268:       sessionId: selectedSessionId,
+ 269:       rollValue: value,
+ 270:       source,
+ 271:     });
+ 272:     setSubmittingRoll(false);
+ 273:     if (!res.ok) {
+ 274:       alert(res.error ?? "Could not submit roll.");
+ 275:       return;
+ 276:     }
+ 277:     router.refresh();
+ 278:   }
+ 279: 
+ 280:   function launchRollFlight(fromRect: DOMRect, result: GuidedRoll) {
+ 281:     const targetRect = promptBoxRef.current?.getBoundingClientRect();
+ 282:     if (!targetRect) {
+ 283:       setGuidedResult(result);
+ 284:       return;
+ 285:     }
+ 286:     const startX = fromRect.left + fromRect.width / 2;
+ 287:     const startY = fromRect.top + fromRect.height / 2;
+ 288:     const endX = targetRect.left + targetRect.width * 0.82;
+ 289:     const endY = targetRect.top + targetRect.height * 0.32;
+ 290:     const id = Date.now();
+ 291:     setFlight({ id, text: `${result.total}`, startX, startY, dx: endX - startX, dy: endY - startY, active: false });
+ 292:     requestAnimationFrame(() => {
+ 293:       setFlight((f) => (f && f.id === id ? { ...f, active: true } : f));
+ 294:     });
+ 295:     window.setTimeout(() => {
+ 296:       setGuidedResult(result);
+ 297:       setFlight((f) => (f && f.id === id ? null : f));
+ 298:       void submitRoll(result.total, "digital");
+ 299:     }, 1500);
+ 300:   }
+ 301: 
+ 302:   async function handleLeaveFromHeader() {
+ 303:     const sid = optimisticLiveSession?.id ?? liveSession?.id ?? selectedSessionId;
+ 304:     if (!sid) return;
+ 305: 
+ 306:     const ok = window.confirm(
+ 307:       "Leave this session?\n\nYou may need a join code to re-enter."
+ 308:     );
+ 309:     if (!ok) return;
+ 310: 
+ 311:     const res = await leaveSessionAction(sid);
+ 312:     if (!res.ok) {
+ 313:       alert(res.error ?? "Failed to leave session.");
+ 314:       return;
+ 315:     }
+ 316: 
+ 317:     setStage(null);
+ 318:     setSelectedSessionId(null);
+ 319:     setOptimisticLiveSession(null);
+ 320:     router.refresh();
+ 321:   }
+ 322: 
+ 323:   function handleAbilityGuidedRoll(ability: AbilityKey, meta: { label: string; total: number; breakdown?: string }, fromRect: DOMRect) {
+ 324:     if (diceMode !== "digital") return;
+ 325:     if (rollLocked) return;
+ 326:     if (!rollOpen || promptTarget?.kind !== "ability" || promptTarget.abilityKey !== ability) return;
+ 327:     launchRollFlight(fromRect, { label: meta.label, total: meta.total, breakdown: meta.breakdown ?? "" });
+ 328:   }
+ 329: 
+ 330:   function handleSkillGuidedRoll(skillKey: string, meta: { label: string; total: number; breakdown?: string }, fromRect: DOMRect) {
+ 331:     if (diceMode !== "digital") return;
+ 332:     if (rollLocked) return;
+ 333:     if (!rollOpen || promptTarget?.kind !== "skill" || promptTarget.skillKey !== skillKey) return;
+ 334:     launchRollFlight(fromRect, { label: meta.label, total: meta.total, breakdown: meta.breakdown ?? "" });
+ 335:   }
+ 336: 
+ 337:   function handleRollPanelGuided(meta: { label: string; total: number; breakdown: string }, fromRect: DOMRect) {
+ 338:     if (diceMode !== "digital") return;
+ 339:     if (rollLocked) return;
+ 340:     if (!rollOpen) return;
+ 341:     if (promptTarget?.kind === "die" || promptTarget?.kind === "ability" || promptTarget?.kind === "skill") {
+ 342:       launchRollFlight(fromRect, meta);
+ 343:     }
+ 344:   }
+ 345: 
+ 346:   async function handleClaimNpcGear(item: { id: string; itemId: string; name: string; faithRequired: number }) {
+ 347:     if (claimingGearId) return;
+ 348:     setClaimingGearId(item.id);
+ 349:     try {
+ 350:       const res = await claimNpcGearItemAction({
+ 351:         characterId: String(props.character?.id ?? ""),
+ 352:         itemId: item.itemId,
+ 353:       });
+ 354:       if (!res.ok) {
+ 355:         alert(res.error ?? "Could not add item.");
+ 356:         return;
+ 357:       }
+ 358:       window.dispatchEvent(new CustomEvent("inventory:refresh"));
+ 359:       router.refresh();
+ 360:     } catch (e: any) {
+ 361:       alert(e?.message ?? "Could not add item.");
+ 362:     } finally {
+ 363:       setClaimingGearId(null);
+ 364:     }
+ 365:   }
+ 366:   async function handleClaimNpcTraining(trait: { id: string; traitId: string; name: string; source: "trait" | "action" }) {
+ 367:     if (claimingTrainingId) return;
+ 368:     setClaimingTrainingId(trait.id);
+ 369:     try {
+ 370:       const res =
+ 371:         trait.source === "action"
+ 372:           ? await claimNpcActionAction({
+ 373:               characterId: String(props.character?.id ?? ""),
+ 374:               actionId: trait.traitId,
+ 375:             })
+ 376:           : await claimNpcTrainingTraitAction({
+ 377:               characterId: String(props.character?.id ?? ""),
+ 378:               traitId: trait.traitId,
+ 379:             });
+ 380:       if (!res.ok) {
+ 381:         alert(res.error ?? "Could not learn.");
+ 382:         return;
+ 383:       }
+ 384:       router.refresh();
+ 385:     } catch (e: any) {
+ 386:       alert(e?.message ?? "Could not learn.");
+ 387:     } finally {
+ 388:       setClaimingTrainingId(null);
+ 389:     }
+ 390:   }
+ 391: 
+ 392:   return (
+ 393:     <main className="min-h-screen bg-neutral-950 text-neutral-100">
+ 394:       <div className="mx-auto max-w-6xl px-4 py-6">
+ 395:         <div className="mb-3 flex justify-end">
+ 396:           <form action="/logout" method="post">
+ 397:             <button
+ 398:               type="submit"
+ 399:               className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs font-semibold text-neutral-200 hover:bg-neutral-900"
+ 400:             >
+ 401:               Sign out
+ 402:             </button>
+ 403:           </form>
+ 404:         </div>
+ 405: 
+ 406:         <PlayerStatusHeader
+ 407:           characterName={props.character?.name ?? "Adventurer"}
+ 408:           becomingLabel={"Pilgrim (MVP)"}
+ 409:           healthCurrent={derived.hp_current ?? null}
+ 410:           healthMax={derived.hp_max ?? null}
+ 411:           defense={derived.defense ?? null}
+ 412:           speed={derived.speed ?? null}
+ 413:           faithAvailable={Number(resources.faith_available ?? 0)}
+ 414:           faithCap={Number(resources.faith_cap ?? 100)}
+ 415:           effects={effects}
+ 416:           liveSessionName={liveSessionNameForHeader}
+ 417:           isSessionLive={isSessionLive}
+ 418:           timerStatus={String(stageState?.timer_status ?? "")}
+ 419:           timerRemainingSeconds={Number(stageState?.remaining_seconds ?? NaN)}
+ 420:           timerUpdatedAt={String(stageState?.updated_at ?? "")}
+ 421:           onJoinClick={() => setJoinOpen(true)}
+ 422:           onLeaveClick={handleLeaveFromHeader}
+ 423:         />
+ 424: 
+ 425:         <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-12">
+ 426:           <aside className="lg:col-span-3 space-y-4">
+ 427:             <AbilitiesCard
+ 428:               stat={stat}
+ 429:               highlightAbility={promptTarget?.kind === "ability" ? promptTarget.abilityKey : null}
+ 430:               onAbilityRoll={handleAbilityGuidedRoll}
+ 431:               rollLocked={rollLocked || diceMode === "manual" || submittingRoll}
+ 432:             />
+ 433:             <SavesCard stat={stat} />
+ 434:             <PassivesCard stat={stat} />
+ 435: 
+ 436:             <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4 text-xs text-neutral-400">
+ 437:               Signed in as {props.userEmail} - {props.accessLabel}
+ 438:             </div>
+ 439:           </aside>
+ 440: 
+ 441:           <section className="lg:col-span-6">
+ 442:             <div className="mb-4 rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4">
+ 443:               <div className="text-sm font-semibold">Stage</div>
+ 444: 
+ 445:               <div className="mt-4 space-y-4">
+ 446:                 <StagePanel
+ 447:                   block={stageBlock}
+ 448:                   linkedBlocks={stage?.linkedBlocks ?? {}}
+ 449:                   playerShop={{
+ 450:                     faithPoints,
+ 451:                     ownedItems: ownedInventoryItemIds,
+ 452:                     ownedTraits: ownedTraitIds,
+ 453:                     ownedActions: ownedActionIds,
+ 454:                     claimingId: claimingGearId,
+ 455:                     claimingTraitId: claimingTrainingId,
+ 456:                     onClaim: handleClaimNpcGear,
+ 457:                     onClaimTraining: handleClaimNpcTraining,
+ 458:                   }}
+ 459:                 />
+ 460: 
+ 461:                 {rollOpen ? (
+ 462:                   <div ref={promptBoxRef}>
+ 463:                     <RollRequestPanel
+ 464:                       prompt={rollPrompt}
+ 465:                       guidedResult={guidedResult}
+ 466:                       diceMode={diceMode}
+ 467:                       setDiceMode={setDiceMode}
+ 468:                       manualValue={manualValue}
+ 469:                       setManualValue={setManualValue}
+ 470:                       onSubmitManual={async () => {
+ 471:                         if (rollLocked || submittingRoll) return;
+ 472:                         const v = Number(manualValue);
+ 473:                         if (!Number.isFinite(v)) {
+ 474:                           alert("Enter a valid roll value.");
+ 475:                           return;
+ 476:                         }
+ 477:                         setGuidedResult({ label: "Manual Roll", total: v, breakdown: "Real dice" });
+ 478:                         await submitRoll(v, "manual");
+ 479:                       }}
+ 480:                       rollLocked={rollLocked}
+ 481:                       submitting={submittingRoll}
+ 482:                     />
+ 483:                   </div>
+ 484:                 ) : null}
+ 485: 
+ 486:                 {stageStoryText ? (
+ 487:                   <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
+ 488:                     <div className="text-sm font-semibold">Story (Board)</div>
+ 489:                     <div className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-neutral-200">
+ 490:                       {stageStoryText}
+ 491:                     </div>
+ 492:                   </div>
+ 493:                 ) : null}
+ 494:               </div>
+ 495:             </div>
+ 496: 
+ 497:             <div className="flex flex-wrap gap-2 rounded-2xl border border-neutral-800 bg-neutral-900/40 p-2">
+ 498:               <Tab active={tab === "inventory"} onClick={() => setTab("inventory")}>Inventory</Tab>
+ 499:               <Tab active={tab === "actions"} onClick={() => setTab("actions")}>Actions</Tab>
+ 500:               <Tab
+ 501:                 active={tab === "talents"}
+ 502:                 onClick={() => setTab("talents")}
+ 503:                 disabled={isLiveMode}
+ 504:                 title={isLiveMode ? "Spend points between sessions in the Elder tents." : undefined}
+ 505:               >
+ 506:                 Talents
+ 507:               </Tab>
+ 508:               <Tab active={tab === "journey"} onClick={() => setTab("journey")}>Journal</Tab>
+ 509: 
+ 510:               <div className="ml-auto flex items-center gap-2 pr-2 text-xs text-neutral-300">
+ 511:                 {isLiveMode ? (
+ 512:                   <span className="rounded-full bg-red-500/20 px-2 py-1 text-red-200">
+ 513:                     LIVE • {liveSessionNameForHeader}
+ 514:                   </span>
+ 515:                 ) : null}
+ 516:               </div>
+ 517:             </div>
+ 518: 
+ 519:             <div className="mt-4 rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4">
+ 520:               {tab === "inventory" ? (
+ 521:                 <PlayerInventoryPanel characterId={props.character.id} />
+ 522:               ) : tab === "journey" ? (
+ 523:                 <div>
+ 524:                   <div className="text-sm font-semibold">Journal</div>
+ 525:                   <div className="mt-3">
+ 526:                     <JourneyLog items={props.gameLog ?? []} />
+ 527:                   </div>
+ 528:                 </div>
+ 529:               ) : tab === "talents" ? (
+ 530:                 <div className="space-y-2">
+ 531:                   <div className="text-sm font-semibold">Talents</div>
+ 532:                   <div className="text-sm text-neutral-300">Scaffold only for now.</div>
+ 533:                 </div>
+ 534:               ) : (
+ 535:                 <div className="space-y-3">
+ 536:                   <div className="text-sm font-semibold">Actions</div>
+ 537:                   <RollPanel
+ 538:                     stat={stat}
+ 539:                     disabled={isLiveMode && !rollOpen}
+ 540:                     disabledReason="Rolls are handled in Live Mode."
+ 541:                     highlightAbility={promptTarget?.kind === "ability" ? promptTarget.abilityKey : undefined}
+ 542:                     highlightSkill={promptTarget?.kind === "skill" ? promptTarget.skillKey : undefined}
+ 543:                     highlightDie={promptTarget?.kind === "die" ? promptTarget.die : undefined}
+ 544:                     onGuidedRoll={handleRollPanelGuided}
+ 545:                     lockRoll={rollLocked || diceMode === "manual" || submittingRoll}
+ 546:                     showAbilityChecks={false}
+ 547:                     showSkillChecks={false}
+ 548:                     showRollConsole={false}
+ 549:                   />
+ 550:                   <ActionListPanel actions={props.playerActions ?? []} />
+ 551:                   <TraitListPanel traits={props.playerTraits ?? []} />
+ 552:                 </div>
+ 553:               )}
+ 554:             </div>
+ 555:           </section>
+ 556: 
+ 557:           <aside className="lg:col-span-3 space-y-4">
+ 558:             <div className="lg:sticky lg:top-4">
+ 559:               <SkillsCard
+ 560:                 stat={stat}
+ 561:                 highlightSkill={promptTarget?.kind === "skill" ? promptTarget.skillKey : null}
+ 562:                 onSkillRoll={handleSkillGuidedRoll}
+ 563:                 rollLocked={rollLocked || diceMode === "manual" || submittingRoll}
+ 564:               />
+ 565:             </div>
+ 566:           </aside>
+ 567:         </div>
+ 568:       </div>
+ 569: 
+ 570:       {flight ? (
+ 571:         <div
+ 572:           className="pointer-events-none fixed z-[100] rounded-lg border border-green-200 bg-green-400/20 px-3 py-1 text-sm font-bold text-green-100 shadow-[0_0_0_2px_rgba(134,239,172,0.8),0_0_26px_rgba(34,197,94,0.95),0_0_48px_rgba(34,197,94,0.5)] transition-all duration-[1400ms] ease-out"
+ 573:           style={{
+ 574:             left: flight.startX,
+ 575:             top: flight.startY,
+ 576:             transform: `translate(${flight.active ? flight.dx : 0}px, ${flight.active ? flight.dy : 0}px) scale(${flight.active ? 0.72 : 1})`,
+ 577:             opacity: flight.active ? 0.08 : 1,
+ 578:           }}
+ 579:         >
+ 580:           {flight.text}
+ 581:         </div>
+ 582:       ) : null}
+ 583: 
+ 584:       <JoinSessionModal
+ 585:         open={joinOpen}
+ 586:         onClose={() => setJoinOpen(false)}
+ 587:         onJoined={(sessionId, sessionName) => {
+ 588:           setSelectedSessionId(sessionId);
+ 589:           setOptimisticLiveSession({ id: sessionId, name: sessionName });
+ 590:         }}
+ 591:       />
+ 592:     </main>
+ 593:   );
+ 594: }
+ 595: 
+ 596: function Tab(props: {
+ 597:   active: boolean;
+ 598:   onClick: () => void;
+ 599:   disabled?: boolean;
+ 600:   title?: string;
+ 601:   children: any;
+ 602: }) {
+ 603:   return (
+ 604:     <button
+ 605:       onClick={props.onClick}
+ 606:       disabled={props.disabled}
+ 607:       title={props.title}
+ 608:       className={[
+ 609:         "rounded-xl px-3 py-2 text-sm transition relative",
+ 610:         props.active ? "bg-white text-black" : "bg-neutral-950 text-neutral-200 hover:bg-neutral-900",
+ 611:         props.disabled ? "opacity-40 cursor-not-allowed hover:bg-neutral-950" : "",
+ 612:       ].join(" ")}
+ 613:     >
+ 614:       {props.children}
+ 615:     </button>
+ 616:   );
+ 617: }
+ 618: 
+ 619: function StagePanel({
+ 620:   block,
+ 621:   linkedBlocks,
+ 622:   playerShop,
+ 623: }: {
+ 624:   block: any;
+ 625:   linkedBlocks?: Record<string, any>;
+ 626:   playerShop?: {
+ 627:     faithPoints: number;
+ 628:     ownedItems: string[];
+ 629:     ownedTraits?: string[];
+ 630:     ownedActions?: string[];
+ 631:     claimingId?: string | null;
+ 632:     claimingTraitId?: string | null;
+ 633:     onClaim?: (item: { id: string; itemId: string; name: string; faithRequired: number }) => void | Promise<void>;
+ 634:     onClaimTraining?: (trait: { id: string; traitId: string; name: string; source: "trait" | "action" }) => void | Promise<void>;
+ 635:   };
+ 636: }) {
+ 637:   const markers = extractMapMarkers(block?.meta);
+ 638:   const [selectedMarkerBlockId, setSelectedMarkerBlockId] = useState<string | null>(null);
+ 639: 
+ 640:   useEffect(() => {
+ 641:     setSelectedMarkerBlockId(null);
+ 642:   }, [block?.id]);
+ 643: 
+ 644:   const revealMap = (linkedBlocks ?? {}) as Record<string, any>;
+ 645:   const selectedReveal = selectedMarkerBlockId ? revealMap[selectedMarkerBlockId] ?? null : null;
+ 646:   return (
+ 647:     block ? (
+ 648:       <div className="space-y-3">
+ 649:         <RevealCard
+ 650:           kind={String(block.block_type ?? "").toLowerCase() === "npc" ? undefined : block.block_type ?? "presented"}
+ 651:           title={block.title ?? block.block_type ?? "Presented"}
+ 652:           body={block.body ?? ""}
+ 653:           className="border-neutral-800 bg-neutral-950/40 text-neutral-100"
+ 654:           hideBody={String(block.block_type ?? "").toLowerCase() === "npc"}
+ 655:           childrenTop={
+ 656:             String(block.block_type ?? "").toLowerCase() === "npc" ? (
+ 657:               <NpcTabsCard
+ 658:                 meta={block.meta}
+ 659:                 fallbackInfo={block.body ?? ""}
+ 660:                 imageUrl={block.image_url ?? null}
+ 661:                 embedded
+ 662:                 playerShop={playerShop}
+ 663:               />
+ 664:             ) : undefined
+ 665:           }
+ 666:         >
+ 667:           {block.image_url && String(block.block_type ?? "").toLowerCase() === "map" ? (
+ 668:             <SceneMap
+ 669:               src={block.image_url}
+ 670:               alt={block.title ?? "Presented"}
+ 671:               markers={markers as any}
+ 672:               showMagnifier
+ 673:               onMarkerClick={(m) => {
+ 674:                 if (m.targetBlockId) setSelectedMarkerBlockId(m.targetBlockId);
+ 675:               }}
+ 676:             />
+ 677:           ) : null}
+ 678:         </RevealCard>
+ 679: 
+ 680:         {selectedReveal ? (
+ 681:           <details open className="rounded-xl border border-neutral-700 bg-neutral-950/60 p-3">
+ 682:             <summary className="cursor-pointer text-sm font-semibold">
+ 683:               Marker Reveal: {selectedReveal.title ?? selectedReveal.block_type ?? "Details"}
+ 684:             </summary>
+ 685:             <div className="mt-3">
+ 686:               <RevealCard
+ 687:                 kind={String(selectedReveal.block_type ?? "").toLowerCase() === "npc" ? undefined : selectedReveal.block_type ?? "reveal"}
+ 688:                 title={selectedReveal.title ?? selectedReveal.block_type ?? "Reveal"}
+ 689:                 body={selectedReveal.body ?? ""}
+ 690:                 className="border-neutral-700 bg-neutral-950/40 text-neutral-100"
+ 691:                 hideBody={String(selectedReveal.block_type ?? "").toLowerCase() === "npc"}
+ 692:                 childrenTop={
+ 693:                   String(selectedReveal.block_type ?? "").toLowerCase() === "npc" ? (
+ 694:                     <NpcTabsCard
+ 695:                       meta={selectedReveal.meta}
+ 696:                       fallbackInfo={selectedReveal.body ?? ""}
+ 697:                       imageUrl={selectedReveal.image_url ?? null}
+ 698:                       embedded
+ 699:                       playerShop={playerShop}
+ 700:                     />
+ 701:                   ) : undefined
+ 702:                 }
+ 703:               >
+ 704:                 {selectedReveal.image_url && String(selectedReveal.block_type ?? "").toLowerCase() !== "npc" ? (
+ 705:                   // eslint-disable-next-line @next/next/no-img-element
+ 706:                   <img src={selectedReveal.image_url} alt={selectedReveal.title ?? "Reveal"} className="w-full rounded-lg border border-neutral-800" />
+ 707:                 ) : null}
+ 708:               </RevealCard>
+ 709:             </div>
+ 710:           </details>
+ 711:         ) : null}
+ 712:       </div>
+ 713:     ) : (
+ 714:       <div className="text-sm text-neutral-300">
+ 715:         When the storyteller clicks <span className="text-neutral-100">Present to Players</span>, it will appear here.
+ 716:       </div>
+ 717:     )
+ 718:   );
+ 719: }
+ 720: 
+ 721: function ActionListPanel(props: {
+ 722:   actions: Array<{
+ 723:     id: string;
+ 724:     name: string;
+ 725:     type?: string | null;
+ 726:     summary?: string | null;
+ 727:     rules_text?: string | null;
+ 728:     range_normal?: number | null;
+ 729:     range_max?: number | null;
+ 730:     uses_attack_roll?: boolean | null;
+ 731:     save_ability?: string | null;
+ 732:     save_dc_override?: number | null;
+ 733:     damage_dice?: string | null;
+ 734:     damage_bonus?: number | null;
+ 735:     attack_bonus_override?: number | null;
+ 736:     damage_type?: string | null;
+ 737:     on_fail?: string | null;
+ 738:     on_success?: string | null;
+ 739:   }>;
+ 740: }) {
+ 741:   const [rolls, setRolls] = useState<Record<string, { hit?: string; damage?: string }>>({});
+ 742:   const HEAL_TYPES = new Set(["healing", "temporary_hp"]);
+ 743: 
+ 744:   function rollDie(sides: number) {
+ 745:     return Math.floor(Math.random() * sides) + 1;
+ 746:   }
+ 747: 
+ 748:   function rollHit(action: any) {
+ 749:     const bonus = Number(action.attack_bonus_override ?? 0);
+ 750:     const d20 = rollDie(20);
+ 751:     const total = d20 + (Number.isFinite(bonus) ? bonus : 0);
+ 752:     setRolls((prev) => ({
+ 753:       ...prev,
+ 754:       [action.id]: {
+ 755:         ...(prev[action.id] ?? {}),
+ 756:         hit: `${total} (d20 ${d20}${bonus ? ` + ${bonus}` : ""})`,
+ 757:       },
+ 758:     }));
+ 759:   }
+ 760: 
+ 761:   function rollDamage(action: any) {
+ 762:     const formula = String(action.damage_dice ?? "").trim().toLowerCase();
+ 763:     const bonusFromField = Number(action.damage_bonus ?? 0);
+ 764:     const m = formula.match(/^(\d*)d(\d+)([+-]\d+)?$/i);
+ 765:     if (!m) return;
+ 766:     const count = Math.max(1, Number(m[1] || 1));
+ 767:     const sides = Math.max(2, Number(m[2] || 2));
+ 768:     const inlineBonus = Number(m[3] || 0);
+ 769:     const bonus = (Number.isFinite(inlineBonus) ? inlineBonus : 0) + (Number.isFinite(bonusFromField) ? bonusFromField : 0);
+ 770:     const rollsArr = Array.from({ length: count }, () => rollDie(sides));
+ 771:     const total = rollsArr.reduce((t, n) => t + n, 0) + bonus;
+ 772:     const outcomeLabel = HEAL_TYPES.has(String(action.damage_type ?? "").toLowerCase()) ? "heal" : "damage";
+ 773:     setRolls((prev) => ({
+ 774:       ...prev,
+ 775:       [action.id]: {
+ 776:         ...(prev[action.id] ?? {}),
+ 777:         damage: `${total} ${outcomeLabel} ([${rollsArr.join(", ")}]${bonus ? ` ${bonus > 0 ? "+" : "-"} ${Math.abs(bonus)}` : ""})`,
+ 778:       },
+ 779:     }));
+ 780:   }
+ 781: 
+ 782:   return (
+ 783:     <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
+ 784:       <div className="text-sm font-semibold">Actions</div>
+ 785:       {props.actions.length ? (
+ 786:         <div className="mt-3 overflow-hidden rounded-xl border border-neutral-800">
+ 787:           <div className="grid grid-cols-12 gap-2 border-b border-neutral-800 bg-neutral-900/50 px-3 py-2 text-[11px] uppercase tracking-wide text-neutral-400">
+ 788:             <div className="col-span-3">Attack</div>
+ 789:             <div className="col-span-2">Range</div>
+ 790:             <div className="col-span-2">Hit / DC</div>
+ 791:             <div className="col-span-2">Damage</div>
+ 792:             <div className="col-span-3">Notes</div>
+ 793:           </div>
+ 794:           {props.actions.map((a) => (
+ 795:             <div key={a.id} className="grid grid-cols-12 gap-2 border-b border-neutral-800 px-3 py-2 text-sm last:border-b-0">
+ 796:               <div className="col-span-3 min-w-0">
+ 797:                 <div className="truncate font-semibold text-neutral-100">{a.name}</div>
+ 798:                 <div className="text-[11px] text-neutral-400">{a.type ?? "other"}</div>
+ 799:               </div>
+ 800:               <div className="col-span-2 text-xs text-neutral-300">
+ 801:                 {a.range_normal ? `${a.range_normal} ft.` : ""}
+ 802:                 {a.range_max ? ` (${a.range_max})` : ""}
+ 803:               </div>
+ 804:               <div className="col-span-2 text-xs text-neutral-300">
+ 805:                 {a.uses_attack_roll !== false && a.attack_bonus_override != null ? (
+ 806:                   <div className="space-y-1">
+ 807:                     <div>+{a.attack_bonus_override}</div>
+ 808:                     <button
+ 809:                       type="button"
+ 810:                       className="rounded border border-neutral-700 px-2 py-0.5 text-[11px] hover:bg-neutral-900"
+ 811:                       onClick={() => rollHit(a)}
+ 812:                     >
+ 813:                       Roll Hit
+ 814:                     </button>
+ 815:                     {rolls[a.id]?.hit ? <div className="text-emerald-300">{rolls[a.id]?.hit}</div> : null}
+ 816:                   </div>
+ 817:                 ) : a.save_dc_override != null ? (
+ 818:                   <div>{`DC ${a.save_dc_override}${a.save_ability ? ` ${String(a.save_ability).toUpperCase()}` : ""}`}</div>
+ 819:                 ) : null}
+ 820:               </div>
+ 821:               <div className="col-span-2 text-xs text-neutral-300">
+ 822:                 {a.damage_dice ? (
+ 823:                   <div>
+ 824:                     <div>{`${a.damage_dice}${a.damage_type ? ` ${a.damage_type}` : ""}`}</div>
+ 825:                     <button
+ 826:                       type="button"
+ 827:                       className="mt-1 rounded border border-neutral-700 px-2 py-0.5 text-[11px] hover:bg-neutral-900"
+ 828:                       onClick={() => rollDamage(a)}
+ 829:                     >
+ 830:                       {HEAL_TYPES.has(String(a.damage_type ?? "").toLowerCase()) ? "Roll Heal" : "Roll Dmg"}
+ 831:                     </button>
+ 832:                     {rolls[a.id]?.damage ? <div className="text-emerald-300">{rolls[a.id]?.damage}</div> : null}
+ 833:                   </div>
+ 834:                 ) : null}
+ 835:               </div>
+ 836:               <div className="col-span-3 text-xs text-neutral-300">
+ 837:                 {a.summary?.trim() ? <div>{a.summary}</div> : null}
+ 838:                 {!a.summary?.trim() && a.rules_text?.trim() ? (
+ 839:                   <div className="line-clamp-2">{a.rules_text}</div>
+ 840:                 ) : null}
+ 841:                 {a.on_fail?.trim() ? <div>{`On fail: ${a.on_fail}`}</div> : null}
+ 842:                 {a.on_success?.trim() ? <div>{`On success: ${a.on_success}`}</div> : null}
+ 843:               </div>
+ 844:             </div>
+ 845:           ))}
+ 846:         </div>
+ 847:       ) : (
+ 848:         <div className="mt-3 text-sm text-neutral-400">No learned actions yet.</div>
+ 849:       )}
+ 850:     </div>
+ 851:   );
+ 852: }
+ 853: 
+ 854: function TraitListPanel(props: { traits: Array<{ id: string; name: string; summary?: string | null; type?: string | null }> }) {
+ 855:   return (
+ 856:     <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
+ 857:       <div className="text-sm font-semibold">Traits</div>
+ 858:       {props.traits.length ? (
+ 859:         <div className="mt-3 space-y-2">
+ 860:           {props.traits.map((t) => (
+ 861:             <div key={t.id} className="rounded-lg border border-neutral-800 bg-neutral-900/40 p-3">
+ 862:               <div className="flex items-center justify-between gap-2">
+ 863:                 <div className="text-sm font-semibold text-neutral-100">{t.name}</div>
+ 864:                 <div className="text-[11px] text-neutral-400">{t.type ?? "trait"}</div>
+ 865:               </div>
+ 866:               {t.summary ? <div className="mt-1 text-xs text-neutral-300">{t.summary}</div> : null}
+ 867:             </div>
+ 868:           ))}
+ 869:         </div>
+ 870:       ) : (
+ 871:         <div className="mt-3 text-sm text-neutral-400">No learned traits yet.</div>
+ 872:       )}
+ 873:     </div>
+ 874:   );
+ 875: }
+ 876: 
+ 877: function RollRequestPanel(props: {
+ 878:   prompt: string;
+ 879:   guidedResult: GuidedRoll | null;
+ 880:   diceMode: "digital" | "manual";
+ 881:   setDiceMode: (mode: "digital" | "manual") => void;
+ 882:   manualValue: string;
+ 883:   setManualValue: (v: string) => void;
+ 884:   onSubmitManual: () => void;
+ 885:   rollLocked: boolean;
+ 886:   submitting: boolean;
+ 887: }) {
+ 888:   return (
+ 889:     <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
+ 890:       <div className="flex items-center justify-between gap-3">
+ 891:         <div className="text-sm font-semibold">Roll Request</div>
+ 892:         <label className="flex items-center gap-2 rounded-lg border border-neutral-700 px-2 py-1 text-xs text-neutral-200">
+ 893:           <input
+ 894:             type="checkbox"
+ 895:             checked={props.diceMode === "manual"}
+ 896:             onChange={(e) => props.setDiceMode(e.currentTarget.checked ? "manual" : "digital")}
+ 897:             className="accent-emerald-400"
+ 898:             disabled={props.rollLocked || props.submitting}
+ 899:           />
+ 900:           {props.diceMode === "manual" ? "Real Dice" : "Digital Dice"}
+ 901:         </label>
+ 902:       </div>
+ 903: 
+ 904:       <div className="mt-3 text-sm text-neutral-200">{props.prompt || "Follow the storyteller's roll instruction."}</div>
+ 905: 
+ 906:       {props.diceMode === "manual" ? (
+ 907:         <div className="mt-3 flex items-center gap-2">
+ 908:           <input
+ 909:             type="number"
+ 910:             value={props.manualValue}
+ 911:             onChange={(e) => props.setManualValue(e.currentTarget.value)}
+ 912:             placeholder="Type your total"
+ 913:             className="w-32 rounded-lg border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-sm"
+ 914:             disabled={props.rollLocked || props.submitting}
+ 915:           />
+ 916:           <button
+ 917:             type="button"
+ 918:             onClick={props.onSubmitManual}
+ 919:             disabled={props.rollLocked || props.submitting}
+ 920:             className="rounded-lg border border-neutral-700 px-3 py-1.5 text-sm hover:bg-neutral-900 disabled:cursor-not-allowed disabled:opacity-60"
+ 921:           >
+ 922:             Submit
+ 923:           </button>
+ 924:         </div>
+ 925:       ) : (
+ 926:         <div className="mt-3 text-xs text-neutral-400">Digital Dice active: click the glowing target to roll once.</div>
+ 927:       )}
+ 928: 
+ 929:       {props.guidedResult ? (
+ 930:         <div className="mt-3 rounded-lg border border-green-300/70 bg-neutral-950/60 px-3 py-2 text-sm text-green-200">
+ 931:           Result: <span className="font-semibold">{props.guidedResult.total}</span> ({props.guidedResult.breakdown})
+ 932:         </div>
+ 933:       ) : null}
+ 934:       <div className="mt-2 text-xs text-neutral-400">
+ 935:         Example: Click <span className="text-neutral-200">Perception</span> in your Skills panel, then submit your total.
+ 936:       </div>
+ 937:     </div>
+ 938:   );
+ 939: }
+ 940: 
