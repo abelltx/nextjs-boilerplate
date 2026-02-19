@@ -244,7 +244,7 @@ export default async function DmScreenPage({
       {/* TOP ROW */}
       <div className="grid grid-cols-12 gap-3">
         {/* Session box */}
-        <div className="col-span-7 border rounded-xl p-4">
+        <div className="col-span-12 border rounded-xl p-4 space-y-3">
           <div className="flex items-start justify-between gap-3">
             <div>
               <div className="text-xs uppercase text-gray-500">Session</div>
@@ -434,121 +434,86 @@ export default async function DmScreenPage({
               ) : (
                 <div className="text-xs text-gray-600">No quests on this NPC.</div>
               )}
+              <div className="pt-1 border-t flex items-center justify-end">
+                <button
+                  type="button"
+                  className="rounded border px-2 py-1 text-xs text-gray-500 cursor-not-allowed"
+                  title="Quest-linked loot assignment coming next."
+                  disabled
+                >
+                  Assign Loot (Soon)
+                </button>
+              </div>
             </div>
           ) : null}
 
-        </div>     {/* end session box */}
-
-
-
-        {/* Right side */}
-        <div className="col-span-5 space-y-3">
-          <div className="border rounded-xl p-4 space-y-3">
-            <div>
-              <div className="text-xs uppercase text-gray-500">Episode</div>
-              <div className="text-sm text-gray-700">
-                Load / switch which episode is attached to this session
+          <details className="rounded border p-2">
+            <summary className="cursor-pointer text-xs uppercase text-gray-500">Episode + Timer</summary>
+            <div className="mt-2 grid grid-cols-1 gap-2 lg:grid-cols-3">
+              <div className="rounded border p-2">
+                <div className="text-[11px] uppercase text-gray-500">Episode</div>
+                <div className="text-xs text-gray-600 mb-2">
+                  Current: <span className="font-mono">{episodeId ?? "-"}</span>
+                </div>
+                <EpisodePicker sessionId={sessionId} episodes={episodes ?? []} />
               </div>
-              <div className="mt-1 text-xs text-gray-500">
-                Current episode_id: <span className="font-mono">{episodeId ?? "-"}</span>
-              </div>
-            </div>
-            <EpisodePicker sessionId={sessionId} episodes={episodes ?? []} />
-          </div>
-
-          <div className="border rounded-xl p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="text-xs uppercase text-gray-500">Session Timer</div>
-              <form
-                action={async () => {
-                  "use server";
-                  const base = getBaseDurationSeconds(state, session);
-                  await updateState(session.id, {
-                    timer_status: "stopped",
-                    duration_seconds: base,
-                    remaining_seconds: base,
-                  });
-                  redirect(`/storyteller/sessions/${session.id}`);
-                }}
-              >
-                <button className="px-2 py-1 rounded border text-xs">Reset</button>
-              </form>
-            </div>
-
-            <div className="flex items-center justify-between rounded-lg border px-3 py-2">
-              <div className="font-mono text-lg font-bold">{formatTimerClock(liveTimerSeconds)}</div>
-              <div className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] uppercase text-gray-600">{timerStatusLabel}</div>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <form
-                action={async () => {
-                  "use server";
-                  const frozen = getLiveRemainingSeconds(state);
-                  await updateState(session.id, { timer_status: "running", remaining_seconds: frozen });
-                  redirect(`/storyteller/sessions/${session.id}`);
-                }}
-              >
-                <button className="px-2 py-1 rounded bg-black text-white text-xs">Start</button>
-              </form>
-
-              <form
-                action={async () => {
-                  "use server";
-                  const frozen = getLiveRemainingSeconds(state);
-                  await updateState(session.id, { timer_status: "paused", remaining_seconds: frozen });
-                  redirect(`/storyteller/sessions/${session.id}`);
-                }}
-              >
-                <button className="px-2 py-1 rounded border text-xs">Pause</button>
-              </form>
-
-              <form
-                action={async () => {
-                  "use server";
-                  const frozen = getLiveRemainingSeconds(state);
-                  await updateState(session.id, {
-                    remaining_seconds: frozen + 300,
-                  });
-                  redirect(`/storyteller/sessions/${session.id}`);
-                }}
-              >
-                <button className="px-2 py-1 rounded border text-xs">+5</button>
-              </form>
-
-              <details className="ml-auto">
-                <summary className="cursor-pointer text-xs underline underline-offset-2 text-gray-600">Adjust</summary>
-                <form
-                  className="mt-2 flex items-end gap-2"
-                  action={async (fd) => {
-                    "use server";
-                    const mins = Number(fd.get("timer_mins"));
-                    if (!Number.isFinite(mins) || mins <= 0) {
+              <div className="rounded border p-2 lg:col-span-2 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="text-[11px] uppercase text-gray-500">Session Timer</div>
+                  <div className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] uppercase text-gray-600">{timerStatusLabel}</div>
+                </div>
+                <div className="font-mono text-lg font-bold">{formatTimerClock(liveTimerSeconds)}</div>
+                <div className="flex flex-wrap gap-2">
+                  <form
+                    action={async () => {
+                      "use server";
+                      const frozen = getLiveRemainingSeconds(state);
+                      await updateState(session.id, { timer_status: "running", remaining_seconds: frozen });
                       redirect(`/storyteller/sessions/${session.id}`);
-                    }
-                    const seconds = Math.max(60, Math.floor(mins * 60));
-                    await updateState(session.id, {
-                      duration_seconds: seconds,
-                      remaining_seconds: seconds,
-                      timer_status: "stopped",
-                    });
-                    redirect(`/storyteller/sessions/${session.id}`);
-                  }}
-                >
-                  <input
-                    name="timer_mins"
-                    type="number"
-                    min={1}
-                    step={1}
-                    defaultValue={Math.max(1, Math.round(Number((state as any).duration_seconds ?? 5400) / 60))}
-                    className="w-24 rounded border px-2 py-1 text-xs"
-                  />
-                  <button className="px-2 py-1 rounded border text-xs">Set</button>
-                </form>
-              </details>
+                    }}
+                  >
+                    <button className="px-2 py-1 rounded bg-black text-white text-xs">Start</button>
+                  </form>
+                  <form
+                    action={async () => {
+                      "use server";
+                      const frozen = getLiveRemainingSeconds(state);
+                      await updateState(session.id, { timer_status: "paused", remaining_seconds: frozen });
+                      redirect(`/storyteller/sessions/${session.id}`);
+                    }}
+                  >
+                    <button className="px-2 py-1 rounded border text-xs">Pause</button>
+                  </form>
+                  <form
+                    action={async () => {
+                      "use server";
+                      const frozen = getLiveRemainingSeconds(state);
+                      await updateState(session.id, { remaining_seconds: frozen + 300 });
+                      redirect(`/storyteller/sessions/${session.id}`);
+                    }}
+                  >
+                    <button className="px-2 py-1 rounded border text-xs">+5</button>
+                  </form>
+                  <form
+                    action={async () => {
+                      "use server";
+                      const base = getBaseDurationSeconds(state, session);
+                      await updateState(session.id, {
+                        timer_status: "stopped",
+                        duration_seconds: base,
+                        remaining_seconds: base,
+                      });
+                      redirect(`/storyteller/sessions/${session.id}`);
+                    }}
+                  >
+                    <button className="px-2 py-1 rounded border text-xs">Reset</button>
+                  </form>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          </details>
+
+        </div>     {/* end session box */}
       </div>
 
       {/* EPISODE TABLE OF CONTENTS */}
@@ -560,7 +525,7 @@ export default async function DmScreenPage({
               {totalScenes ? (
                 <>
                   Current: <b>{currentSceneHuman || 0}</b> of <b>{totalScenes}</b> | Completed: <b>{completedCount}</b> of{" "}
-                  <b>{totalScenes}</b>
+                  <b>{totalScenes}</b> | Progress: <b>{episodePct}%</b>
                 </>
               ) : (
                 "No scenes found (add block_type = scene)."
@@ -581,7 +546,9 @@ export default async function DmScreenPage({
 
         <div className="space-y-2">
           <SequenceRail items={runtimeSequence} activeId={activeSceneId} />
-
+          <details className="rounded border p-2">
+            <summary className="cursor-pointer text-sm font-semibold">Detailed Scene Controls</summary>
+            <div className="mt-2 space-y-2">
           {scenes.map((s, si) => {
             const sceneLive = s.scene.id === presentedId || s.children.some((c) => c.id === presentedId);
             const sceneDone = completedSceneIds.includes(s.scene.id);
@@ -947,26 +914,8 @@ export default async function DmScreenPage({
               </details>
             );
           })}
-        </div>
-      </div>
-
-      {/* EPISODE PROGRESS */}
-      <div className="grid grid-cols-12 gap-3">
-        <div className="col-span-12 border rounded-xl p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-xs uppercase text-gray-500">Episode Progress</div>
-              <div className="font-bold">
-                {totalScenes === 0 ? "No scenes" : `Scene ${Math.max(1, currentSceneHuman || 1)} / ${totalScenes}`}
-              </div>
-              <div className="text-xs text-gray-600 mt-1">Completion is driven by "Mark Scene Complete".</div>
             </div>
-            <div className="text-2xl font-bold">{episodePct}%</div>
-          </div>
-
-          <div className="mt-3 h-2 rounded bg-gray-200 overflow-hidden">
-            <div className="h-2 bg-black" style={{ width: `${episodePct}%` }} />
-          </div>
+          </details>
         </div>
       </div>
 
@@ -980,39 +929,58 @@ export default async function DmScreenPage({
         </div>
 
         <div className="col-span-6 border rounded-xl p-4">
-          <div className="text-xs uppercase text-gray-500">Story Text</div>
-
-          <form
-            action={async (fd) => {
-              "use server";
-              await updateStoryText(session.id, fd);
-              redirect(`/storyteller/sessions/${session.id}`);
-            }}
-            className="mt-2 space-y-2"
-          >
-            <textarea
-              name="story_text"
-              defaultValue={session.story_text || ""}
-              className="w-full h-64 border rounded p-3 font-serif"
-              placeholder="Write the scene/story here..."
-            />
-            <button className="px-4 py-2 rounded bg-black text-white">Save Story</button>
-          </form>
+          <div className="text-xs uppercase text-gray-500">Stage Mirror</div>
+          <div className="mt-2 h-64 rounded border bg-gray-50 p-3 overflow-auto space-y-2">
+            {presentedBlock ? (
+              <>
+                <div className="text-sm font-semibold">
+                  {presentedBlock.title ?? presentedBlock.block_type ?? "Presented"}
+                </div>
+                {presentedBlock.body ? (
+                  <div className="text-sm whitespace-pre-wrap text-gray-700">{presentedBlock.body}</div>
+                ) : (
+                  <div className="text-sm text-gray-500">No body text on this presented block.</div>
+                )}
+              </>
+            ) : (
+              <div className="text-sm text-gray-500">Nothing presented to players yet.</div>
+            )}
+          </div>
         </div>
 
         <div className="col-span-3 border rounded-xl p-4">
           <div className="text-xs uppercase text-gray-500">NPC Portrait</div>
-          <div className="mt-2 h-64 rounded bg-gray-100 flex items-center justify-center text-gray-500">
-            NPC image placeholder
-          </div>
+          {presentedBlock?.image_url ? (
+            <div className="mt-2 h-64 rounded border overflow-hidden bg-gray-100">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={presentedBlock.image_url} alt={presentedBlock.title ?? "Presented"} className="w-full h-full object-cover" />
+            </div>
+          ) : (
+            <div className="mt-2 h-64 rounded bg-gray-100 flex items-center justify-center text-gray-500">
+              NPC image placeholder
+            </div>
+          )}
         </div>
       </div>
 
       <div className="border rounded-xl p-4">
-        <div className="text-xs uppercase text-gray-500">Loot / Olives</div>
-        <div className="mt-2 text-gray-600 text-sm">
-          Framework panel now. Later: olive bank, drops, assignment, time-travel inventory.
-        </div>
+        <div className="text-xs uppercase text-gray-500">Storyteller Script</div>
+        <form
+          action={async (fd) => {
+            "use server";
+            await updateStoryText(session.id, fd);
+            redirect(`/storyteller/sessions/${session.id}`);
+          }}
+          className="mt-2 space-y-2"
+        >
+          <textarea
+            name="story_text"
+            defaultValue={session.story_text || ""}
+            className="w-full h-56 border rounded p-3 font-serif"
+            placeholder="Write or paste the script you will read to players..."
+          />
+          <button className="px-4 py-2 rounded bg-black text-white">Save Script</button>
+        </form>
       </div>
     </div>
   );
