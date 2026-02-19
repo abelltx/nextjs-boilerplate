@@ -626,7 +626,15 @@ export default function PlayerHubClient(props: {
                 <div>
                   <div className="text-sm font-semibold">Journal</div>
                   <div className="mt-3">
-                    <JourneyLog items={props.gameLog ?? []} />
+                    <JourneyLog
+                      items={props.gameLog ?? []}
+                      onOpenItem={(itemId) => {
+                        setTab("inventory");
+                        window.setTimeout(() => {
+                          window.dispatchEvent(new CustomEvent("inventory:open-item", { detail: { itemId } }));
+                        }, 20);
+                      }}
+                    />
                   </div>
                 </div>
               ) : tab === "talents" ? (

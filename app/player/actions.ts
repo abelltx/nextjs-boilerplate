@@ -47,14 +47,18 @@ async function appendGameLogSafe(
     eventType: string;
     title: string;
     summary?: string;
+    itemId?: string;
   }
 ) {
+  const taggedSummary = input.itemId
+    ? `${input.summary ?? ""}${input.summary ? " " : ""}[item_id:${input.itemId}]`
+    : input.summary ?? null;
   const payload = {
     user_id: input.userId,
     character_id: input.characterId,
     event_type: input.eventType,
     title: input.title,
-    summary: input.summary ?? null,
+    summary: taggedSummary,
   };
   const { error } = await supabase.from("game_log").insert(payload as any);
   if (error) {
@@ -614,28 +618,38 @@ export async function claimNpcQuestRewardsAction(input: {
   if (rewardItemIds.length) {
     const { data: itemRows, error: itemErr } = await supabase
       .from("items")
-      .select("id,name,is_active")
+      .select("id,name,is_active,stackable")
       .in("id", rewardItemIds);
     if (itemErr) return { ok: false, error: itemErr.message };
     const validItems = (itemRows ?? []).filter((row: any) => row?.id && row.is_active !== false);
     for (const it of validItems as any[]) {
       const itemId = String(it.id);
+      const isStackable = Boolean((it as any).stackable ?? true);
       const { data: existing, error: exErr } = await supabase
         .from("inventory_items")
-        .select("id")
+        .select("id,quantity")
         .eq("character_id", characterId)
         .eq("item_id", itemId)
+        .order("created_at", { ascending: true })
         .limit(1)
         .maybeSingle();
       if (exErr) return { ok: false, error: exErr.message };
-      if (existing?.id) continue;
-      const { error: insErr } = await supabase.from("inventory_items").insert({
-        character_id: characterId,
-        item_id: itemId,
-        name: String((it as any).name ?? "Quest Reward"),
-        quantity: 1,
-      });
-      if (insErr) return { ok: false, error: insErr.message };
+      if (existing?.id && isStackable) {
+        const qty = Math.max(1, Number((existing as any).quantity ?? 1));
+        const { error: upErr } = await supabase
+          .from("inventory_items")
+          .update({ quantity: qty + 1 })
+          .eq("id", (existing as any).id);
+        if (upErr) return { ok: false, error: upErr.message };
+      } else {
+        const { error: insErr } = await supabase.from("inventory_items").insert({
+          character_id: characterId,
+          item_id: itemId,
+          name: String((it as any).name ?? "Quest Reward"),
+          quantity: 1,
+        });
+        if (insErr) return { ok: false, error: insErr.message };
+      }
       grantedItems += 1;
     }
   }
@@ -713,14 +727,16 @@ export async function claimNpcQuestRewardsAction(input: {
       .select("id,name")
       .in("id", rewardItemIds);
     for (const itemId of rewardItemIds) {
+      const itemIdStr = String(itemId);
       const itemName =
-        (rewardItems ?? []).find((it: any) => String(it?.id) === itemId)?.name ?? itemId;
+        (rewardItems ?? []).find((it: any) => String(it?.id) === itemIdStr)?.name ?? itemIdStr;
       await appendGameLogSafe(supabase, {
         userId: user.id,
         characterId,
         eventType: "item_acquired",
         title: `Item Acquired: ${String(itemName)}`,
         summary: `Quest reward from ${questTitle}`,
+        itemId: itemIdStr,
       });
     }
   }

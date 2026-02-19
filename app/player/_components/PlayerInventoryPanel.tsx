@@ -139,6 +139,20 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    const onOpenItem = (evt: Event) => {
+      const custom = evt as CustomEvent<{ itemId?: string }>;
+      const rawId = String(custom?.detail?.itemId ?? "").trim().toLowerCase();
+      if (!rawId) return;
+      const found = rows.find((r) => String(r.item_id ?? "").trim().toLowerCase() === rawId);
+      if (found) setSelected(found);
+    };
+    window.addEventListener("inventory:open-item", onOpenItem as EventListener);
+    return () => {
+      window.removeEventListener("inventory:open-item", onOpenItem as EventListener);
+    };
+  }, [rows]);
+
   const filtered = rows;
 
     async function setEquipped(row: ItemRow, equipped: boolean) {

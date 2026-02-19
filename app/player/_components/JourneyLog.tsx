@@ -23,6 +23,7 @@ function iconFor(type: string) {
 export default function JourneyLog(props: {
   items: Array<any>;
   compact?: boolean;
+  onOpenItem?: (itemId: string) => void;
 }) {
   const items = props.items ?? [];
 
@@ -60,6 +61,20 @@ export default function JourneyLog(props: {
                     {it.summary ? (
                       <div className="mt-1 text-sm text-neutral-300">
                         {it.summary}
+                      </div>
+                    ) : null}
+                    {typeof it.summary === "string" && it.summary.includes("[item_id:") && props.onOpenItem ? (
+                      <div className="mt-2">
+                        <button
+                          type="button"
+                          className="rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-200 hover:bg-neutral-900"
+                          onClick={() => {
+                            const m = it.summary.match(/\[item_id:([0-9a-f-]{36})\]/i);
+                            if (m?.[1]) props.onOpenItem?.(m[1]);
+                          }}
+                        >
+                          Examine Item
+                        </button>
                       </div>
                     ) : null}
 
