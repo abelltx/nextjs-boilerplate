@@ -947,6 +947,11 @@ function StagePanel({
                 fallbackInfo={block.body ?? ""}
                 imageUrl={block.image_url ?? null}
                 embedded
+                npcContextIds={[
+                  String(block.id ?? ""),
+                  String(block.meta?.npc_binding?.npc_id ?? ""),
+                  String(block.meta?.npc_library?.npc_id ?? ""),
+                ]}
                 playerShop={playerShop}
               />
             ) : undefined
@@ -984,6 +989,11 @@ function StagePanel({
                       fallbackInfo={selectedReveal.body ?? ""}
                       imageUrl={selectedReveal.image_url ?? null}
                       embedded
+                      npcContextIds={[
+                        String(selectedReveal.id ?? ""),
+                        String(selectedReveal.meta?.npc_binding?.npc_id ?? ""),
+                        String(selectedReveal.meta?.npc_library?.npc_id ?? ""),
+                      ]}
                       playerShop={playerShop}
                     />
                   ) : undefined

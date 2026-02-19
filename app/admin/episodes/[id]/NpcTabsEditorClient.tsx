@@ -316,12 +316,16 @@ export default function NpcTabsEditorClient(props: {
               kind: "task",
               title: line,
             })),
-            ...npcIds.map((npcId, npcIdx) => ({
-              id: `${id}_talk_${npcIdx + 1}`,
-              kind: "talk_to_npc",
-              title: `Talk to NPC (${npcId.slice(0, 8)}...)`,
-              target_npc_block_id: npcId,
-            })),
+            ...npcIds.map((npcId, npcIdx) => {
+              const npcName = npcMap.get(npcId)?.name?.trim() || "";
+              return {
+                id: `${id}_talk_${npcIdx + 1}`,
+                kind: "talk_to_npc",
+                title: npcName ? `Talk to ${npcName}` : `Talk to NPC (${npcId.slice(0, 8)}...)`,
+                target_npc_block_id: npcId,
+                target_npc_name: npcName || null,
+              };
+            }),
           ];
           return {
             id,
@@ -339,7 +343,7 @@ export default function NpcTabsEditorClient(props: {
           };
         })
         .filter((q) => q.title.length > 0),
-    [safeQuests, itemLabelById]
+    [safeQuests, itemLabelById, npcMap]
   );
 
   const extraMeta = useMemo(() => {

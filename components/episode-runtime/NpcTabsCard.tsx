@@ -1,6 +1,6 @@
-"use client";
+﻿"use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/utils/supabase/client";
 
 type TabKey = "information" | "gear" | "quests" | "training";
@@ -33,6 +33,7 @@ type QuestTask = {
   title: string;
   kind: "task" | "talk_to_npc";
   targetNpcBlockId?: string | null;
+  targetNpcName?: string | null;
 };
 type QuestReward = {
   faith: number;
@@ -57,6 +58,7 @@ export default function NpcTabsCard(props: {
   fallbackInfo?: string | null;
   imageUrl?: string | null;
   embedded?: boolean;
+  npcContextIds?: string[];
   playerShop?: {
     characterId?: string;
     faithPoints: number;
@@ -75,6 +77,8 @@ export default function NpcTabsCard(props: {
   };
 }) {
   const linkedNpc = (props.meta?.npc_library ?? null) as any;
+  const boundNpcId = String(props.meta?.npc_binding?.npc_id ?? "").trim();
+  const libraryNpcId = String(props.meta?.npc_library?.npc_id ?? "").trim();
   const mergedImageUrl = String(props.imageUrl ?? linkedNpc?.image_url ?? "").trim() || null;
   const mergedFallbackInfo = String(props.fallbackInfo ?? linkedNpc?.description ?? "").trim();
   const tabs = useMemo<TabDef[]>(() => {
@@ -175,6 +179,7 @@ export default function NpcTabsCard(props: {
       .filter((it: any): it is GearItem => Boolean(it?.name));
   }, [snapshotRaw]);
   const [gearItems, setGearItems] = useState<GearItem[]>(snapshotItems);
+  const [talkTargetNameMap, setTalkTargetNameMap] = useState<Record<string, string>>({});
   const trainingSnapshotItems = useMemo<TrainingTrait[]>(() => {
     const raw = JSON.parse(trainingSnapshotRaw || "[]");
     const arr = Array.isArray(raw) ? raw : [];
@@ -242,14 +247,19 @@ export default function NpcTabsCard(props: {
         const tasks = tasksRaw
           .map((t: any, tIdx: number) => {
             const taskId = String(t?.id ?? "").trim() || `${questId}_task_${tIdx + 1}`;
-            const taskTitle = String(t?.title ?? "").trim();
-            if (!taskTitle) return null;
             const kind = String(t?.kind ?? "").trim().toLowerCase() === "talk_to_npc" ? "talk_to_npc" : "task";
+            const targetNpcName = String(t?.target_npc_name ?? "").trim() || null;
+            const fallbackTalkTitle = targetNpcName
+              ? `Talk to ${targetNpcName}`
+              : `Talk to NPC (${String(t?.target_npc_block_id ?? "").trim().slice(0, 8)}...)`;
+            const taskTitle = String(t?.title ?? "").trim() || (kind === "talk_to_npc" ? fallbackTalkTitle : "");
+            if (!taskTitle) return null;
             return {
               id: taskId,
               title: taskTitle,
               kind,
               targetNpcBlockId: String(t?.target_npc_block_id ?? "").trim() || null,
+              targetNpcName,
             } as QuestTask;
           })
           .filter((t: any): t is QuestTask => Boolean(t?.title));
@@ -278,6 +288,43 @@ export default function NpcTabsCard(props: {
       })
       .filter((q: any): q is QuestDef => Boolean(q?.id && q?.title));
   }, [questDefsRaw]);
+  const talkTargetIds = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          questDefs
+            .flatMap((q) => q.tasks)
+            .filter((t) => t.kind === "talk_to_npc")
+            .map((t) => String(t.targetNpcBlockId ?? "").trim())
+            .filter(Boolean)
+        )
+      ),
+    [questDefsRaw]
+  );
+  const talkTargetIdsKey = useMemo(() => JSON.stringify(talkTargetIds), [talkTargetIds]);
+  const questProgressKey = useMemo(
+    () => JSON.stringify(props.playerShop?.questProgress ?? {}),
+    [props.playerShop?.questProgress]
+  );
+
+  const autoTaskKeyRef = useRef<string>("");
+  const npcContextIdKey = useMemo(
+    () =>
+      JSON.stringify(
+        Array.from(
+          new Set(
+            [
+              ...(Array.isArray(props.npcContextIds) ? props.npcContextIds : []),
+              boundNpcId,
+              libraryNpcId,
+            ]
+              .map((v) => String(v ?? "").trim().toLowerCase())
+              .filter(Boolean)
+          )
+        )
+      ),
+    [props.npcContextIds, boundNpcId, libraryNpcId]
+  );
 
   useEffect(() => {
     setGearItems(snapshotItems);
@@ -285,6 +332,63 @@ export default function NpcTabsCard(props: {
   useEffect(() => {
     setTrainingTraits([...trainingSnapshotItems, ...trainingActionSnapshotItems, ...trainingUnknownSnapshotItems]);
   }, [trainingSnapshotRaw, trainingActionSnapshotRaw, trainingUnknownSnapshotRaw]);
+  useEffect(() => {
+    let alive = true;
+    async function loadTalkNames() {
+      if (!talkTargetIds.length) {
+        if (alive) setTalkTargetNameMap({});
+        return;
+      }
+      const { data, error } = await supabase
+        .from("npcs")
+        .select("id,name")
+        .in("id", talkTargetIds);
+      if (!alive) return;
+      if (error || !data) {
+        setTalkTargetNameMap({});
+        return;
+      }
+      const map: Record<string, string> = {};
+      for (const row of data as any[]) {
+        const id = String(row?.id ?? "").trim();
+        const name = String(row?.name ?? "").trim();
+        if (id && name) map[id.toLowerCase()] = name;
+      }
+      setTalkTargetNameMap(map);
+    }
+    void loadTalkNames();
+    return () => {
+      alive = false;
+    };
+  }, [supabase, talkTargetIdsKey]);
+
+  useEffect(() => {
+    const onQuestTask = props.playerShop?.onQuestTask;
+    const questProgress = props.playerShop?.questProgress ?? {};
+    if (!onQuestTask) return;
+    const npcTargets = new Set<string>(
+      (JSON.parse(npcContextIdKey || "[]") as string[]).map((v) => String(v).toLowerCase())
+    );
+    if (!npcTargets.size) return;
+
+    for (const quest of questDefs) {
+      const progress = questProgress[quest.id];
+      const status = progress?.status ?? "available";
+      if (status !== "active" && status !== "completed") continue;
+      const completed = new Set((progress?.completedTaskIds ?? []).map((v) => String(v)));
+      for (const task of quest.tasks) {
+        if (task.kind !== "talk_to_npc") continue;
+        if (completed.has(task.id)) continue;
+        const target = String(task.targetNpcBlockId ?? "").trim().toLowerCase();
+        if (!target || !npcTargets.has(target)) continue;
+        const key = `${quest.id}:${task.id}:${target}`;
+        if (autoTaskKeyRef.current === key) return;
+        autoTaskKeyRef.current = key;
+        void onQuestTask(quest, task);
+        return;
+      }
+    }
+  }, [questDefsRaw, npcContextIdKey, props.playerShop?.onQuestTask, questProgressKey]);
 
   useEffect(() => {
     let alive = true;
@@ -553,8 +657,15 @@ export default function NpcTabsCard(props: {
                       return (
                         <div key={task.id} className="flex items-center justify-between gap-2 rounded border border-neutral-800 px-2 py-1">
                           <div className={["text-xs", done ? "text-emerald-200" : "text-neutral-300"].join(" ")}>
-                            <span className="mr-1">{done ? "✓" : "○"}</span>
-                            {task.title}
+                            <span className="mr-1">{done ? "âœ“" : "â—‹"}</span>
+                            {task.kind === "talk_to_npc"
+                              ? (() => {
+                                  const target = String(task.targetNpcBlockId ?? "").trim().toLowerCase();
+                                  const fallbackName = target ? talkTargetNameMap[target] : "";
+                                  const name = task.targetNpcName || fallbackName;
+                                  return name ? `Talk to ${name}` : task.title;
+                                })()
+                              : task.title}
                             {task.kind === "talk_to_npc" ? (
                               <span className="ml-2 text-[10px] uppercase text-neutral-400">Talk</span>
                             ) : null}
@@ -621,3 +732,4 @@ export default function NpcTabsCard(props: {
     </div>
   );
 }
+
