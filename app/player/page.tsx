@@ -526,9 +526,13 @@ export default async function PlayerPage() {
                       ? `Talk to ${npcName}`
                       : `Talk to NPC (${targetNpcId.slice(0, 8)}...)`
                     : id;
+                const resolvedTitle =
+                  kind === "talk_to_npc" && npcName
+                    ? `Talk to ${npcName}`
+                    : String(t?.title ?? "").trim() || fallbackTitle;
                 return {
                   id,
-                  title: String(t?.title ?? "").trim() || fallbackTitle,
+                  title: resolvedTitle,
                   kind,
                   target_npc_block_id: targetNpcId || null,
                   target_npc_name: npcName || null,
