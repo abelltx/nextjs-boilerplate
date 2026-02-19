@@ -443,7 +443,7 @@ export default async function PlayerPage() {
             .filter(([id, name]) => Boolean(id && name))
         );
       }
-      // Also resolve cases where task target uses episode_block_id (legacy/current talk task format).
+      // Resolve cases where task target uses episode_block_id.
       const { data: bindingRows, error: bindErr } = await supabase
         .from("episode_npc_bindings")
         .select("episode_block_id,npc_id")

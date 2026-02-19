@@ -151,9 +151,6 @@ export default function NpcTabsEditorClient(props: {
   const [linkedNpcId, setLinkedNpcId] = useState<string>(() =>
     String(props.initialMeta?.npc_library?.npc_id ?? "").trim()
   );
-  const [createNpcFromBlock, setCreateNpcFromBlock] = useState<boolean>(() =>
-    Boolean(props.initialMeta?.npc_binding?.create_from_block)
-  );
   const showLibraryLink = props.showLibraryLink !== false;
   const showAdvancedMeta = props.showAdvancedMeta !== false;
   const safeItemOptions = useMemo(
@@ -384,11 +381,7 @@ export default function NpcTabsEditorClient(props: {
                   binding_id: String(props.initialMeta?.npc_binding?.binding_id ?? "").trim() || null,
                   npc_id: linkedNpc.id,
                 }
-              : createNpcFromBlock
-                ? {
-                    create_from_block: true,
-                  }
-                : null,
+              : null,
             npc_library: linkedNpc
               ? {
                   npc_id: linkedNpc.id,
@@ -415,7 +408,6 @@ export default function NpcTabsEditorClient(props: {
   }, [
     actionMap,
     actionTrainingSnapshots,
-    createNpcFromBlock,
     extraMeta,
     gearIds,
     itemSnapshots,
@@ -461,16 +453,6 @@ export default function NpcTabsEditorClient(props: {
               </option>
             ))}
           </select>
-          {!linkedNpc ? (
-            <label className="flex items-center gap-2 text-xs text-gray-700">
-              <input
-                type="checkbox"
-                checked={createNpcFromBlock}
-                onChange={(e) => setCreateNpcFromBlock(e.currentTarget.checked)}
-              />
-              Create a new library NPC from this block on save (for legacy inline NPCs)
-            </label>
-          ) : null}
           {linkedNpc ? (
             <div className="rounded border bg-gray-50 px-2 py-2 text-xs text-gray-700">
               <div className="font-semibold">{linkedNpc.name}</div>

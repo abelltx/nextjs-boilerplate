@@ -91,26 +91,6 @@ async function upsertNpcBindingForBlock(input: {
   const meta = { ...(input.meta ?? {}) } as Record<string, any>;
   const bindingMeta = (meta.npc_binding ?? {}) as Record<string, any>;
   let npcId = String(bindingMeta.npc_id ?? meta?.npc_library?.npc_id ?? "").trim();
-  const createFromBlock = Boolean(bindingMeta.create_from_block);
-
-  if (!npcId && createFromBlock) {
-    const adminClient = createAdminClient() ?? supabase;
-    const { data: createdNpc, error: createNpcErr } = await adminClient
-      .from("npcs")
-      .insert({
-        name: String(input.title ?? "NPC").trim() || "NPC",
-        description: String(input.body ?? "").trim() || null,
-        default_role: "neutral",
-        npc_type: "human",
-      })
-      .select("id,name,description,image_base_path,image_updated_at")
-      .single();
-    if (!createNpcErr && createdNpc?.id) {
-      npcId = String(createdNpc.id);
-    } else if (createNpcErr) {
-      throw new Error(`Failed to create library NPC: ${createNpcErr.message}`);
-    }
-  }
 
   if (!isUuid(npcId)) {
     delete meta.npc_binding;
