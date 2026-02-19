@@ -69,6 +69,21 @@ async function resolveNpcBlock(
     .select("id,name,description,image_base_path,image_updated_at")
     .eq("id", npcId)
     .maybeSingle();
+  let runtimeTabs: Record<string, any> = {};
+  const runtimeQuery = await supabase
+    .from("npc_runtime_configs")
+    .select("meta_json")
+    .eq("npc_id", npcId)
+    .maybeSingle();
+  if (runtimeQuery?.error && !isMissingRelationError(runtimeQuery.error, "npc_runtime_configs")) {
+    console.error("resolveNpcBlock runtime config load failed:", runtimeQuery.error.message);
+  }
+  if (runtimeQuery?.data && typeof (runtimeQuery.data as any)?.meta_json === "object") {
+    const maybeTabs = (runtimeQuery.data as any).meta_json?.npc_tabs;
+    if (maybeTabs && typeof maybeTabs === "object") {
+      runtimeTabs = maybeTabs as Record<string, any>;
+    }
+  }
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
   const npcMediumUrl =
     npc?.image_base_path && supabaseUrl
@@ -80,8 +95,8 @@ async function resolveNpcBlock(
       ? bindingRow.tab_overrides_json
       : null;
   const mergedNpcTabs = bindingTabs
-    ? { ...(meta?.npc_tabs ?? {}), ...(bindingTabs ?? {}) }
-    : (meta?.npc_tabs ?? {});
+    ? { ...(meta?.npc_tabs ?? {}), ...runtimeTabs, ...(bindingTabs ?? {}) }
+    : { ...(meta?.npc_tabs ?? {}), ...runtimeTabs };
   const questsOverride = Array.isArray(bindingRow?.quests_override_json) ? bindingRow.quests_override_json : null;
   if (questsOverride) {
     const questsPrev = (mergedNpcTabs?.quests ?? {}) as Record<string, any>;

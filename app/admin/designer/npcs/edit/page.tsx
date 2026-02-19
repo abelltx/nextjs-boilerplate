@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getNpcById } from "@/lib/designer/npcs";
 import { updateNpcAction, archiveNpcAction } from "@/app/actions/npcs";
@@ -10,6 +10,9 @@ import SaveBar from "@/components/ui/SaveBar";
 import { listTraits, getNpcTraitIds, getNpcPassives } from "@/lib/designer/traits";
 import { listActions, getNpcActionIds, getNpcEffectiveActions } from "@/lib/designer/actions";
 import NpcTraitActionPicker from "@/components/designer/npcs/NpcTraitActionPicker";
+import NpcTabsEditorClient from "@/app/admin/episodes/[id]/NpcTabsEditorClient";
+import { createClient } from "@/utils/supabase/server";
+import { saveNpcRuntimeConfigAction } from "@/app/actions/npcRuntime";
 
 
 export const dynamic = "force-dynamic";
@@ -75,6 +78,8 @@ let selectedTraitIds: string[] = [];
 let selectedActionIds: string[] = [];
 let passives: any[] = [];
 let effectiveActions: any[] = [];
+let itemOptions: any[] = [];
+let runtimeMeta: any = { npc_tabs: {} };
 
 try {
   [
@@ -92,6 +97,13 @@ try {
     getNpcPassives(npcId),
     getNpcEffectiveActions(npcId),
   ]);
+  const supabase = await createClient();
+  const [{ data: items }, { data: runtime }] = await Promise.all([
+    supabase.from("items").select("id,name,faith_required,is_active").eq("is_active", true).order("name", { ascending: true }),
+    supabase.from("npc_runtime_configs").select("meta_json").eq("npc_id", npcId).maybeSingle(),
+  ]);
+  itemOptions = items ?? [];
+  runtimeMeta = (runtime as any)?.meta_json ?? { npc_tabs: {} };
 } catch (err) {
   console.error("Failed to load traits/actions for NPC", err);
 }
@@ -110,6 +122,10 @@ try {
   async function archive() {
     "use server";
     await archiveNpcAction(npcId);
+  }
+  async function saveRuntime(formData: FormData) {
+    "use server";
+    await saveNpcRuntimeConfigAction(npcId, formData);
   }
 
   return (
@@ -210,7 +226,7 @@ try {
   <div>
     <h2 className="font-semibold">Traits & Actions</h2>
     <p className="text-sm text-muted-foreground">
-      Choose from the library. “Effective” results come from your views.
+      Choose from the library. Effective results come from your views.
     </p>
   </div>
 
@@ -314,7 +330,31 @@ try {
   </div>
 </div>
 
+<div className="border rounded-xl p-4 space-y-4">
+  <div>
+    <h2 className="font-semibold">Player Runtime (Tabs, Quests, Gear, Training)</h2>
+    <p className="text-sm text-muted-foreground">
+      Configure this NPC once here. Episode scenes should only link/select the NPC.
+    </p>
+  </div>
+  <form action={saveRuntime} className="space-y-3">
+    <NpcTabsEditorClient
+      initialMeta={runtimeMeta}
+      fallbackInfo={npc.description ?? ""}
+      itemOptions={itemOptions}
+      traitOptions={allTraits.map((t: any) => ({ id: t.id, name: t.name, is_active: !t.is_archived }))}
+      actionOptions={allActions.map((a: any) => ({ id: a.id, name: a.name, is_active: !a.is_archived }))}
+      showLibraryLink={false}
+      showAdvancedMeta={false}
+    />
+    <button className="rounded-lg border px-3 py-2 text-sm hover:bg-muted/40" type="submit">
+      Save Runtime Config
+    </button>
+  </form>
+</div>
+
 
     </div>
   );
 }
+

@@ -1256,6 +1256,8 @@ export default async function AdminEpisodeEditPage({
                               actionOptions={(actionOptions ?? []) as any[]}
                               npcOptions={npcOptions as any[]}
                               returnTo={`/admin/episodes/${episode.id}#block-${b.id}`}
+                              libraryOnly
+                              showAdvancedMeta={false}
                             />
                           ) : (
                             <textarea

@@ -89,6 +89,9 @@ export default function NpcTabsEditorClient(props: {
     designer_url?: string | null;
   }>;
   returnTo?: string;
+  libraryOnly?: boolean;
+  showLibraryLink?: boolean;
+  showAdvancedMeta?: boolean;
 }) {
   const rawTabs = (props.initialMeta?.npc_tabs ?? {}) as Record<string, any>;
   const [tabs, setTabs] = useState<Record<TabKey, { enabled: boolean; content: string }>>({
@@ -143,6 +146,8 @@ export default function NpcTabsEditorClient(props: {
   const [createNpcFromBlock, setCreateNpcFromBlock] = useState<boolean>(() =>
     Boolean(props.initialMeta?.npc_binding?.create_from_block)
   );
+  const showLibraryLink = props.showLibraryLink !== false;
+  const showAdvancedMeta = props.showAdvancedMeta !== false;
   const safeItemOptions = useMemo(
     () =>
       (props.itemOptions ?? []).map((it: any) => ({
@@ -336,10 +341,9 @@ export default function NpcTabsEditorClient(props: {
 
   const metaJson = useMemo(() => {
     try {
-      return JSON.stringify(
-        {
-          ...extraMeta,
-          npc_tabs: {
+      const npcTabsPayload = props.libraryOnly
+        ? null
+        : {
             ...tabs,
             gear: {
               ...tabs.gear,
@@ -359,6 +363,9 @@ export default function NpcTabsEditorClient(props: {
               ...tabs.quests,
               quest_defs: questDefs,
             },
+          };
+      const libraryPayload = showLibraryLink
+        ? {
             npc_binding: linkedNpc
               ? {
                   binding_id: String(props.initialMeta?.npc_binding?.binding_id ?? "").trim() || null,
@@ -378,7 +385,13 @@ export default function NpcTabsEditorClient(props: {
                   designer_url: linkedNpc.designer_url ?? null,
                 }
               : null,
-          },
+          }
+        : {};
+      return JSON.stringify(
+        {
+          ...extraMeta,
+          ...(npcTabsPayload ? { npc_tabs: npcTabsPayload } : {}),
+          ...libraryPayload,
         },
         null,
         2
@@ -389,23 +402,35 @@ export default function NpcTabsEditorClient(props: {
   }, [
     actionMap,
     actionTrainingSnapshots,
+    createNpcFromBlock,
     extraMeta,
     gearIds,
     itemSnapshots,
+    linkedNpc,
     questDefs,
+    showLibraryLink,
     tabs,
     traitMap,
     trainingIds,
     trainingSnapshots,
     unknownTrainingSnapshots,
+    props.initialMeta,
+    props.libraryOnly,
   ]);
 
   return (
     <div className="space-y-2 rounded-lg border p-2">
-      <div className="text-xs uppercase text-gray-500">NPC Tabs</div>
-      <div className="text-xs text-gray-600">Enable only the tabs you need for this NPC.</div>
+      <div className="text-xs uppercase text-gray-500">
+        {props.libraryOnly ? "NPC Library Link" : "NPC Tabs"}
+      </div>
+      <div className="text-xs text-gray-600">
+        {props.libraryOnly
+          ? "Link this scene NPC to a library NPC. Configure quests/gear/training in NPC Designer."
+          : "Enable only the tabs you need for this NPC."}
+      </div>
 
       <div className="space-y-2">
+        {showLibraryLink ? (
         <div className="rounded border p-2 space-y-2">
           <div className="text-sm font-semibold">NPC Library Link</div>
           <div className="text-xs text-gray-600">
@@ -465,7 +490,8 @@ export default function NpcTabsEditorClient(props: {
             </div>
           ) : null}
         </div>
-        {KEYS.map((k) => (
+        ) : null}
+        {props.libraryOnly ? null : KEYS.map((k) => (
           <div key={k} className="rounded border p-2">
             <label className="flex items-center gap-2 text-sm font-semibold">
               <input
@@ -817,10 +843,12 @@ export default function NpcTabsEditorClient(props: {
       </div>
 
       <input type="hidden" name="meta_json" value={metaJson} />
+      {showAdvancedMeta ? (
       <details>
         <summary className="cursor-pointer text-xs text-gray-600">Advanced: raw meta JSON</summary>
         <pre className="mt-1 max-h-40 overflow-auto rounded border bg-gray-50 p-2 text-[11px]">{metaJson}</pre>
       </details>
+      ) : null}
     </div>
   );
 }

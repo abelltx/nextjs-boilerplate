@@ -94,7 +94,8 @@ async function upsertNpcBindingForBlock(input: {
   const createFromBlock = Boolean(bindingMeta.create_from_block);
 
   if (!npcId && createFromBlock) {
-    const { data: createdNpc, error: createNpcErr } = await supabase
+    const adminClient = createAdminClient() ?? supabase;
+    const { data: createdNpc, error: createNpcErr } = await adminClient
       .from("npcs")
       .insert({
         name: String(input.title ?? "NPC").trim() || "NPC",
@@ -107,17 +108,19 @@ async function upsertNpcBindingForBlock(input: {
     if (!createNpcErr && createdNpc?.id) {
       npcId = String(createdNpc.id);
     } else if (createNpcErr) {
-      console.error("Failed to auto-create NPC from block:", createNpcErr.message);
+      throw new Error(`Failed to create library NPC: ${createNpcErr.message}`);
     }
   }
 
   if (!isUuid(npcId)) {
     delete meta.npc_binding;
+    delete meta.npc_library;
     return meta;
   }
 
-  const tabOverrides = (meta?.npc_tabs ?? {}) as Record<string, any>;
-  const questsOverrides = Array.isArray(tabOverrides?.quests?.quest_defs) ? tabOverrides.quests.quest_defs : [];
+  // Episode editor is now link-only for NPCs; runtime tabs live in NPC Designer.
+  const tabOverrides = {} as Record<string, any>;
+  const questsOverrides: any[] = [];
 
   const { data: binding, error: bindErr } = await supabase
     .from("episode_npc_bindings")
@@ -166,6 +169,8 @@ async function upsertNpcBindingForBlock(input: {
     image_url: mediumUrl,
     designer_url: `/admin/designer/npcs/edit?id=${encodeURIComponent(npcId)}`,
   };
+  // Clear legacy inline tab payload from episode blocks to prevent stale overrides.
+  delete meta.npc_tabs;
   return meta;
 }
 
