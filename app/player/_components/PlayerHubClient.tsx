@@ -134,6 +134,8 @@ export default function PlayerHubClient(props: {
     status: "available" | "active" | "completed" | "claimed";
     completedTaskIds: string[];
     claimedAt?: string | null;
+    tasks?: Array<{ id: string; title: string; kind?: string }>;
+    rewards?: { faith?: number; itemIds?: string[] };
   }>;
 }) {
   const [tab, setTab] = useState<TabKey>("inventory");
@@ -419,6 +421,13 @@ export default function PlayerHubClient(props: {
         questId: String(quest.id ?? ""),
         questTitle: String(quest.title ?? ""),
         taskIds: Array.isArray(quest.tasks) ? quest.tasks.map((t) => String(t?.id ?? "").trim()).filter(Boolean) : [],
+        taskDefs: Array.isArray(quest.tasks)
+          ? quest.tasks.map((t: any) => ({
+              id: String(t?.id ?? "").trim(),
+              title: String(t?.title ?? "").trim(),
+              kind: String(t?.kind ?? "").trim().toLowerCase() || "task",
+            }))
+          : [],
         rewardFaith: Number(quest.rewards?.faith ?? 0),
         rewardItemIds: Array.isArray(quest.rewards?.itemIds) ? quest.rewards?.itemIds : [],
       });
@@ -621,7 +630,24 @@ export default function PlayerHubClient(props: {
               {tab === "inventory" ? (
                 <PlayerInventoryPanel characterId={props.character.id} />
               ) : tab === "quests" ? (
-                <QuestListPanel entries={props.questEntries ?? []} />
+                <QuestListPanel
+                  entries={props.questEntries ?? []}
+                  claimingQuestId={claimingQuestId}
+                  onTaskDone={(entry, task) =>
+                    handleCompleteNpcQuestTask(
+                      { id: entry.questId, title: entry.title, tasks: (entry.tasks ?? []).map((t) => ({ id: t.id })) },
+                      { id: task.id }
+                    )
+                  }
+                  onClaim={(entry) =>
+                    handleClaimNpcQuestRewards({
+                      id: entry.questId,
+                      title: entry.title,
+                      tasks: (entry.tasks ?? []).map((t) => ({ id: t.id })),
+                      rewards: { faith: Number(entry.rewards?.faith ?? 0), itemIds: entry.rewards?.itemIds ?? [] },
+                    })
+                  }
+                />
               ) : tab === "journey" ? (
                 <div>
                   <div className="text-sm font-semibold">Journal</div>
@@ -711,7 +737,31 @@ function QuestListPanel(props: {
     status: "available" | "active" | "completed" | "claimed";
     completedTaskIds: string[];
     claimedAt?: string | null;
+    tasks?: Array<{ id: string; title: string; kind?: string }>;
+    rewards?: { faith?: number; itemIds?: string[] };
   }>;
+  claimingQuestId?: string | null;
+  onTaskDone?: (
+    entry: {
+      questId: string;
+      title: string;
+      status: "available" | "active" | "completed" | "claimed";
+      completedTaskIds: string[];
+      claimedAt?: string | null;
+      tasks?: Array<{ id: string; title: string; kind?: string }>;
+      rewards?: { faith?: number; itemIds?: string[] };
+    },
+    task: { id: string; title: string; kind?: string }
+  ) => void | Promise<void>;
+  onClaim?: (entry: {
+    questId: string;
+    title: string;
+    status: "available" | "active" | "completed" | "claimed";
+    completedTaskIds: string[];
+    claimedAt?: string | null;
+    tasks?: Array<{ id: string; title: string; kind?: string }>;
+    rewards?: { faith?: number; itemIds?: string[] };
+  }) => void | Promise<void>;
 }) {
   const active = props.entries.filter((q) => q.status === "active" || q.status === "completed");
   const done = props.entries.filter((q) => q.status === "claimed");
@@ -739,9 +789,44 @@ function QuestListPanel(props: {
                 </span>
               </div>
               <div className="mt-1 text-xs text-neutral-400 font-mono">{q.questId}</div>
-              <div className="mt-2 text-xs text-neutral-300">
-                Tasks done: {q.completedTaskIds.length}
+              <div className="mt-2 space-y-1">
+                {(q.tasks ?? []).map((task) => {
+                  const doneTask = (q.completedTaskIds ?? []).includes(task.id);
+                  return (
+                    <div key={task.id} className="flex items-center justify-between gap-2 rounded border border-neutral-800 px-2 py-1">
+                      <div className={["text-xs", doneTask ? "text-emerald-300" : "text-neutral-300"].join(" ")}>
+                        <span className="mr-1">{doneTask ? "✓" : "○"}</span>
+                        {task.title}
+                      </div>
+                      {!doneTask && q.status !== "claimed" ? (
+                        <button
+                          type="button"
+                          className="rounded border border-neutral-700 px-2 py-0.5 text-[11px] hover:bg-neutral-900 disabled:opacity-50"
+                          disabled={props.claimingQuestId === q.questId}
+                          onClick={() => props.onTaskDone?.(q, task)}
+                        >
+                          {props.claimingQuestId === q.questId ? "Saving..." : "Done"}
+                        </button>
+                      ) : null}
+                    </div>
+                  );
+                })}
+                <div className="text-xs text-neutral-400">
+                  Tasks done: {q.completedTaskIds.length}/{(q.tasks ?? []).length || 0}
+                </div>
               </div>
+              {q.status === "completed" ? (
+                <div className="mt-2 flex justify-end">
+                  <button
+                    type="button"
+                    className="rounded border border-emerald-500/60 bg-emerald-500/20 px-2 py-1 text-xs text-emerald-100 hover:bg-emerald-500/30 disabled:opacity-50"
+                    disabled={props.claimingQuestId === q.questId}
+                    onClick={() => props.onClaim?.(q)}
+                  >
+                    {props.claimingQuestId === q.questId ? "Claiming..." : "Claim Rewards"}
+                  </button>
+                </div>
+              ) : null}
             </div>
           ))
         ) : (

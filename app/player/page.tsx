@@ -46,6 +46,7 @@ type QuestProgressRow = {
   status: string | null;
   completed_task_ids: string[] | null;
   claimed_at: string | null;
+  reward_meta?: any;
 };
 
 function n(v: unknown, fallback = 0) {
@@ -401,10 +402,12 @@ export default async function PlayerPage() {
     status: "available" | "active" | "completed" | "claimed";
     completedTaskIds: string[];
     claimedAt?: string | null;
+    tasks?: Array<{ id: string; title: string; kind?: string }>;
+    rewards?: { faith?: number; itemIds?: string[] };
   }> = [];
   const { data: questProgressRows, error: questProgressErr } = await supabase
     .from("player_quest_progress")
-    .select("quest_id,quest_title,status,completed_task_ids,claimed_at,created_at")
+    .select("quest_id,quest_title,status,completed_task_ids,claimed_at,reward_meta,created_at")
     .eq("character_id", character.id);
   if (questProgressErr) {
     // Never block /player render for optional quest-progress data.
@@ -433,6 +436,29 @@ export default async function PlayerPage() {
           ? row.completed_task_ids.map((v) => String(v ?? "").trim()).filter(Boolean)
           : [],
         claimedAt: row.claimed_at ?? null,
+        tasks: Array.isArray((row as any)?.reward_meta?.task_defs)
+          ? (row as any).reward_meta.task_defs
+              .map((t: any) => ({
+                id: String(t?.id ?? "").trim(),
+                title: String(t?.title ?? "").trim() || String(t?.id ?? "").trim(),
+                kind: String(t?.kind ?? "").trim().toLowerCase() || "task",
+              }))
+              .filter((t: any) => t.id.length > 0)
+          : Array.isArray((row as any)?.reward_meta?.task_ids)
+            ? (row as any).reward_meta.task_ids
+                .map((id: any) => ({
+                  id: String(id ?? "").trim(),
+                  title: String(id ?? "").trim(),
+                  kind: "task",
+                }))
+                .filter((t: any) => t.id.length > 0)
+            : [],
+        rewards: {
+          faith: Math.max(0, Number((row as any)?.reward_meta?.faith ?? 0) || 0),
+          itemIds: Array.isArray((row as any)?.reward_meta?.item_ids)
+            ? (row as any).reward_meta.item_ids.map((v: any) => String(v ?? "").trim()).filter(Boolean)
+            : [],
+        },
       });
     }
   }

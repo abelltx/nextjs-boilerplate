@@ -377,6 +377,7 @@ export async function startNpcQuestAction(input: {
   questId: string;
   questTitle?: string;
   taskIds?: string[];
+  taskDefs?: Array<{ id: string; title?: string; kind?: string }>;
   rewardFaith?: number;
   rewardItemIds?: string[];
 }): Promise<{ ok: boolean; status?: string; error?: string }> {
@@ -394,6 +395,15 @@ export async function startNpcQuestAction(input: {
   if (!owner.ok) return { ok: false, error: owner.error };
 
   const taskIds = cleanQuestTaskIds(input.taskIds);
+  const taskDefs = Array.isArray(input.taskDefs)
+    ? input.taskDefs
+        .map((t: any) => ({
+          id: String(t?.id ?? "").trim(),
+          title: String(t?.title ?? "").trim(),
+          kind: String(t?.kind ?? "").trim().toLowerCase() || "task",
+        }))
+        .filter((t) => t.id.length > 0)
+    : [];
   const rewardItemIds = Array.from(
     new Set(
       (Array.isArray(input.rewardItemIds) ? input.rewardItemIds : [])
@@ -429,6 +439,7 @@ export async function startNpcQuestAction(input: {
       faith: rewardFaith,
       item_ids: rewardItemIds,
       task_ids: taskIds,
+      task_defs: taskDefs,
     },
   });
   if (insErr) {
