@@ -411,6 +411,7 @@ export default async function PlayerPage() {
     claimedAt?: string | null;
     tasks?: Array<QuestTaskView>;
     rewards?: { faith?: number; itemIds?: string[] };
+    storytellerControlled?: boolean;
   }> = [];
   const { data: questProgressRows, error: questProgressErr } = await supabase
     .from("player_quest_progress")
@@ -554,6 +555,7 @@ export default async function PlayerPage() {
             ? (row as any).reward_meta.item_ids.map((v: any) => String(v ?? "").trim()).filter(Boolean)
             : [],
         },
+        storytellerControlled: Boolean((row as any)?.reward_meta?.storyteller_controlled),
       });
     }
   }

@@ -384,6 +384,7 @@ export async function startNpcQuestAction(input: {
     target_npc_block_id?: string | null;
     target_npc_name?: string | null;
   }>;
+  storytellerControlled?: boolean;
   rewardFaith?: number;
   rewardItemIds?: string[];
 }): Promise<{ ok: boolean; status?: string; error?: string }> {
@@ -420,6 +421,10 @@ export async function startNpcQuestAction(input: {
     )
   ).slice(0, 25);
   const rewardFaith = Math.max(0, Math.min(100, Math.floor(Number(input.rewardFaith ?? 0) || 0)));
+  const storytellerControlled = Boolean(input.storytellerControlled);
+  if (storytellerControlled) {
+    return { ok: false, error: "Storyteller will assign this quest." };
+  }
 
   const { data: existing, error: exErr } = await supabase
     .from("player_quest_progress")
@@ -448,6 +453,7 @@ export async function startNpcQuestAction(input: {
       item_ids: rewardItemIds,
       task_ids: taskIds,
       task_defs: taskDefs,
+      storyteller_controlled: storytellerControlled,
     },
   });
   if (insErr) {
@@ -504,6 +510,10 @@ export async function completeNpcQuestTaskAction(input: {
   }
 
   const currentDone = Array.isArray((row as any)?.completed_task_ids) ? (row as any).completed_task_ids : [];
+  const storytellerControlled = Boolean((row as any)?.reward_meta?.storyteller_controlled);
+  if (storytellerControlled) {
+    return { ok: false, error: "Storyteller controls this quest's progress." };
+  }
   const nextDone = Array.from(new Set([...currentDone.map((v: any) => String(v)), taskId]));
   const isCompleted = allTaskIds.length > 0 && allTaskIds.every((id) => nextDone.includes(id));
   const nextStatus = (row as any)?.status === "claimed" ? "claimed" : isCompleted ? "completed" : "active";

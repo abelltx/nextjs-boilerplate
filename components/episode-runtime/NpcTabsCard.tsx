@@ -44,6 +44,7 @@ type QuestDef = {
   id: string;
   title: string;
   directions: string;
+  storytellerControlled?: boolean;
   tasks: QuestTask[];
   rewards: QuestReward;
 };
@@ -58,6 +59,7 @@ export default function NpcTabsCard(props: {
   fallbackInfo?: string | null;
   imageUrl?: string | null;
   embedded?: boolean;
+  hideInformationText?: boolean;
   npcContextIds?: string[];
   playerShop?: {
     characterId?: string;
@@ -86,7 +88,9 @@ export default function NpcTabsCard(props: {
     const base: Record<TabKey, { enabled: boolean; content: string }> = {
       information: {
         enabled: raw?.information?.enabled !== false,
-        content: String(raw?.information?.content ?? mergedFallbackInfo ?? "").trim(),
+        content: props.hideInformationText
+          ? ""
+          : String(raw?.information?.content ?? mergedFallbackInfo ?? "").trim(),
       },
       gear: {
         enabled: Boolean(raw?.gear?.enabled),
@@ -109,7 +113,7 @@ export default function NpcTabsCard(props: {
       return [{ key: "image" as RuntimeTabKey, label: "Image", content: "" }, ...coreTabs];
     }
     return coreTabs;
-  }, [props.meta, mergedFallbackInfo, mergedImageUrl]);
+  }, [props.meta, mergedFallbackInfo, mergedImageUrl, props.hideInformationText]);
 
   const [active, setActive] = useState<RuntimeTabKey>(
     (tabs.find((t) => t.key === "information")?.key ?? tabs[0]?.key ?? "information") as RuntimeTabKey
@@ -278,6 +282,7 @@ export default function NpcTabsCard(props: {
           id: questId,
           title,
           directions,
+          storytellerControlled: Boolean(q?.storyteller_controlled),
           tasks,
           rewards: {
             faith: Math.max(0, Number(rewards?.faith ?? 0) || 0),
@@ -372,6 +377,7 @@ export default function NpcTabsCard(props: {
     if (!npcTargets.size) return;
 
     for (const quest of questDefs) {
+      if (Boolean(quest.storytellerControlled)) continue;
       const progress = questProgress[quest.id];
       const status = progress?.status ?? "available";
       if (status !== "active" && status !== "completed") continue;
@@ -614,6 +620,7 @@ export default function NpcTabsCard(props: {
           {questDefs.map((quest) => {
             const progress = questProgress[quest.id];
             const status = String(progress?.status ?? "available").toLowerCase() as QuestProgress["status"];
+            const storytellerControlled = Boolean(quest.storytellerControlled);
             const completedSet = new Set((progress?.completedTaskIds ?? []).map((id) => String(id).trim()));
             const allTasksDone = quest.tasks.length > 0 && quest.tasks.every((t) => completedSet.has(t.id));
             const claimable = status === "completed" || (status === "active" && allTasksDone);
@@ -644,6 +651,9 @@ export default function NpcTabsCard(props: {
                   </div>
                 </div>
                 {quest.directions ? <div className="mt-1 text-xs text-neutral-300">{quest.directions}</div> : null}
+                {storytellerControlled ? (
+                  <div className="mt-1 text-[11px] text-amber-300">Progress controlled by storyteller.</div>
+                ) : null}
 
                 {quest.tasks.length ? (
                   <div className="mt-2 space-y-1">
@@ -652,6 +662,7 @@ export default function NpcTabsCard(props: {
                       const canMark =
                         !done &&
                         (status === "active" || status === "completed") &&
+                        !storytellerControlled &&
                         props.playerShop?.onQuestTask &&
                         props.playerShop?.claimingQuestId !== quest.id;
                       return (
@@ -705,7 +716,7 @@ export default function NpcTabsCard(props: {
                     <button
                       type="button"
                       className="rounded border border-neutral-700 px-2 py-1 text-xs hover:bg-neutral-900 disabled:opacity-50 disabled:cursor-not-allowed"
-                      disabled={props.playerShop?.claimingQuestId === quest.id || !props.playerShop?.onQuestStart}
+                      disabled={storytellerControlled || props.playerShop?.claimingQuestId === quest.id || !props.playerShop?.onQuestStart}
                       onClick={() => props.playerShop?.onQuestStart?.(quest)}
                     >
                       {props.playerShop?.claimingQuestId === quest.id ? "Starting..." : "Start Quest"}
@@ -726,6 +737,8 @@ export default function NpcTabsCard(props: {
             );
           })}
         </div>
+      ) : activeTab.key === "information" && props.hideInformationText ? (
+        <div className="mt-3 text-sm text-neutral-300">Listen to the storyteller for this NPC dialogue.</div>
       ) : (
         <div className="mt-3 whitespace-pre-wrap text-sm text-neutral-200">{activeTab.content}</div>
       )}

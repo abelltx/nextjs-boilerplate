@@ -136,6 +136,7 @@ export default function PlayerHubClient(props: {
     claimedAt?: string | null;
     tasks?: Array<{ id: string; title: string; kind?: string; target_npc_name?: string | null; target_npc_block_id?: string | null }>;
     rewards?: { faith?: number; itemIds?: string[] };
+    storytellerControlled?: boolean;
   }>;
 }) {
   const [tab, setTab] = useState<TabKey>("inventory");
@@ -412,6 +413,7 @@ export default function PlayerHubClient(props: {
     title: string;
     tasks?: Array<{ id: string; title?: string; kind?: string; targetNpcBlockId?: string | null; targetNpcName?: string | null }>;
     rewards?: { faith?: number; itemIds?: string[] };
+    storytellerControlled?: boolean;
   }) {
     if (claimingQuestId) return;
     setClaimingQuestId(quest.id);
@@ -432,6 +434,7 @@ export default function PlayerHubClient(props: {
           : [],
         rewardFaith: Number(quest.rewards?.faith ?? 0),
         rewardItemIds: Array.isArray(quest.rewards?.itemIds) ? quest.rewards?.itemIds : [],
+        storytellerControlled: Boolean(quest.storytellerControlled),
       });
       if (!res.ok) {
         alert(res.error ?? "Could not start quest.");
@@ -741,6 +744,7 @@ function QuestListPanel(props: {
     claimedAt?: string | null;
     tasks?: Array<{ id: string; title: string; kind?: string; target_npc_name?: string | null; target_npc_block_id?: string | null }>;
     rewards?: { faith?: number; itemIds?: string[] };
+    storytellerControlled?: boolean;
   }>;
   claimingQuestId?: string | null;
   onTaskDone?: (
@@ -752,6 +756,7 @@ function QuestListPanel(props: {
       claimedAt?: string | null;
       tasks?: Array<{ id: string; title: string; kind?: string; target_npc_name?: string | null; target_npc_block_id?: string | null }>;
       rewards?: { faith?: number; itemIds?: string[] };
+      storytellerControlled?: boolean;
     },
     task: { id: string; title: string; kind?: string; target_npc_name?: string | null; target_npc_block_id?: string | null }
   ) => void | Promise<void>;
@@ -763,6 +768,7 @@ function QuestListPanel(props: {
     claimedAt?: string | null;
     tasks?: Array<{ id: string; title: string; kind?: string; target_npc_name?: string | null; target_npc_block_id?: string | null }>;
     rewards?: { faith?: number; itemIds?: string[] };
+    storytellerControlled?: boolean;
   }) => void | Promise<void>;
 }) {
   const active = props.entries.filter((q) => q.status === "active" || q.status === "completed");
@@ -803,6 +809,7 @@ function QuestListPanel(props: {
                           : task.title}
                       </div>
                       {!doneTask && q.status !== "claimed" ? (
+                        q.storytellerControlled ? null : (
                         <button
                           type="button"
                           className="rounded border border-neutral-700 px-2 py-0.5 text-[11px] hover:bg-neutral-900 disabled:opacity-50"
@@ -811,10 +818,14 @@ function QuestListPanel(props: {
                         >
                           {props.claimingQuestId === q.questId ? "Saving..." : "Done"}
                         </button>
+                        )
                       ) : null}
                     </div>
                   );
                 })}
+                {q.storytellerControlled ? (
+                  <div className="text-[11px] text-amber-300">Progress controlled by storyteller.</div>
+                ) : null}
                 <div className="text-xs text-neutral-400">
                   Tasks done: {q.completedTaskIds.length}/{(q.tasks ?? []).length || 0}
                 </div>
@@ -951,6 +962,7 @@ function StagePanel({
                 fallbackInfo={block.body ?? ""}
                 imageUrl={block.image_url ?? null}
                 embedded
+                hideInformationText
                 npcContextIds={[
                   String(block.id ?? ""),
                   String(block.meta?.npc_binding?.npc_id ?? ""),
@@ -993,6 +1005,7 @@ function StagePanel({
                       fallbackInfo={selectedReveal.body ?? ""}
                       imageUrl={selectedReveal.image_url ?? null}
                       embedded
+                      hideInformationText
                       npcContextIds={[
                         String(selectedReveal.id ?? ""),
                         String(selectedReveal.meta?.npc_binding?.npc_id ?? ""),

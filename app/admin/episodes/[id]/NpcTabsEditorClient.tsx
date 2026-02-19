@@ -16,6 +16,7 @@ type QuestDraft = {
   id: string;
   title: string;
   directions: string;
+  storytellerControlled: boolean;
   taskLines: string;
   talkNpcIds: string;
   rewardItemIds: string;
@@ -71,6 +72,7 @@ function parseQuestDrafts(initialMeta: any): QuestDraft[] {
         id: String(raw?.id ?? "").trim() || `quest_${idx + 1}`,
         title: String(raw?.title ?? "").trim() || `Quest ${idx + 1}`,
         directions: String(raw?.directions ?? "").trim(),
+        storytellerControlled: Boolean(raw?.storyteller_controlled),
         taskLines: plainTasks.join("\n"),
         talkNpcIds: npcTasks.join("\n"),
         rewardItemIds: rewardItems.map((v: any) => String(v ?? "").trim()).filter(Boolean).join("\n"),
@@ -188,6 +190,7 @@ export default function NpcTabsEditorClient(props: {
         id: String((q as any)?.id ?? `quest_${idx + 1}`),
         title: String((q as any)?.title ?? `Quest ${idx + 1}`),
         directions: String((q as any)?.directions ?? ""),
+        storytellerControlled: Boolean((q as any)?.storytellerControlled),
         taskLines: String((q as any)?.taskLines ?? ""),
         talkNpcIds: String((q as any)?.talkNpcIds ?? ""),
         rewardItemIds: String((q as any)?.rewardItemIds ?? ""),
@@ -300,6 +303,7 @@ export default function NpcTabsEditorClient(props: {
           const id = toQuestId(q.id) || toQuestId(q.title) || `quest_${idx + 1}`;
           const title = q.title.trim() || `Quest ${idx + 1}`;
           const directions = q.directions.trim();
+          const storytellerControlled = Boolean(q.storytellerControlled);
           const taskLines = q.taskLines
             .split(/\r?\n/g)
             .map((v) => v.trim())
@@ -328,6 +332,7 @@ export default function NpcTabsEditorClient(props: {
             id,
             title,
             directions,
+            storyteller_controlled: storytellerControlled,
             tasks,
             rewards: {
               faith: rewardFaith,
@@ -524,6 +529,7 @@ export default function NpcTabsEditorClient(props: {
                           id: `quest_${prev.length + 1}`,
                           title: `Quest ${prev.length + 1}`,
                           directions: "",
+                          storytellerControlled: true,
                           taskLines: "",
                           talkNpcIds: "",
                           rewardItemIds: "",
@@ -599,6 +605,19 @@ export default function NpcTabsEditorClient(props: {
                           }}
                           placeholder="Speak with Gabriel, then check in with the supply table."
                         />
+                      </label>
+                      <label className="flex items-center gap-2 text-xs text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(q.storytellerControlled)}
+                          onChange={(e) => {
+                            const checked = e.currentTarget.checked;
+                            setQuests((prev) =>
+                              prev.map((row, i) => (i === idx ? { ...row, storytellerControlled: checked } : row))
+                            );
+                          }}
+                        />
+                        Storyteller controls start/progress for this quest
                       </label>
 
                       <div className="grid grid-cols-1 gap-2 md:grid-cols-2">

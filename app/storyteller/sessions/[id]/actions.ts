@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 
 /**
  * Loads the DM session, state, and joined players
@@ -97,4 +98,246 @@ export async function updateState(sessionId: string, patch: Record<string, any>)
 
   const { error } = await supabase.from("session_state").update(patch).eq("session_id", sessionId);
   if (error) throw new Error(error.message);
+}
+
+function cleanIds(input: string[] | undefined) {
+  return Array.from(
+    new Set(
+      (Array.isArray(input) ? input : [])
+        .map((v) => String(v ?? "").trim())
+        .filter(Boolean)
+    )
+  );
+}
+
+async function getSessionCharacterTargets(sessionId: string) {
+  const supabase = await createClient();
+  const admin = createAdminClient() ?? supabase;
+  const { data: joins, error: joinsErr } = await supabase
+    .from("session_players")
+    .select("player_id")
+    .eq("session_id", sessionId);
+  if (joinsErr) throw new Error(joinsErr.message);
+  const playerIds = Array.from(
+    new Set((joins ?? []).map((r: any) => String(r?.player_id ?? "").trim()).filter(Boolean))
+  );
+  if (!playerIds.length) return [] as Array<{ playerId: string; characterId: string }>;
+
+  const { data: chars, error: charsErr } = await admin
+    .from("characters")
+    .select("id,user_id,created_at")
+    .in("user_id", playerIds)
+    .order("created_at", { ascending: true });
+  if (charsErr) throw new Error(charsErr.message);
+
+  const firstCharByUser = new Map<string, string>();
+  for (const row of chars ?? []) {
+    const userId = String((row as any)?.user_id ?? "").trim();
+    const charId = String((row as any)?.id ?? "").trim();
+    if (!userId || !charId || firstCharByUser.has(userId)) continue;
+    firstCharByUser.set(userId, charId);
+  }
+  return playerIds
+    .map((playerId) => ({ playerId, characterId: firstCharByUser.get(playerId) ?? "" }))
+    .filter((x) => x.characterId.length > 0);
+}
+
+export async function storytellerAssignQuestToAll(input: {
+  sessionId: string;
+  questId: string;
+  questTitle?: string;
+  taskDefs?: Array<{ id: string; title?: string; kind?: string; target_npc_block_id?: string | null; target_npc_name?: string | null }>;
+  rewardFaith?: number;
+  rewardItemIds?: string[];
+}) {
+  const sessionId = String(input.sessionId ?? "").trim();
+  const questId = String(input.questId ?? "").trim();
+  if (!sessionId || !questId) throw new Error("Missing session or quest id.");
+
+  const supabase = await createClient();
+  const admin = createAdminClient() ?? supabase;
+  const targets = await getSessionCharacterTargets(sessionId);
+  const taskDefs = (Array.isArray(input.taskDefs) ? input.taskDefs : [])
+    .map((t: any) => ({
+      id: String(t?.id ?? "").trim(),
+      title: String(t?.title ?? "").trim(),
+      kind: String(t?.kind ?? "").trim().toLowerCase() || "task",
+      target_npc_block_id: String(t?.target_npc_block_id ?? "").trim() || null,
+      target_npc_name: String(t?.target_npc_name ?? "").trim() || null,
+    }))
+    .filter((t) => t.id.length > 0);
+  const taskIds = taskDefs.map((t) => t.id);
+  const rewardItemIds = cleanIds(input.rewardItemIds);
+  const rewardFaith = Math.max(0, Math.floor(Number(input.rewardFaith ?? 0) || 0));
+
+  for (const t of targets) {
+    const { error } = await admin.from("player_quest_progress").upsert(
+      {
+        player_id: t.playerId,
+        character_id: t.characterId,
+        quest_id: questId,
+        quest_title: String(input.questTitle ?? "").trim() || questId,
+        status: "active",
+        reward_meta: {
+          faith: rewardFaith,
+          item_ids: rewardItemIds,
+          task_ids: taskIds,
+          task_defs: taskDefs,
+          storyteller_controlled: true,
+        },
+      },
+      { onConflict: "character_id,quest_id" }
+    );
+    if (error) throw new Error(error.message);
+  }
+}
+
+export async function storytellerCompleteQuestTaskForAll(input: {
+  sessionId: string;
+  questId: string;
+  questTitle?: string;
+  taskId: string;
+  allTaskIds?: string[];
+  taskDefs?: Array<{ id: string; title?: string; kind?: string; target_npc_block_id?: string | null; target_npc_name?: string | null }>;
+  rewardFaith?: number;
+  rewardItemIds?: string[];
+}) {
+  const sessionId = String(input.sessionId ?? "").trim();
+  const questId = String(input.questId ?? "").trim();
+  const taskId = String(input.taskId ?? "").trim();
+  if (!sessionId || !questId || !taskId) throw new Error("Missing quest task details.");
+
+  const supabase = await createClient();
+  const admin = createAdminClient() ?? supabase;
+  const targets = await getSessionCharacterTargets(sessionId);
+  const allTaskIds = cleanIds(input.allTaskIds);
+  const taskDefs = (Array.isArray(input.taskDefs) ? input.taskDefs : [])
+    .map((t: any) => ({
+      id: String(t?.id ?? "").trim(),
+      title: String(t?.title ?? "").trim(),
+      kind: String(t?.kind ?? "").trim().toLowerCase() || "task",
+      target_npc_block_id: String(t?.target_npc_block_id ?? "").trim() || null,
+      target_npc_name: String(t?.target_npc_name ?? "").trim() || null,
+    }))
+    .filter((t) => t.id.length > 0);
+  const rewardItemIds = cleanIds(input.rewardItemIds);
+  const rewardFaith = Math.max(0, Math.floor(Number(input.rewardFaith ?? 0) || 0));
+
+  for (const t of targets) {
+    const { data: row, error: rowErr } = await admin
+      .from("player_quest_progress")
+      .select("id,status,completed_task_ids")
+      .eq("character_id", t.characterId)
+      .eq("quest_id", questId)
+      .maybeSingle();
+    if (rowErr) throw new Error(rowErr.message);
+    const currentDone = Array.isArray((row as any)?.completed_task_ids) ? (row as any).completed_task_ids : [];
+    const nextDone = Array.from(new Set([...currentDone.map((v: any) => String(v)), taskId]));
+    const isCompleted = allTaskIds.length > 0 && allTaskIds.every((id) => nextDone.includes(id));
+    const nextStatus = (row as any)?.status === "claimed" ? "claimed" : isCompleted ? "completed" : "active";
+
+    if (!(row as any)?.id) {
+      const { error: insErr } = await admin.from("player_quest_progress").insert({
+        player_id: t.playerId,
+        character_id: t.characterId,
+        quest_id: questId,
+        quest_title: String(input.questTitle ?? "").trim() || questId,
+        status: nextStatus,
+        completed_task_ids: nextDone,
+        completed_at: nextStatus === "completed" ? new Date().toISOString() : null,
+        last_task_at: new Date().toISOString(),
+        reward_meta: {
+          faith: rewardFaith,
+          item_ids: rewardItemIds,
+          task_ids: allTaskIds,
+          task_defs: taskDefs,
+          storyteller_controlled: true,
+        },
+      });
+      if (insErr) throw new Error(insErr.message);
+    } else {
+      const { error: upErr } = await admin
+        .from("player_quest_progress")
+        .update({
+          completed_task_ids: nextDone,
+          status: nextStatus,
+          completed_at: nextStatus === "completed" ? new Date().toISOString() : (row as any)?.completed_at ?? null,
+          last_task_at: new Date().toISOString(),
+        })
+        .eq("id", (row as any).id);
+      if (upErr) throw new Error(upErr.message);
+    }
+  }
+}
+
+export async function storytellerCompleteQuestForAll(input: {
+  sessionId: string;
+  questId: string;
+  questTitle?: string;
+  allTaskIds?: string[];
+  taskDefs?: Array<{ id: string; title?: string; kind?: string; target_npc_block_id?: string | null; target_npc_name?: string | null }>;
+  rewardFaith?: number;
+  rewardItemIds?: string[];
+}) {
+  const sessionId = String(input.sessionId ?? "").trim();
+  const questId = String(input.questId ?? "").trim();
+  if (!sessionId || !questId) throw new Error("Missing quest details.");
+
+  const supabase = await createClient();
+  const admin = createAdminClient() ?? supabase;
+  const targets = await getSessionCharacterTargets(sessionId);
+  const allTaskIds = cleanIds(input.allTaskIds);
+  const taskDefs = (Array.isArray(input.taskDefs) ? input.taskDefs : [])
+    .map((t: any) => ({
+      id: String(t?.id ?? "").trim(),
+      title: String(t?.title ?? "").trim(),
+      kind: String(t?.kind ?? "").trim().toLowerCase() || "task",
+      target_npc_block_id: String(t?.target_npc_block_id ?? "").trim() || null,
+      target_npc_name: String(t?.target_npc_name ?? "").trim() || null,
+    }))
+    .filter((t) => t.id.length > 0);
+  const rewardItemIds = cleanIds(input.rewardItemIds);
+  const rewardFaith = Math.max(0, Math.floor(Number(input.rewardFaith ?? 0) || 0));
+
+  for (const t of targets) {
+    const { data: row, error: rowErr } = await admin
+      .from("player_quest_progress")
+      .select("id,status")
+      .eq("character_id", t.characterId)
+      .eq("quest_id", questId)
+      .maybeSingle();
+    if (rowErr) throw new Error(rowErr.message);
+
+    if (!(row as any)?.id) {
+      const { error: insErr } = await admin.from("player_quest_progress").insert({
+        player_id: t.playerId,
+        character_id: t.characterId,
+        quest_id: questId,
+        quest_title: String(input.questTitle ?? "").trim() || questId,
+        status: "completed",
+        completed_task_ids: allTaskIds,
+        completed_at: new Date().toISOString(),
+        last_task_at: new Date().toISOString(),
+        reward_meta: {
+          faith: rewardFaith,
+          item_ids: rewardItemIds,
+          task_ids: allTaskIds,
+          task_defs: taskDefs,
+          storyteller_controlled: true,
+        },
+      });
+      if (insErr) throw new Error(insErr.message);
+    } else if ((row as any)?.status !== "claimed") {
+      const { error: upErr } = await admin
+        .from("player_quest_progress")
+        .update({
+          status: "completed",
+          completed_task_ids: allTaskIds,
+          completed_at: new Date().toISOString(),
+          last_task_at: new Date().toISOString(),
+        })
+        .eq("id", (row as any).id);
+      if (upErr) throw new Error(upErr.message);
+    }
+  }
 }
