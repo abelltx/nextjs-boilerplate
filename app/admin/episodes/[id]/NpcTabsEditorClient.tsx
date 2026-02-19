@@ -371,7 +371,10 @@ export default function NpcTabsEditorClient(props: {
               className="mt-2 w-full border rounded p-2 h-20 text-sm"
               placeholder={`${LABELS[k]} details`}
               value={tabs[k].content}
-              onChange={(e) => setTabs((prev) => ({ ...prev, [k]: { ...prev[k], content: e.target.value } }))}
+              onChange={(e) => {
+                const value = e.currentTarget.value;
+                setTabs((prev) => ({ ...prev, [k]: { ...prev[k], content: value } }));
+              }}
             />
             {k === "quests" ? (
               <div className="mt-2 space-y-2 rounded border border-dashed p-2">
@@ -424,11 +427,12 @@ export default function NpcTabsEditorClient(props: {
                           <input
                             className="w-full border rounded p-2 text-xs font-mono"
                             value={q.id}
-                            onChange={(e) =>
+                            onChange={(e) => {
+                              const value = e.currentTarget.value;
                               setQuests((prev) =>
-                                prev.map((row, i) => (i === idx ? { ...row, id: e.currentTarget.value } : row))
-                              )
-                            }
+                                prev.map((row, i) => (i === idx ? { ...row, id: value } : row))
+                              );
+                            }}
                             placeholder="welcome_olives"
                           />
                         </label>
@@ -437,11 +441,12 @@ export default function NpcTabsEditorClient(props: {
                           <input
                             className="w-full border rounded p-2 text-sm"
                             value={q.title}
-                            onChange={(e) =>
+                            onChange={(e) => {
+                              const value = e.currentTarget.value;
                               setQuests((prev) =>
-                                prev.map((row, i) => (i === idx ? { ...row, title: e.currentTarget.value } : row))
-                              )
-                            }
+                                prev.map((row, i) => (i === idx ? { ...row, title: value } : row))
+                              );
+                            }}
                             placeholder="Gather Church Supplies"
                           />
                         </label>
@@ -452,11 +457,12 @@ export default function NpcTabsEditorClient(props: {
                         <textarea
                           className="w-full border rounded p-2 text-sm h-16"
                           value={q.directions}
-                          onChange={(e) =>
+                          onChange={(e) => {
+                            const value = e.currentTarget.value;
                             setQuests((prev) =>
-                              prev.map((row, i) => (i === idx ? { ...row, directions: e.currentTarget.value } : row))
-                            )
-                          }
+                              prev.map((row, i) => (i === idx ? { ...row, directions: value } : row))
+                            );
+                          }}
                           placeholder="Speak with Gabriel, then check in with the supply table."
                         />
                       </label>
@@ -467,11 +473,12 @@ export default function NpcTabsEditorClient(props: {
                           <textarea
                             className="w-full border rounded p-2 text-xs h-20"
                             value={q.taskLines}
-                            onChange={(e) =>
+                            onChange={(e) => {
+                              const value = e.currentTarget.value;
                               setQuests((prev) =>
-                                prev.map((row, i) => (i === idx ? { ...row, taskLines: e.currentTarget.value } : row))
-                              )
-                            }
+                                prev.map((row, i) => (i === idx ? { ...row, taskLines: value } : row))
+                              );
+                            }}
                             placeholder={"Find Gabriel\nAsk about class mentors\nReturn to the front table"}
                           />
                         </label>
@@ -480,11 +487,12 @@ export default function NpcTabsEditorClient(props: {
                           <textarea
                             className="w-full border rounded p-2 text-xs h-20 font-mono"
                             value={q.talkNpcIds}
-                            onChange={(e) =>
+                            onChange={(e) => {
+                              const value = e.currentTarget.value;
                               setQuests((prev) =>
-                                prev.map((row, i) => (i === idx ? { ...row, talkNpcIds: e.currentTarget.value } : row))
-                              )
-                            }
+                                prev.map((row, i) => (i === idx ? { ...row, talkNpcIds: value } : row))
+                              );
+                            }}
                             placeholder={"e0f49433-8461-4a74-85d8-efd3cd422cea"}
                           />
                         </label>
@@ -496,11 +504,12 @@ export default function NpcTabsEditorClient(props: {
                           <textarea
                             className="w-full border rounded p-2 text-xs h-20 font-mono"
                             value={q.rewardItemIds}
-                            onChange={(e) =>
+                            onChange={(e) => {
+                              const value = e.currentTarget.value;
                               setQuests((prev) =>
-                                prev.map((row, i) => (i === idx ? { ...row, rewardItemIds: e.currentTarget.value } : row))
-                              )
-                            }
+                                prev.map((row, i) => (i === idx ? { ...row, rewardItemIds: value } : row))
+                              );
+                            }}
                             placeholder={"e0f49433-8461-4a74-85d8-efd3cd422cea"}
                           />
                           {safeItemOptions.length ? (
@@ -550,18 +559,19 @@ export default function NpcTabsEditorClient(props: {
                             step={1}
                             className="w-full border rounded p-2 text-sm"
                             value={String(q.rewardFaith)}
-                            onChange={(e) =>
+                            onChange={(e) => {
+                              const value = e.currentTarget.value;
                               setQuests((prev) =>
                                 prev.map((row, i) =>
                                   i === idx
                                     ? {
                                         ...row,
-                                        rewardFaith: Math.max(0, Math.floor(Number(e.currentTarget.value || 0))),
+                                        rewardFaith: Math.max(0, Math.floor(Number(value || 0))),
                                       }
                                     : row
                                 )
-                              )
-                            }
+                              );
+                            }}
                           />
                         </label>
                       </div>
