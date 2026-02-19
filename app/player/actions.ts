@@ -377,7 +377,13 @@ export async function startNpcQuestAction(input: {
   questId: string;
   questTitle?: string;
   taskIds?: string[];
-  taskDefs?: Array<{ id: string; title?: string; kind?: string }>;
+  taskDefs?: Array<{
+    id: string;
+    title?: string;
+    kind?: string;
+    target_npc_block_id?: string | null;
+    target_npc_name?: string | null;
+  }>;
   rewardFaith?: number;
   rewardItemIds?: string[];
 }): Promise<{ ok: boolean; status?: string; error?: string }> {
@@ -401,6 +407,8 @@ export async function startNpcQuestAction(input: {
           id: String(t?.id ?? "").trim(),
           title: String(t?.title ?? "").trim(),
           kind: String(t?.kind ?? "").trim().toLowerCase() || "task",
+          target_npc_block_id: String(t?.target_npc_block_id ?? "").trim() || null,
+          target_npc_name: String(t?.target_npc_name ?? "").trim() || null,
         }))
         .filter((t) => t.id.length > 0)
     : [];

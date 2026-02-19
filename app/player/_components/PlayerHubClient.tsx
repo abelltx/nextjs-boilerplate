@@ -410,7 +410,7 @@ export default function PlayerHubClient(props: {
   async function handleStartNpcQuest(quest: {
     id: string;
     title: string;
-    tasks?: Array<{ id: string }>;
+    tasks?: Array<{ id: string; title?: string; kind?: string; targetNpcBlockId?: string | null; targetNpcName?: string | null }>;
     rewards?: { faith?: number; itemIds?: string[] };
   }) {
     if (claimingQuestId) return;
@@ -426,6 +426,8 @@ export default function PlayerHubClient(props: {
               id: String(t?.id ?? "").trim(),
               title: String(t?.title ?? "").trim(),
               kind: String(t?.kind ?? "").trim().toLowerCase() || "task",
+              target_npc_block_id: String(t?.targetNpcBlockId ?? "").trim() || null,
+              target_npc_name: String(t?.targetNpcName ?? "").trim() || null,
             }))
           : [],
         rewardFaith: Number(quest.rewards?.faith ?? 0),
@@ -905,7 +907,7 @@ function StagePanel({
     onQuestStart?: (quest: {
       id: string;
       title: string;
-      tasks?: Array<{ id: string }>;
+      tasks?: Array<{ id: string; title?: string; kind?: string; targetNpcBlockId?: string | null; targetNpcName?: string | null }>;
       rewards?: { faith?: number; itemIds?: string[] };
     }) => void | Promise<void>;
     onQuestTask?: (
