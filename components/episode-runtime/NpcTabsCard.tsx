@@ -657,7 +657,7 @@ export default function NpcTabsCard(props: {
                       return (
                         <div key={task.id} className="flex items-center justify-between gap-2 rounded border border-neutral-800 px-2 py-1">
                           <div className={["text-xs", done ? "text-emerald-200" : "text-neutral-300"].join(" ")}>
-                            <span className="mr-1">{done ? "âœ“" : "â—‹"}</span>
+                            <span className="mr-1">{done ? "✓" : "○"}</span>
                             {task.kind === "talk_to_npc"
                               ? (() => {
                                   const target = String(task.targetNpcBlockId ?? "").trim().toLowerCase();

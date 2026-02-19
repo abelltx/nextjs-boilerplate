@@ -48,6 +48,13 @@ type QuestProgressRow = {
   claimed_at: string | null;
   reward_meta?: any;
 };
+type QuestTaskView = {
+  id: string;
+  title: string;
+  kind?: string;
+  target_npc_block_id?: string | null;
+  target_npc_name?: string | null;
+};
 
 function n(v: unknown, fallback = 0) {
   const num = Number(v);
@@ -402,7 +409,7 @@ export default async function PlayerPage() {
     status: "available" | "active" | "completed" | "claimed";
     completedTaskIds: string[];
     claimedAt?: string | null;
-    tasks?: Array<{ id: string; title: string; kind?: string }>;
+    tasks?: Array<QuestTaskView>;
     rewards?: { faith?: number; itemIds?: string[] };
   }> = [];
   const { data: questProgressRows, error: questProgressErr } = await supabase
@@ -413,6 +420,30 @@ export default async function PlayerPage() {
     // Never block /player render for optional quest-progress data.
     console.error("Quest progress load skipped:", questProgressErr.message);
   } else {
+    const talkTargetIds = Array.from(
+      new Set(
+        (questProgressRows ?? [])
+          .flatMap((row: any) =>
+            Array.isArray(row?.reward_meta?.task_defs) ? row.reward_meta.task_defs : []
+          )
+          .map((t: any) => String(t?.target_npc_block_id ?? "").trim())
+          .filter((v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v))
+      )
+    );
+    let npcNameById = new Map<string, string>();
+    if (talkTargetIds.length) {
+      const { data: npcRows, error: npcErr } = await supabase
+        .from("npcs")
+        .select("id,name")
+        .in("id", talkTargetIds);
+      if (!npcErr) {
+        npcNameById = new Map<string, string>(
+          (npcRows ?? [])
+            .map((n: any) => [String(n?.id ?? "").trim().toLowerCase(), String(n?.name ?? "").trim()] as const)
+            .filter(([id, name]) => Boolean(id && name))
+        );
+      }
+    }
     for (const row of (questProgressRows ?? []) as QuestProgressRow[]) {
       const questId = String(row.quest_id ?? "").trim();
       if (!questId) continue;
@@ -438,11 +469,27 @@ export default async function PlayerPage() {
         claimedAt: row.claimed_at ?? null,
         tasks: Array.isArray((row as any)?.reward_meta?.task_defs)
           ? (row as any).reward_meta.task_defs
-              .map((t: any) => ({
-                id: String(t?.id ?? "").trim(),
-                title: String(t?.title ?? "").trim() || String(t?.id ?? "").trim(),
-                kind: String(t?.kind ?? "").trim().toLowerCase() || "task",
-              }))
+              .map((t: any) => {
+                const id = String(t?.id ?? "").trim();
+                const kind = String(t?.kind ?? "").trim().toLowerCase() || "task";
+                const targetNpcId = String(t?.target_npc_block_id ?? "").trim();
+                const explicitName = String(t?.target_npc_name ?? "").trim();
+                const lookupName = targetNpcId ? npcNameById.get(targetNpcId.toLowerCase()) ?? "" : "";
+                const npcName = explicitName || lookupName;
+                const fallbackTitle =
+                  kind === "talk_to_npc" && targetNpcId
+                    ? npcName
+                      ? `Talk to ${npcName}`
+                      : `Talk to NPC (${targetNpcId.slice(0, 8)}...)`
+                    : id;
+                return {
+                  id,
+                  title: String(t?.title ?? "").trim() || fallbackTitle,
+                  kind,
+                  target_npc_block_id: targetNpcId || null,
+                  target_npc_name: npcName || null,
+                };
+              })
               .filter((t: any) => t.id.length > 0)
           : Array.isArray((row as any)?.reward_meta?.task_ids)
             ? (row as any).reward_meta.task_ids

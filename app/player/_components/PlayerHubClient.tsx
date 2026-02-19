@@ -134,7 +134,7 @@ export default function PlayerHubClient(props: {
     status: "available" | "active" | "completed" | "claimed";
     completedTaskIds: string[];
     claimedAt?: string | null;
-    tasks?: Array<{ id: string; title: string; kind?: string }>;
+    tasks?: Array<{ id: string; title: string; kind?: string; target_npc_name?: string | null; target_npc_block_id?: string | null }>;
     rewards?: { faith?: number; itemIds?: string[] };
   }>;
 }) {
@@ -737,7 +737,7 @@ function QuestListPanel(props: {
     status: "available" | "active" | "completed" | "claimed";
     completedTaskIds: string[];
     claimedAt?: string | null;
-    tasks?: Array<{ id: string; title: string; kind?: string }>;
+    tasks?: Array<{ id: string; title: string; kind?: string; target_npc_name?: string | null; target_npc_block_id?: string | null }>;
     rewards?: { faith?: number; itemIds?: string[] };
   }>;
   claimingQuestId?: string | null;
@@ -748,10 +748,10 @@ function QuestListPanel(props: {
       status: "available" | "active" | "completed" | "claimed";
       completedTaskIds: string[];
       claimedAt?: string | null;
-      tasks?: Array<{ id: string; title: string; kind?: string }>;
+      tasks?: Array<{ id: string; title: string; kind?: string; target_npc_name?: string | null; target_npc_block_id?: string | null }>;
       rewards?: { faith?: number; itemIds?: string[] };
     },
-    task: { id: string; title: string; kind?: string }
+    task: { id: string; title: string; kind?: string; target_npc_name?: string | null; target_npc_block_id?: string | null }
   ) => void | Promise<void>;
   onClaim?: (entry: {
     questId: string;
@@ -759,7 +759,7 @@ function QuestListPanel(props: {
     status: "available" | "active" | "completed" | "claimed";
     completedTaskIds: string[];
     claimedAt?: string | null;
-    tasks?: Array<{ id: string; title: string; kind?: string }>;
+    tasks?: Array<{ id: string; title: string; kind?: string; target_npc_name?: string | null; target_npc_block_id?: string | null }>;
     rewards?: { faith?: number; itemIds?: string[] };
   }) => void | Promise<void>;
 }) {
@@ -796,7 +796,9 @@ function QuestListPanel(props: {
                     <div key={task.id} className="flex items-center justify-between gap-2 rounded border border-neutral-800 px-2 py-1">
                       <div className={["text-xs", doneTask ? "text-emerald-300" : "text-neutral-300"].join(" ")}>
                         <span className="mr-1">{doneTask ? "✓" : "○"}</span>
-                        {task.title}
+                        {String(task.kind ?? "").toLowerCase() === "talk_to_npc" && task.target_npc_name
+                          ? `Talk to ${task.target_npc_name}`
+                          : task.title}
                       </div>
                       {!doneTask && q.status !== "claimed" ? (
                         <button
