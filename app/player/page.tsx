@@ -398,24 +398,26 @@ export default async function PlayerPage() {
     .from("player_quest_progress")
     .select("quest_id,status,completed_task_ids,claimed_at")
     .eq("character_id", character.id);
-  if (questProgressErr && !String(questProgressErr.message ?? "").toLowerCase().includes("does not exist")) {
-    throw new Error(`Failed to load quest progress: ${questProgressErr.message}`);
-  }
-  for (const row of (questProgressRows ?? []) as QuestProgressRow[]) {
-    const questId = String(row.quest_id ?? "").trim();
-    if (!questId) continue;
-    const statusRaw = String(row.status ?? "available").trim().toLowerCase();
-    const status =
-      statusRaw === "active" || statusRaw === "completed" || statusRaw === "claimed"
-        ? (statusRaw as "active" | "completed" | "claimed")
-        : ("available" as const);
-    questProgressById[questId] = {
-      status,
-      completedTaskIds: Array.isArray(row.completed_task_ids)
-        ? row.completed_task_ids.map((v) => String(v ?? "").trim()).filter(Boolean)
-        : [],
-      claimedAt: row.claimed_at ?? null,
-    };
+  if (questProgressErr) {
+    // Never block /player render for optional quest-progress data.
+    console.error("Quest progress load skipped:", questProgressErr.message);
+  } else {
+    for (const row of (questProgressRows ?? []) as QuestProgressRow[]) {
+      const questId = String(row.quest_id ?? "").trim();
+      if (!questId) continue;
+      const statusRaw = String(row.status ?? "available").trim().toLowerCase();
+      const status =
+        statusRaw === "active" || statusRaw === "completed" || statusRaw === "claimed"
+          ? (statusRaw as "active" | "completed" | "claimed")
+          : ("available" as const);
+      questProgressById[questId] = {
+        status,
+        completedTaskIds: Array.isArray(row.completed_task_ids)
+          ? row.completed_task_ids.map((v) => String(v ?? "").trim()).filter(Boolean)
+          : [],
+        claimedAt: row.claimed_at ?? null,
+      };
+    }
   }
 
   const baseStatBlock = curRow?.stat_block_current ?? character.stat_block ?? {};
