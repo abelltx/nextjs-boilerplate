@@ -423,162 +423,6 @@ export default async function DmScreenPage({
               </details>
             </div>
           </div>
-          {questDirectorNpcBlock ? (
-            <div className="mt-3 rounded border p-2 bg-gray-50 space-y-2">
-              <div className="text-xs uppercase text-gray-500">Quest Director (Live NPC)</div>
-              <div className="text-xs text-gray-600">
-                {questDirectorNpcBlock.title ? `${questDirectorNpcBlock.title}` : "Presented NPC"}
-              </div>
-              {questDirectorDefs.length ? (
-                questDirectorDefs.map((q: any, qi: number) => {
-                  const qId = String(q?.id ?? "").trim() || `quest_${qi + 1}`;
-                  const qTitle = String(q?.title ?? "").trim() || qId;
-                  const qStorytellerNotes = String(q?.storyteller_notes ?? "").trim();
-                  const qTasks = Array.isArray(q?.tasks) ? q.tasks : [];
-                  const qTaskIds = qTasks.map((t: any) => String(t?.id ?? "").trim()).filter(Boolean);
-                  const qProgressRows = questProgressByQuest.get(qId) ?? [];
-                  const qTaskDoneCounts = new Map<string, number>();
-                  for (const row of qProgressRows) {
-                    const done = Array.isArray((row as any)?.completed_task_ids)
-                      ? (row as any).completed_task_ids.map((v: any) => String(v ?? "").trim()).filter(Boolean)
-                      : [];
-                    for (const tId of done) {
-                      qTaskDoneCounts.set(tId, (qTaskDoneCounts.get(tId) ?? 0) + 1);
-                    }
-                  }
-                  const qCompletedPlayers = qProgressRows.filter((r: any) => {
-                    const st = String(r?.status ?? "").toLowerCase();
-                    return st === "completed" || st === "claimed";
-                  }).length;
-                  const qRewardFaith = Math.max(0, Number(q?.rewards?.faith ?? 0) || 0);
-                  const qRewardItemIds = Array.isArray(q?.rewards?.item_ids)
-                    ? q.rewards.item_ids.map((v: any) => String(v ?? "").trim()).filter(Boolean)
-                    : [];
-                  return (
-                    <div key={qId} className="rounded border bg-white p-2 space-y-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="text-sm font-semibold">{qTitle}</div>
-                        <div className="flex items-center gap-2">
-                          <form
-                            action={async () => {
-                              "use server";
-                              await storytellerAssignQuestToAll({
-                                sessionId: session.id,
-                                questId: qId,
-                                questTitle: qTitle,
-                                taskDefs: qTasks.map((t: any) => ({
-                                  id: String(t?.id ?? "").trim(),
-                                  title: String(t?.title ?? "").trim(),
-                                  kind: String(t?.kind ?? "").trim().toLowerCase() || "task",
-                                  target_npc_block_id: String(t?.target_npc_block_id ?? "").trim() || null,
-                                  target_npc_name: String(t?.target_npc_name ?? "").trim() || null,
-                                })),
-                                rewardFaith: qRewardFaith,
-                                rewardItemIds: qRewardItemIds,
-                              });
-                              redirect(`/storyteller/sessions/${session.id}`);
-                            }}
-                          >
-                            <button className="rounded border px-2 py-1 text-xs">Assign to All</button>
-                          </form>
-                          <form
-                            action={async () => {
-                              "use server";
-                              await storytellerCompleteQuestForAll({
-                                sessionId: session.id,
-                                questId: qId,
-                                questTitle: qTitle,
-                                allTaskIds: qTaskIds,
-                                taskDefs: qTasks.map((t: any) => ({
-                                  id: String(t?.id ?? "").trim(),
-                                  title: String(t?.title ?? "").trim(),
-                                  kind: String(t?.kind ?? "").trim().toLowerCase() || "task",
-                                  target_npc_block_id: String(t?.target_npc_block_id ?? "").trim() || null,
-                                  target_npc_name: String(t?.target_npc_name ?? "").trim() || null,
-                                })),
-                                rewardFaith: qRewardFaith,
-                                rewardItemIds: qRewardItemIds,
-                              });
-                              redirect(`/storyteller/sessions/${session.id}`);
-                            }}
-                          >
-                            <button className="rounded border px-2 py-1 text-xs">Complete Quest for All</button>
-                          </form>
-                        </div>
-                      </div>
-                      {qStorytellerNotes ? (
-                        <div className="rounded border bg-amber-50 px-2 py-1 text-xs text-amber-900 whitespace-pre-wrap">
-                          {qStorytellerNotes}
-                        </div>
-                      ) : null}
-                      <div className="text-[11px] text-gray-600">
-                        Players completed quest: {qCompletedPlayers}/{sessionCharacterIds.length || 0}
-                      </div>
-                      {qTasks.length ? (
-                        <div className="space-y-1">
-                          {qTasks.map((t: any) => {
-                            const tId = String(t?.id ?? "").trim();
-                            const tTitle = renderQuestTaskTitle(t);
-                            const doneCount = qTaskDoneCounts.get(tId) ?? 0;
-                            if (!tId) return null;
-                            return (
-                              <div key={tId} className="flex items-center justify-between gap-2 rounded border px-2 py-1">
-                                <div className="text-xs">
-                                  {tTitle}
-                                  <span className="ml-2 text-[11px] text-gray-500">
-                                    ({doneCount}/{sessionCharacterIds.length || 0})
-                                  </span>
-                                </div>
-                                <form
-                                  action={async () => {
-                                    "use server";
-                                    await storytellerCompleteQuestTaskForAll({
-                                      sessionId: session.id,
-                                      questId: qId,
-                                      questTitle: qTitle,
-                                      taskId: tId,
-                                      allTaskIds: qTaskIds,
-                                      taskDefs: qTasks.map((x: any) => ({
-                                        id: String(x?.id ?? "").trim(),
-                                        title: String(x?.title ?? "").trim(),
-                                        kind: String(x?.kind ?? "").trim().toLowerCase() || "task",
-                                        target_npc_block_id: String(x?.target_npc_block_id ?? "").trim() || null,
-                                        target_npc_name: String(x?.target_npc_name ?? "").trim() || null,
-                                      })),
-                                      rewardFaith: qRewardFaith,
-                                      rewardItemIds: qRewardItemIds,
-                                    });
-                                    redirect(`/storyteller/sessions/${session.id}`);
-                                  }}
-                                >
-                                  <button className="rounded border px-2 py-0.5 text-[11px]">Mark Task Complete</button>
-                                </form>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <div className="text-xs text-gray-600">No tasks configured.</div>
-                      )}
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="text-xs text-gray-600">No quests on this NPC.</div>
-              )}
-              <div className="pt-1 border-t flex items-center justify-end">
-                <button
-                  type="button"
-                  className="rounded border px-2 py-1 text-xs text-gray-500 cursor-not-allowed"
-                  title="Quest-linked loot assignment coming next."
-                  disabled
-                >
-                  Assign Loot (Soon)
-                </button>
-              </div>
-            </div>
-          ) : null}
-
           <details className="rounded border p-2">
             <summary className="cursor-pointer text-xs uppercase text-gray-500">Timer</summary>
             <div className="mt-2">
@@ -1092,6 +936,161 @@ export default async function DmScreenPage({
                 <div className="text-sm text-gray-500">Nothing presented to players yet.</div>
               )}
             </div>
+            {questDirectorNpcBlock ? (
+              <div className="rounded border bg-white p-2 space-y-2">
+                <div className="text-[11px] uppercase text-gray-500">Quest Director (Live NPC)</div>
+                <div className="text-xs text-gray-600">
+                  {questDirectorNpcBlock.title ? `${questDirectorNpcBlock.title}` : "Presented NPC"}
+                </div>
+                {questDirectorDefs.length ? (
+                  questDirectorDefs.map((q: any, qi: number) => {
+                    const qId = String(q?.id ?? "").trim() || `quest_${qi + 1}`;
+                    const qTitle = String(q?.title ?? "").trim() || qId;
+                    const qStorytellerNotes = String(q?.storyteller_notes ?? "").trim();
+                    const qTasks = Array.isArray(q?.tasks) ? q.tasks : [];
+                    const qTaskIds = qTasks.map((t: any) => String(t?.id ?? "").trim()).filter(Boolean);
+                    const qProgressRows = questProgressByQuest.get(qId) ?? [];
+                    const qTaskDoneCounts = new Map<string, number>();
+                    for (const row of qProgressRows) {
+                      const done = Array.isArray((row as any)?.completed_task_ids)
+                        ? (row as any).completed_task_ids.map((v: any) => String(v ?? "").trim()).filter(Boolean)
+                        : [];
+                      for (const tId of done) {
+                        qTaskDoneCounts.set(tId, (qTaskDoneCounts.get(tId) ?? 0) + 1);
+                      }
+                    }
+                    const qCompletedPlayers = qProgressRows.filter((r: any) => {
+                      const st = String(r?.status ?? "").toLowerCase();
+                      return st === "completed" || st === "claimed";
+                    }).length;
+                    const qRewardFaith = Math.max(0, Number(q?.rewards?.faith ?? 0) || 0);
+                    const qRewardItemIds = Array.isArray(q?.rewards?.item_ids)
+                      ? q.rewards.item_ids.map((v: any) => String(v ?? "").trim()).filter(Boolean)
+                      : [];
+                    return (
+                      <div key={qId} className="rounded border bg-gray-50 p-2 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-sm font-semibold">{qTitle}</div>
+                          <div className="flex items-center gap-2">
+                            <form
+                              action={async () => {
+                                "use server";
+                                await storytellerAssignQuestToAll({
+                                  sessionId: session.id,
+                                  questId: qId,
+                                  questTitle: qTitle,
+                                  taskDefs: qTasks.map((t: any) => ({
+                                    id: String(t?.id ?? "").trim(),
+                                    title: String(t?.title ?? "").trim(),
+                                    kind: String(t?.kind ?? "").trim().toLowerCase() || "task",
+                                    target_npc_block_id: String(t?.target_npc_block_id ?? "").trim() || null,
+                                    target_npc_name: String(t?.target_npc_name ?? "").trim() || null,
+                                  })),
+                                  rewardFaith: qRewardFaith,
+                                  rewardItemIds: qRewardItemIds,
+                                });
+                                redirect(`/storyteller/sessions/${session.id}`);
+                              }}
+                            >
+                              <button className="rounded border px-2 py-1 text-xs">Assign to All</button>
+                            </form>
+                            <form
+                              action={async () => {
+                                "use server";
+                                await storytellerCompleteQuestForAll({
+                                  sessionId: session.id,
+                                  questId: qId,
+                                  questTitle: qTitle,
+                                  allTaskIds: qTaskIds,
+                                  taskDefs: qTasks.map((t: any) => ({
+                                    id: String(t?.id ?? "").trim(),
+                                    title: String(t?.title ?? "").trim(),
+                                    kind: String(t?.kind ?? "").trim().toLowerCase() || "task",
+                                    target_npc_block_id: String(t?.target_npc_block_id ?? "").trim() || null,
+                                    target_npc_name: String(t?.target_npc_name ?? "").trim() || null,
+                                  })),
+                                  rewardFaith: qRewardFaith,
+                                  rewardItemIds: qRewardItemIds,
+                                });
+                                redirect(`/storyteller/sessions/${session.id}`);
+                              }}
+                            >
+                              <button className="rounded border px-2 py-1 text-xs">Complete Quest for All</button>
+                            </form>
+                          </div>
+                        </div>
+                        {qStorytellerNotes ? (
+                          <div className="rounded border bg-amber-50 px-2 py-1 text-xs text-amber-900 whitespace-pre-wrap">
+                            {qStorytellerNotes}
+                          </div>
+                        ) : null}
+                        <div className="text-[11px] text-gray-600">
+                          Players completed quest: {qCompletedPlayers}/{sessionCharacterIds.length || 0}
+                        </div>
+                        {qTasks.length ? (
+                          <div className="space-y-1">
+                            {qTasks.map((t: any) => {
+                              const tId = String(t?.id ?? "").trim();
+                              const tTitle = renderQuestTaskTitle(t);
+                              const doneCount = qTaskDoneCounts.get(tId) ?? 0;
+                              if (!tId) return null;
+                              return (
+                                <div key={tId} className="flex items-center justify-between gap-2 rounded border px-2 py-1 bg-white">
+                                  <div className="text-xs">
+                                    {tTitle}
+                                    <span className="ml-2 text-[11px] text-gray-500">
+                                      ({doneCount}/{sessionCharacterIds.length || 0})
+                                    </span>
+                                  </div>
+                                  <form
+                                    action={async () => {
+                                      "use server";
+                                      await storytellerCompleteQuestTaskForAll({
+                                        sessionId: session.id,
+                                        questId: qId,
+                                        questTitle: qTitle,
+                                        taskId: tId,
+                                        allTaskIds: qTaskIds,
+                                        taskDefs: qTasks.map((x: any) => ({
+                                          id: String(x?.id ?? "").trim(),
+                                          title: String(x?.title ?? "").trim(),
+                                          kind: String(x?.kind ?? "").trim().toLowerCase() || "task",
+                                          target_npc_block_id: String(x?.target_npc_block_id ?? "").trim() || null,
+                                          target_npc_name: String(x?.target_npc_name ?? "").trim() || null,
+                                        })),
+                                        rewardFaith: qRewardFaith,
+                                        rewardItemIds: qRewardItemIds,
+                                      });
+                                      redirect(`/storyteller/sessions/${session.id}`);
+                                    }}
+                                  >
+                                    <button className="rounded border px-2 py-0.5 text-[11px]">Mark Task Complete</button>
+                                  </form>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="text-xs text-gray-600">No tasks configured.</div>
+                        )}
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="text-xs text-gray-600">No quests on this NPC.</div>
+                )}
+                <div className="pt-1 border-t flex items-center justify-end">
+                  <button
+                    type="button"
+                    className="rounded border px-2 py-1 text-xs text-gray-500 cursor-not-allowed"
+                    title="Quest-linked loot assignment coming next."
+                    disabled
+                  >
+                    Assign Loot (Soon)
+                  </button>
+                </div>
+              </div>
+            ) : null}
             <details className="rounded border bg-white p-2 space-y-2" open>
               <summary className="cursor-pointer text-[11px] uppercase text-gray-500">Player View Preview</summary>
               <div className="mt-2">
