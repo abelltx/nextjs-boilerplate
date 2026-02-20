@@ -254,71 +254,19 @@ export default async function DmScreenPage({
               </div>
             </div>
 
-            <div className="text-right">
+            <div className="w-full max-w-md space-y-2">
+              <div className="text-right">
               <div className="text-xs uppercase text-gray-500">Join Code</div>
               <div className="font-mono text-2xl font-bold">{session.join_code}</div>
-            </div>
-          </div>
-
-          {/* Players */}
-          <div className="mt-4 grid grid-cols-6 gap-2">
-            {Array.from({ length: 6 }).map((_, i) => {
-              const pRow = (joins ?? [])[i];
-              const playerId = pRow?.player_id ?? null;
-
-              return (
-                <div key={i} className="border rounded-lg p-2 text-center">
-                  <div>
-                    <div className="text-xs text-gray-500">Player {i + 1}</div>
-                    <div className="text-[11px] font-mono break-all">
-                      {playerId ? playerId.slice(0, 8) : "-"}
-                    </div>
-                    {/* LIVE roll result line */}
-                    <DmPlayerRollLineRealtime sessionId={sessionId} playerId={playerId} initialState={state as any} />
-                  </div>
+              </div>
+              <div className="rounded border p-2">
+                <div className="text-[11px] uppercase text-gray-500">Episode</div>
+                <div className="text-xs text-gray-600 mb-2">
+                  Current: <span className="font-mono">{episodeId ?? "-"}</span>
                 </div>
-              );
-            })}
-
-          </div>
-
-          <div className="mt-3">
-            <CheckPromptCard
-              sessionId={session.id}
-              joins={joins as any[]}
-              rollOpen={Boolean((state as any).roll_open)}
-              currentPrompt={String((state as any).roll_prompt ?? "")}
-              onSendPrompt={async (fd) => {
-                "use server";
-                const checkKey = String(fd.get("check_key") ?? "Perception").trim();
-                const instruction = String(fd.get("instruction") ?? "").trim();
-                const dcRaw = String(fd.get("dc") ?? "").trim();
-                const target = String(fd.get("target") ?? "all").trim() || "all";
-                const dc = Number(dcRaw);
-                const hasDc = Number.isFinite(dc) && dc > 0;
-
-                const prompt = [
-                  "Roll Request",
-                  `${checkKey} check${hasDc ? ` (DC ${dc})` : ""}.`,
-                  instruction || `Click ${checkKey} in your sheet and report your total.`,
-                ].join(" ");
-
-                await updateState(session.id, {
-                  roll_open: true,
-                  roll_die: "d20",
-                  roll_prompt: prompt,
-                  roll_target: target,
-                  roll_round_id: randomUUID(),
-                  roll_results: {},
-                });
-                redirect(`/storyteller/sessions/${session.id}`);
-              }}
-              onClosePrompt={async () => {
-                "use server";
-                await updateState(session.id, { roll_open: false, roll_die: null, roll_prompt: null, roll_target: "all" });
-                redirect(`/storyteller/sessions/${session.id}`);
-              }}
-            />
+                <EpisodePicker sessionId={sessionId} episodes={episodes ?? []} />
+              </div>
+            </div>
           </div>
           {questDirectorNpcBlock ? (
             <div className="mt-3 rounded border p-2 bg-gray-50 space-y-2">
@@ -448,16 +396,9 @@ export default async function DmScreenPage({
           ) : null}
 
           <details className="rounded border p-2">
-            <summary className="cursor-pointer text-xs uppercase text-gray-500">Episode + Timer</summary>
-            <div className="mt-2 grid grid-cols-1 gap-2 lg:grid-cols-3">
-              <div className="rounded border p-2">
-                <div className="text-[11px] uppercase text-gray-500">Episode</div>
-                <div className="text-xs text-gray-600 mb-2">
-                  Current: <span className="font-mono">{episodeId ?? "-"}</span>
-                </div>
-                <EpisodePicker sessionId={sessionId} episodes={episodes ?? []} />
-              </div>
-              <div className="rounded border p-2 lg:col-span-2 space-y-2">
+            <summary className="cursor-pointer text-xs uppercase text-gray-500">Timer</summary>
+            <div className="mt-2">
+              <div className="rounded border p-2 space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="text-[11px] uppercase text-gray-500">Session Timer</div>
                   <div className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] uppercase text-gray-600">{timerStatusLabel}</div>
@@ -960,6 +901,64 @@ export default async function DmScreenPage({
               NPC image placeholder
             </div>
           )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-12 gap-3">
+        <div className="col-span-12 lg:col-span-7 border rounded-xl p-4">
+          <div className="text-xs uppercase text-gray-500">Players</div>
+          <div className="mt-2 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
+            {Array.from({ length: 6 }).map((_, i) => {
+              const pRow = (joins ?? [])[i];
+              const playerId = pRow?.player_id ?? null;
+              return (
+                <div key={i} className="border rounded-lg p-2 text-center">
+                  <div className="text-xs text-gray-500">Player {i + 1}</div>
+                  <div className="text-[11px] font-mono break-all">{playerId ? playerId.slice(0, 8) : "-"}</div>
+                  <DmPlayerRollLineRealtime sessionId={sessionId} playerId={playerId} initialState={state as any} />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <div className="col-span-12 lg:col-span-5 border rounded-xl p-4">
+          <div className="text-xs uppercase text-gray-500 mb-2">Check Prompt</div>
+          <CheckPromptCard
+            sessionId={session.id}
+            joins={joins as any[]}
+            rollOpen={Boolean((state as any).roll_open)}
+            currentPrompt={String((state as any).roll_prompt ?? "")}
+            onSendPrompt={async (fd) => {
+              "use server";
+              const checkKey = String(fd.get("check_key") ?? "Perception").trim();
+              const instruction = String(fd.get("instruction") ?? "").trim();
+              const dcRaw = String(fd.get("dc") ?? "").trim();
+              const target = String(fd.get("target") ?? "all").trim() || "all";
+              const dc = Number(dcRaw);
+              const hasDc = Number.isFinite(dc) && dc > 0;
+
+              const prompt = [
+                "Roll Request",
+                `${checkKey} check${hasDc ? ` (DC ${dc})` : ""}.`,
+                instruction || `Click ${checkKey} in your sheet and report your total.`,
+              ].join(" ");
+
+              await updateState(session.id, {
+                roll_open: true,
+                roll_die: "d20",
+                roll_prompt: prompt,
+                roll_target: target,
+                roll_round_id: randomUUID(),
+                roll_results: {},
+              });
+              redirect(`/storyteller/sessions/${session.id}`);
+            }}
+            onClosePrompt={async () => {
+              "use server";
+              await updateState(session.id, { roll_open: false, roll_die: null, roll_prompt: null, roll_target: "all" });
+              redirect(`/storyteller/sessions/${session.id}`);
+            }}
+          />
         </div>
       </div>
 
