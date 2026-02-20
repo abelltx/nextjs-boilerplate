@@ -5,7 +5,6 @@ export const fetchCache = "force-no-store";
 import { redirect } from "next/navigation";
 import {
   getDmSession,
-  updateStoryText,
   updateState,
   storytellerAssignQuestToAll,
   storytellerCompleteQuestForAll,
@@ -231,6 +230,28 @@ export default async function DmScreenPage({
   const liveTimerSeconds = getLiveRemainingSeconds(state);
   const timerStatusLabel = String((state as any).timer_status ?? "stopped");
   const presentedBlock = presentedId ? blockById.get(presentedId) ?? null : null;
+  const storytellerDirective = (() => {
+    if (!presentedBlock) return "";
+    const meta = (presentedBlock.meta ?? {}) as Record<string, any>;
+    const candidates = [
+      meta.storyteller_text,
+      meta.storyteller_script,
+      meta.narrative,
+      meta.note,
+      meta.notes,
+      meta.dm_notes,
+      meta.gm_notes,
+    ];
+    for (const c of candidates) {
+      const value = String(c ?? "").trim();
+      if (value) return value;
+    }
+    const kind = String(presentedBlock.block_type ?? "").toLowerCase();
+    if (kind === "map") return "Guide players through the map and use marker reveals as they investigate.";
+    if (kind === "npc") return "Read the NPC prompt and drive dialogue before assigning or progressing quests.";
+    if (kind === "encounter") return "Set initiative and run encounter pacing from this scene.";
+    return "";
+  })();
   const questDirectorNpcBlock =
     presentedBlock && String(presentedBlock.block_type).toLowerCase() === "npc"
       ? presentedBlock
@@ -259,13 +280,13 @@ export default async function DmScreenPage({
               <div className="text-xs uppercase text-gray-500">Join Code</div>
               <div className="font-mono text-2xl font-bold">{session.join_code}</div>
               </div>
-              <div className="rounded border p-2">
-                <div className="text-[11px] uppercase text-gray-500">Episode</div>
-                <div className="text-xs text-gray-600 mb-2">
+              <details className="rounded border p-2">
+                <summary className="cursor-pointer text-xs uppercase text-gray-500">Select Episode</summary>
+                <div className="mt-2 text-xs text-gray-600 mb-2">
                   Current: <span className="font-mono">{episodeId ?? "-"}</span>
                 </div>
                 <EpisodePicker sessionId={sessionId} episodes={episodes ?? []} />
-              </div>
+              </details>
             </div>
           </div>
           {questDirectorNpcBlock ? (
@@ -871,12 +892,36 @@ export default async function DmScreenPage({
 
         <div className="col-span-6 border rounded-xl p-4">
           <div className="text-xs uppercase text-gray-500">Stage Mirror</div>
-          <div className="mt-2 h-64 rounded border bg-gray-50 p-3 overflow-auto space-y-2">
+          <div className="mt-2 rounded border bg-gray-50 p-3 space-y-3">
+            <div className="rounded border bg-white p-2 space-y-1">
+              <div className="text-[11px] uppercase text-gray-500">Storyteller Direction</div>
+              {presentedBlock ? (
+                <>
+                  <div className="text-sm font-semibold">
+                    {presentedBlock.title ?? presentedBlock.block_type ?? "Presented"}
+                  </div>
+                  <div className="text-sm whitespace-pre-wrap text-gray-700">
+                    {storytellerDirective || "No storyteller notes on this block. Use block title/body and quest controls to run this moment."}
+                  </div>
+                </>
+              ) : (
+                <div className="text-sm text-gray-500">Nothing presented to players yet.</div>
+              )}
+            </div>
+            <div className="rounded border bg-white p-2 space-y-2">
+              <div className="text-[11px] uppercase text-gray-500">Player View Preview</div>
             {presentedBlock ? (
               <>
-                <div className="text-sm font-semibold">
-                  {presentedBlock.title ?? presentedBlock.block_type ?? "Presented"}
-                </div>
+                {presentedBlock.image_url ? (
+                  <div className="rounded border overflow-hidden bg-gray-100">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={presentedBlock.image_url}
+                      alt={presentedBlock.title ?? "Presented"}
+                      className="w-full max-h-56 object-cover"
+                    />
+                  </div>
+                ) : null}
                 {presentedBlock.body ? (
                   <div className="text-sm whitespace-pre-wrap text-gray-700">{presentedBlock.body}</div>
                 ) : (
@@ -886,6 +931,7 @@ export default async function DmScreenPage({
             ) : (
               <div className="text-sm text-gray-500">Nothing presented to players yet.</div>
             )}
+            </div>
           </div>
         </div>
 
@@ -962,25 +1008,6 @@ export default async function DmScreenPage({
         </div>
       </div>
 
-      <div className="border rounded-xl p-4">
-        <div className="text-xs uppercase text-gray-500">Storyteller Script</div>
-        <form
-          action={async (fd) => {
-            "use server";
-            await updateStoryText(session.id, fd);
-            redirect(`/storyteller/sessions/${session.id}`);
-          }}
-          className="mt-2 space-y-2"
-        >
-          <textarea
-            name="story_text"
-            defaultValue={session.story_text || ""}
-            className="w-full h-56 border rounded p-3 font-serif"
-            placeholder="Write or paste the script you will read to players..."
-          />
-          <button className="px-4 py-2 rounded bg-black text-white">Save Script</button>
-        </form>
-      </div>
     </div>
   );
 }
