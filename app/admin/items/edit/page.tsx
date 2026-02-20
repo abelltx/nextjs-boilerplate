@@ -314,8 +314,8 @@ export default async function ItemEditPage({
   const tags = Array.isArray(item.tags) ? item.tags.join(", ") : "";
 
   return (
-    <div className="p-6">
-      <div className="mx-auto max-w-5xl">
+    <div className="p-4">
+      <div className="mx-auto max-w-4xl">
         {/* Save / Upload banners */}
         <div className="space-y-2">
           {saved ? (
@@ -333,7 +333,7 @@ export default async function ItemEditPage({
           ) : null}
         </div>
 
-        <div className="mt-4 flex items-start justify-between gap-3">
+        <div className="mt-3 flex items-start justify-between gap-3">
           <div>
             <h1 className="text-xl font-semibold">Edit Item</h1>
             <p className="text-sm text-muted-foreground">Item ID: {itemId}</p>
@@ -347,8 +347,21 @@ export default async function ItemEditPage({
           </div>
         </div>
 
+        <div className="sticky top-2 z-30 mt-3 rounded-xl border bg-white/95 p-2 backdrop-blur">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-xs text-muted-foreground">Quick save row (stays visible while scrolling)</div>
+            <button
+              className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-muted"
+              type="submit"
+              form="item-edit-form"
+            >
+              Save Changes
+            </button>
+          </div>
+        </div>
+
         {/* Image upload (file picker) */}
-        <div className="mt-4 rounded-2xl border p-3">
+        <div className="mt-3 rounded-2xl border p-3">
           <div className="font-semibold">Item Image</div>
           <p className="text-xs text-muted-foreground">
             Stored in bucket <span className="font-mono">item-images</span> at{" "}
@@ -370,7 +383,7 @@ export default async function ItemEditPage({
         </div>
 
         {/* Core editor */}
-        <form action={updateItemAction} className="mt-4 rounded-2xl border p-4">
+        <form id="item-edit-form" action={updateItemAction} className="mt-3 rounded-2xl border p-3">
           <input type="hidden" name="id" value={itemId} />
 
           {/* Keep legacy image_url so updates don't wipe it */}
@@ -503,10 +516,11 @@ export default async function ItemEditPage({
           </div>
 
           {/* Weaponizable */}
-          <div className="mt-4 rounded-xl border p-3">
+          <details className="mt-3 rounded-xl border p-3">
+            <summary className="cursor-pointer font-semibold">Weaponizable (optional)</summary>
+            <div className="mt-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <div className="font-semibold">Weaponizable</div>
                 <div className="text-xs text-muted-foreground">Optional combat fields for items that can act like weapons.</div>
               </div>
 
@@ -636,10 +650,11 @@ export default async function ItemEditPage({
                 <label className="text-xs text-muted-foreground">on_success</label>
                 <input name="on_success" defaultValue={item.on_success ?? ""} className="mt-1 h-9 w-full rounded-md border px-3 text-sm" />
               </div>
+              </div>
             </div>
-          </div>
+          </details>
 
-          <div className="mt-4 flex justify-end">
+          <div className="mt-3 flex justify-end">
             <button className="rounded-lg border px-4 py-2 text-sm hover:bg-muted" type="submit">
               Save Changes
             </button>
@@ -647,7 +662,7 @@ export default async function ItemEditPage({
         </form>
 
         {/* Effects */}
-        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
           <EffectsAddForm itemId={itemId} />
 
           <div className="rounded-2xl border p-3">
@@ -683,7 +698,7 @@ export default async function ItemEditPage({
           </div>
         </div>
 
-        <div className="mt-6 text-xs text-muted-foreground">
+        <div className="mt-4 text-xs text-muted-foreground">
           Note: cookie selection is required by design. Open items from the library grid (POST action) to set the edit
           cookie.
         </div>
