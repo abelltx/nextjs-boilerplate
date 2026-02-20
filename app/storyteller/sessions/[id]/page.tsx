@@ -93,6 +93,18 @@ function blockTypeTone(type: string) {
   return "bg-gray-100 text-gray-700 border-gray-200";
 }
 
+function resolveBlockImageUrl(block: any): string | null {
+  if (!block) return null;
+  const direct = String(block?.image_url ?? "").trim();
+  if (direct) return direct;
+  const meta = (block?.meta ?? {}) as Record<string, any>;
+  const npcFull = String(meta?.npc_library?.full_image_url ?? "").trim();
+  if (npcFull) return npcFull;
+  const npcPortrait = String(meta?.npc_library?.image_url ?? "").trim();
+  if (npcPortrait) return npcPortrait;
+  return null;
+}
+
 export default async function DmScreenPage({
   params,
 }: {
@@ -246,7 +258,7 @@ export default async function DmScreenPage({
     activeScene?.children?.find((c) => String(c.block_type).toLowerCase() === "map" && !!c.image_url) ?? null;
   const activeSceneMapMarkers = activeSceneMapBlock ? extractMapMarkers(activeSceneMapBlock.meta) : [];
   const activeSceneNpcBlock =
-    activeScene?.children?.find((c) => String(c.block_type).toLowerCase() === "npc" && !!c.image_url) ?? null;
+    activeScene?.children?.find((c) => String(c.block_type).toLowerCase() === "npc") ?? null;
   const stageMapBlock =
     String(presentedBlock?.block_type ?? "").toLowerCase() === "map" ? presentedBlock : activeSceneMapBlock;
   const stageMapMarkers = stageMapBlock ? extractMapMarkers(stageMapBlock.meta) : [];
@@ -1354,10 +1366,14 @@ export default async function DmScreenPage({
           </div>
           <div>
             <div className="text-xs uppercase text-gray-500">NPC Portrait</div>
-            {stageNpcBlock?.image_url ? (
+            {resolveBlockImageUrl(stageNpcBlock) ? (
               <div className="mt-2 h-56 rounded border overflow-hidden bg-gray-100">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={stageNpcBlock.image_url} alt={stageNpcBlock.title ?? "Presented"} className="w-full h-full object-cover" />
+                <img
+                  src={resolveBlockImageUrl(stageNpcBlock) as string}
+                  alt={stageNpcBlock?.title ?? "Presented"}
+                  className="w-full h-full object-cover"
+                />
               </div>
             ) : (
               <div className="mt-2 h-56 rounded bg-gray-100 flex items-center justify-center text-gray-500">
