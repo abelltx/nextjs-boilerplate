@@ -171,13 +171,40 @@ export async function storytellerAssignQuestToAll(input: {
   const rewardFaith = Math.max(0, Math.floor(Number(input.rewardFaith ?? 0) || 0));
 
   for (const t of targets) {
-    const { error } = await admin.from("player_quest_progress").upsert(
-      {
+    const { data: existingRows, error: existingErr } = await admin
+      .from("player_quest_progress")
+      .select("id")
+      .eq("character_id", t.characterId)
+      .eq("quest_id", questId)
+      .limit(1);
+    if (existingErr) throw new Error(existingErr.message);
+    const hasExisting = Array.isArray(existingRows) && existingRows.length > 0;
+    if (hasExisting) {
+      const { error: upErr } = await admin
+        .from("player_quest_progress")
+        .update({
+          quest_title: String(input.questTitle ?? "").trim() || questId,
+          status: "active",
+          reward_meta: {
+            faith: rewardFaith,
+            item_ids: rewardItemIds,
+            task_ids: taskIds,
+            task_defs: taskDefs,
+            storyteller_controlled: true,
+          },
+          last_task_at: new Date().toISOString(),
+        })
+        .eq("character_id", t.characterId)
+        .eq("quest_id", questId);
+      if (upErr) throw new Error(upErr.message);
+    } else {
+      const { error: insErr } = await admin.from("player_quest_progress").insert({
         player_id: t.playerId,
         character_id: t.characterId,
         quest_id: questId,
         quest_title: String(input.questTitle ?? "").trim() || questId,
         status: "active",
+        completed_task_ids: [],
         reward_meta: {
           faith: rewardFaith,
           item_ids: rewardItemIds,
@@ -185,10 +212,9 @@ export async function storytellerAssignQuestToAll(input: {
           task_defs: taskDefs,
           storyteller_controlled: true,
         },
-      },
-      { onConflict: "character_id,quest_id" }
-    );
-    if (error) throw new Error(error.message);
+      });
+      if (insErr) throw new Error(insErr.message);
+    }
   }
 }
 
@@ -224,19 +250,21 @@ export async function storytellerCompleteQuestTaskForAll(input: {
   const rewardFaith = Math.max(0, Math.floor(Number(input.rewardFaith ?? 0) || 0));
 
   for (const t of targets) {
-    const { data: row, error: rowErr } = await admin
+    const { data: rows, error: rowErr } = await admin
       .from("player_quest_progress")
-      .select("id,status,completed_task_ids")
+      .select("id,status,completed_task_ids,completed_at,created_at")
       .eq("character_id", t.characterId)
       .eq("quest_id", questId)
-      .maybeSingle();
+      .order("created_at", { ascending: false })
+      .limit(1);
     if (rowErr) throw new Error(rowErr.message);
-    const currentDone = Array.isArray((row as any)?.completed_task_ids) ? (row as any).completed_task_ids : [];
+    const row = Array.isArray(rows) && rows.length ? (rows[0] as any) : null;
+    const currentDone = Array.isArray(row?.completed_task_ids) ? row.completed_task_ids : [];
     const nextDone = Array.from(new Set([...currentDone.map((v: any) => String(v)), taskId]));
     const isCompleted = allTaskIds.length > 0 && allTaskIds.every((id) => nextDone.includes(id));
-    const nextStatus = (row as any)?.status === "claimed" ? "claimed" : isCompleted ? "completed" : "active";
+    const nextStatus = row?.status === "claimed" ? "claimed" : isCompleted ? "completed" : "active";
 
-    if (!(row as any)?.id) {
+    if (!row?.id) {
       const { error: insErr } = await admin.from("player_quest_progress").insert({
         player_id: t.playerId,
         character_id: t.characterId,
@@ -261,10 +289,11 @@ export async function storytellerCompleteQuestTaskForAll(input: {
         .update({
           completed_task_ids: nextDone,
           status: nextStatus,
-          completed_at: nextStatus === "completed" ? new Date().toISOString() : (row as any)?.completed_at ?? null,
+          completed_at: nextStatus === "completed" ? new Date().toISOString() : row?.completed_at ?? null,
           last_task_at: new Date().toISOString(),
         })
-        .eq("id", (row as any).id);
+        .eq("character_id", t.characterId)
+        .eq("quest_id", questId);
       if (upErr) throw new Error(upErr.message);
     }
   }
@@ -300,15 +329,17 @@ export async function storytellerCompleteQuestForAll(input: {
   const rewardFaith = Math.max(0, Math.floor(Number(input.rewardFaith ?? 0) || 0));
 
   for (const t of targets) {
-    const { data: row, error: rowErr } = await admin
+    const { data: rows, error: rowErr } = await admin
       .from("player_quest_progress")
-      .select("id,status")
+      .select("id,status,created_at")
       .eq("character_id", t.characterId)
       .eq("quest_id", questId)
-      .maybeSingle();
+      .order("created_at", { ascending: false })
+      .limit(1);
     if (rowErr) throw new Error(rowErr.message);
+    const row = Array.isArray(rows) && rows.length ? (rows[0] as any) : null;
 
-    if (!(row as any)?.id) {
+    if (!row?.id) {
       const { error: insErr } = await admin.from("player_quest_progress").insert({
         player_id: t.playerId,
         character_id: t.characterId,
@@ -327,7 +358,7 @@ export async function storytellerCompleteQuestForAll(input: {
         },
       });
       if (insErr) throw new Error(insErr.message);
-    } else if ((row as any)?.status !== "claimed") {
+    } else if (row?.status !== "claimed") {
       const { error: upErr } = await admin
         .from("player_quest_progress")
         .update({
@@ -336,7 +367,8 @@ export async function storytellerCompleteQuestForAll(input: {
           completed_at: new Date().toISOString(),
           last_task_at: new Date().toISOString(),
         })
-        .eq("id", (row as any).id);
+        .eq("character_id", t.characterId)
+        .eq("quest_id", questId);
       if (upErr) throw new Error(upErr.message);
     }
   }
