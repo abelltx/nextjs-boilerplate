@@ -7,14 +7,15 @@ function isUuid(value: string) {
   const v = value.trim();
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
 }
-function buildNpcMediumUrl(
+function buildNpcImageUrl(
   supabaseUrl: string,
   npcId: string,
+  file: "thumb.webp" | "small.webp" | "medium.webp" | "portrait.webp" | "full.webp",
   imageUpdatedAt?: string | null
 ) {
   if (!supabaseUrl || !npcId) return null;
   const version = imageUpdatedAt ? `?v=${encodeURIComponent(imageUpdatedAt)}` : "";
-  return `${supabaseUrl}/storage/v1/object/public/npc-images/${npcId}/medium.webp${version}`;
+  return `${supabaseUrl}/storage/v1/object/public/npc-images/${npcId}/${file}${version}`;
 }
 function isMissingRelationError(err: any, relation: string) {
   const msg = String(err?.message ?? "").toLowerCase();
@@ -95,9 +96,17 @@ async function resolveNpcBlock(
     }
   }
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-  const npcMediumUrl =
+  const npcPortraitUrl =
     npc?.image_base_path && supabaseUrl
-      ? buildNpcMediumUrl(supabaseUrl, String(npc.id), npc.image_updated_at ?? null)
+      ? buildNpcImageUrl(supabaseUrl, String(npc.id), "portrait.webp", npc.image_updated_at ?? null)
+      : null;
+  const npcFullUrl =
+    npc?.image_base_path && supabaseUrl
+      ? buildNpcImageUrl(supabaseUrl, String(npc.id), "full.webp", npc.image_updated_at ?? null)
+      : null;
+  const npcThumbUrl =
+    npc?.image_base_path && supabaseUrl
+      ? buildNpcImageUrl(supabaseUrl, String(npc.id), "thumb.webp", npc.image_updated_at ?? null)
       : null;
 
   const bindingTabs =
@@ -124,7 +133,9 @@ async function resolveNpcBlock(
       npc_id: npcId,
       name: String(npc?.name ?? meta?.npc_library?.name ?? "NPC"),
       description: String(npc?.description ?? meta?.npc_library?.description ?? "").trim() || null,
-      image_url: npcMediumUrl ?? (String(meta?.npc_library?.image_url ?? "").trim() || null),
+      image_url: npcPortraitUrl ?? (String(meta?.npc_library?.image_url ?? "").trim() || null),
+      full_image_url: npcFullUrl ?? (String(meta?.npc_library?.full_image_url ?? "").trim() || null),
+      thumb_url: npcThumbUrl ?? (String(meta?.npc_library?.thumb_url ?? "").trim() || null),
       designer_url: `/admin/designer/npcs/edit?id=${encodeURIComponent(npcId)}`,
     },
   };
@@ -133,7 +144,7 @@ async function resolveNpcBlock(
     ...block,
     title: String(bindingRow?.title_override ?? block.title ?? npc?.name ?? "NPC"),
     body: String(bindingRow?.body_override ?? block.body ?? npc?.description ?? ""),
-    image_url: String(bindingRow?.image_override ?? block.image_url ?? npcMediumUrl ?? "").trim() || null,
+    image_url: String(bindingRow?.image_override ?? block.image_url ?? npcPortraitUrl ?? "").trim() || null,
     meta: mergedMeta,
   };
 }

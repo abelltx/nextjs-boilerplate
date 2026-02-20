@@ -43,14 +43,15 @@ function safeJsonStringify(value: any) {
   }
 }
 
-function buildNpcMediumUrl(
+function buildNpcImageUrl(
   supabaseUrl: string,
   npcId: string,
+  file: "thumb.webp" | "small.webp" | "medium.webp" | "portrait.webp" | "full.webp",
   imageUpdatedAt?: string | null
 ) {
   if (!supabaseUrl || !npcId) return null;
   const version = imageUpdatedAt ? `?v=${encodeURIComponent(imageUpdatedAt)}` : "";
-  return `${supabaseUrl}/storage/v1/object/public/npc-images/${npcId}/medium.webp${version}`;
+  return `${supabaseUrl}/storage/v1/object/public/npc-images/${npcId}/${file}${version}`;
 }
 
 export default async function AdminEpisodeEditPage({
@@ -118,7 +119,9 @@ export default async function AdminEpisodeEditPage({
     id: String(n.id),
     name: String(n.name ?? "NPC"),
     description: String(n.description ?? "").trim() || null,
-    medium_url: n.image_base_path ? buildNpcMediumUrl(supabaseUrl, String(n.id), n.image_updated_at ?? null) : null,
+    medium_url: n.image_base_path ? buildNpcImageUrl(supabaseUrl, String(n.id), "portrait.webp", n.image_updated_at ?? null) : null,
+    full_url: n.image_base_path ? buildNpcImageUrl(supabaseUrl, String(n.id), "full.webp", n.image_updated_at ?? null) : null,
+    thumb_url: n.image_base_path ? buildNpcImageUrl(supabaseUrl, String(n.id), "thumb.webp", n.image_updated_at ?? null) : null,
     designer_url: `/admin/designer/npcs/edit?id=${encodeURIComponent(String(n.id))}`,
   }));
   const npcOptionById = new Map<string, any>();
@@ -154,6 +157,8 @@ export default async function AdminEpisodeEditPage({
         name: String(libNpc.name ?? "NPC"),
         description: String(libNpc.description ?? "").trim() || null,
         image_url: libNpc.medium_url ?? null,
+        full_image_url: libNpc.full_url ?? null,
+        thumb_url: libNpc.thumb_url ?? null,
         designer_url: libNpc.designer_url ?? null,
       };
     }

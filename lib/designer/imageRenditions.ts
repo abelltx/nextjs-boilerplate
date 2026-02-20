@@ -69,19 +69,33 @@ async function canvasToWebpBlob(canvas: HTMLCanvasElement, quality = 0.86): Prom
   return fallback;
 }
 
+function drawFullToCanvas(img: HTMLImageElement): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(img.naturalWidth || img.width));
+  canvas.height = Math.max(1, Math.round(img.naturalHeight || img.height));
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas context unavailable");
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
 export async function buildNpcRenditions(file: File, crop: CropPixels) {
   const img = await loadImage(file);
+  const full = drawFullToCanvas(img);
   const cropped = drawCroppedToCanvas(img, crop);
 
-  const portrait = resizeCanvas(cropped, 334, 430);
-  const medium = resizeCanvas(cropped, 167, 215);
-  const small = resizeCanvas(cropped, 112, 144);
+  // Portrait preserves the chosen face crop pixels (no downscale).
+  const portrait = cropped;
+  // Generate smaller renditions from portrait for cards/lists.
+  const medium = resizeCanvas(cropped, 334, 430);
+  const small = resizeCanvas(cropped, 167, 215);
   const thumb = resizeCanvas(cropped, 56, 72);
 
   return {
-    portrait: await canvasToWebpBlob(portrait),
-    medium: await canvasToWebpBlob(medium),
-    small: await canvasToWebpBlob(small),
-    thumb: await canvasToWebpBlob(thumb),
+    full: await canvasToWebpBlob(full, 0.94),
+    portrait: await canvasToWebpBlob(portrait, 0.92),
+    medium: await canvasToWebpBlob(medium, 0.9),
+    small: await canvasToWebpBlob(small, 0.88),
+    thumb: await canvasToWebpBlob(thumb, 0.86),
   };
 }

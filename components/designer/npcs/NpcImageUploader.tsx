@@ -7,7 +7,7 @@ import { createClient } from "@/utils/supabase/client";
 import { npcClearImageMetaAction, npcSetImageMetaAction } from "@/app/actions/npcs";
 
 const BUCKET = "npc-images";
-const FILES = ["portrait.webp", "medium.webp", "small.webp", "thumb.webp"] as const;
+const FILES = ["full.webp", "portrait.webp", "medium.webp", "small.webp", "thumb.webp"] as const;
 
 export default function NpcImageUploader({ npc }: { npc: any }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -24,6 +24,10 @@ export default function NpcImageUploader({ npc }: { npc: any }) {
     const base = `${npcId}/`;
 
     const uploads = [
+      supabase.storage.from(BUCKET).upload(base + "full.webp", renditions.full, {
+        upsert: true,
+        contentType: "image/webp",
+      }),
       supabase.storage.from(BUCKET).upload(base + "portrait.webp", renditions.portrait, {
         upsert: true,
         contentType: "image/webp",
@@ -111,11 +115,11 @@ export default function NpcImageUploader({ npc }: { npc: any }) {
         {npc.mediumUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={npc.mediumUrl}
+            src={npc.portraitUrl ?? npc.mediumUrl}
             alt={npc.image_alt ?? npc.name}
             width={167}
             height={215}
-            className="rounded-lg border object-cover"
+            className="rounded-lg border object-contain bg-black/5"
           />
         ) : (
           <div className="w-[167px] h-[215px] rounded-lg border bg-muted/40" />
@@ -124,7 +128,7 @@ export default function NpcImageUploader({ npc }: { npc: any }) {
 
       <div className="space-y-2">
         <div className="text-sm text-muted-foreground">
-          Upload any image. You’ll crop it to the NPC portrait ratio, and the system will generate all thumbnails.
+          Upload any image. Pick a face profile crop (kept at source quality) and the full scene image is kept intact.
         </div>
 
         <div className="flex flex-wrap gap-2">

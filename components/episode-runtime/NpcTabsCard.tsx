@@ -81,7 +81,10 @@ export default function NpcTabsCard(props: {
   const linkedNpc = (props.meta?.npc_library ?? null) as any;
   const boundNpcId = String(props.meta?.npc_binding?.npc_id ?? "").trim();
   const libraryNpcId = String(props.meta?.npc_library?.npc_id ?? "").trim();
-  const mergedImageUrl = String(props.imageUrl ?? linkedNpc?.image_url ?? "").trim() || null;
+  const mergedImageUrl =
+    String(linkedNpc?.full_image_url ?? props.imageUrl ?? linkedNpc?.image_url ?? "").trim() || null;
+  const mergedThumbUrl =
+    String(linkedNpc?.thumb_url ?? linkedNpc?.image_url ?? props.imageUrl ?? "").trim() || null;
   const mergedFallbackInfo = String(props.fallbackInfo ?? linkedNpc?.description ?? "").trim();
   const tabs = useMemo<TabDef[]>(() => {
     const raw = (props.meta?.npc_tabs ?? {}) as Record<string, any>;
@@ -529,7 +532,7 @@ export default function NpcTabsCard(props: {
             {t.key === "image" && mergedImageUrl ? (
               <span className="inline-flex items-center gap-1">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={mergedImageUrl} alt="NPC thumbnail" className="h-4 w-4 rounded object-cover" />
+                <img src={mergedThumbUrl || mergedImageUrl} alt="NPC thumbnail" className="h-4 w-4 rounded object-cover" />
                 <span>{t.label}</span>
               </span>
             ) : (

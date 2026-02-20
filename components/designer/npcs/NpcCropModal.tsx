@@ -26,7 +26,7 @@ export default function NpcCropModal({
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
       <div className="w-full max-w-3xl bg-background rounded-xl overflow-hidden border shadow-xl">
         <div className="p-4 border-b flex items-center justify-between">
-          <div className="font-semibold">Crop NPC Portrait</div>
+          <div className="font-semibold">Choose Face Profile Crop</div>
           <button className="px-3 py-1 rounded-lg border hover:bg-muted/40" onClick={onCancel}>
             Close
           </button>
@@ -41,7 +41,7 @@ export default function NpcCropModal({
             onCropChange={setCrop}
             onZoomChange={setZoom}
             onCropComplete={(_, pixels) => setCropPixels(pixels)}
-            objectFit="horizontal-cover"
+            objectFit="contain"
           />
         </div>
 

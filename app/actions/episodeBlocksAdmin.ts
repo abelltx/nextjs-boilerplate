@@ -18,14 +18,15 @@ function isMissingRelationError(err: any, relation: string) {
   const msg = String(err?.message ?? "").toLowerCase();
   return msg.includes(`relation "${relation}" does not exist`) || msg.includes(`relation "public.${relation}" does not exist`);
 }
-function buildNpcMediumUrl(
+function buildNpcImageUrl(
   supabaseUrl: string,
   npcId: string,
+  file: "thumb.webp" | "small.webp" | "medium.webp" | "portrait.webp" | "full.webp",
   imageUpdatedAt?: string | null
 ) {
   if (!supabaseUrl || !npcId) return null;
   const version = imageUpdatedAt ? `?v=${encodeURIComponent(imageUpdatedAt)}` : "";
-  return `${supabaseUrl}/storage/v1/object/public/npc-images/${npcId}/medium.webp${version}`;
+  return `${supabaseUrl}/storage/v1/object/public/npc-images/${npcId}/${file}${version}`;
 }
 
 async function maybeUploadBlockImage(
@@ -133,9 +134,17 @@ async function upsertNpcBindingForBlock(input: {
     .eq("id", npcId)
     .maybeSingle();
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-  const mediumUrl =
+  const portraitUrl =
     npc?.image_base_path && supabaseUrl
-      ? buildNpcMediumUrl(supabaseUrl, String(npc.id), npc.image_updated_at ?? null)
+      ? buildNpcImageUrl(supabaseUrl, String(npc.id), "portrait.webp", npc.image_updated_at ?? null)
+      : null;
+  const fullUrl =
+    npc?.image_base_path && supabaseUrl
+      ? buildNpcImageUrl(supabaseUrl, String(npc.id), "full.webp", npc.image_updated_at ?? null)
+      : null;
+  const thumbUrl =
+    npc?.image_base_path && supabaseUrl
+      ? buildNpcImageUrl(supabaseUrl, String(npc.id), "thumb.webp", npc.image_updated_at ?? null)
       : null;
 
   meta.npc_binding = {
@@ -146,7 +155,9 @@ async function upsertNpcBindingForBlock(input: {
     npc_id: npcId,
     name: String(npc?.name ?? "NPC"),
     description: String(npc?.description ?? "").trim() || null,
-    image_url: mediumUrl,
+    image_url: portraitUrl,
+    full_image_url: fullUrl,
+    thumb_url: thumbUrl,
     designer_url: `/admin/designer/npcs/edit?id=${encodeURIComponent(npcId)}`,
   };
   // Clear legacy inline tab payload from episode blocks to prevent stale overrides.
