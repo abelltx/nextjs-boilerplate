@@ -265,6 +265,91 @@ export default async function DmScreenPage({
   const questDirectorDefs = Array.isArray(questDirectorNpcBlock?.meta?.npc_tabs?.quests?.quest_defs)
     ? (questDirectorNpcBlock?.meta?.npc_tabs?.quests?.quest_defs as any[])
     : [];
+  const talkTargetIds = Array.from(
+    new Set(
+      (blocks ?? [])
+        .flatMap((b) => {
+          const defs = Array.isArray((b as any)?.meta?.npc_tabs?.quests?.quest_defs)
+            ? ((b as any).meta.npc_tabs.quests.quest_defs as any[])
+            : [];
+          return defs.flatMap((q: any) => (Array.isArray(q?.tasks) ? q.tasks : []));
+        })
+        .map((t: any) => String(t?.target_npc_block_id ?? "").trim())
+        .filter((v) => isUuid(v))
+    )
+  );
+  let npcNameByTargetId = new Map<string, string>();
+  if (talkTargetIds.length) {
+    const { data: npcRows, error: npcErr } = await supabase
+      .from("npcs")
+      .select("id,name")
+      .in("id", talkTargetIds);
+    if (!npcErr) {
+      npcNameByTargetId = new Map<string, string>(
+        (npcRows ?? [])
+          .map((n: any) => [String(n?.id ?? "").trim().toLowerCase(), String(n?.name ?? "").trim()] as const)
+          .filter(([id, name]) => Boolean(id && name))
+      );
+    }
+    const { data: bindingRows, error: bindErr } = await supabase
+      .from("episode_npc_bindings")
+      .select("episode_block_id,npc_id")
+      .in("episode_block_id", talkTargetIds);
+    if (!bindErr && (bindingRows ?? []).length) {
+      const blockToNpc = new Map<string, string>(
+        (bindingRows ?? [])
+          .map((b: any) => [String(b?.episode_block_id ?? "").trim().toLowerCase(), String(b?.npc_id ?? "").trim()] as const)
+          .filter(([blockId, npcId]) => Boolean(blockId && npcId))
+      );
+      const unresolvedNpcIds = Array.from(
+        new Set(
+          talkTargetIds
+            .map((id) => {
+              const lower = id.toLowerCase();
+              if (npcNameByTargetId.has(lower)) return null;
+              return blockToNpc.get(lower) ?? null;
+            })
+            .filter((v): v is string => Boolean(v))
+        )
+      );
+      if (unresolvedNpcIds.length) {
+        const { data: linkedNpcRows, error: linkedNpcErr } = await supabase
+          .from("npcs")
+          .select("id,name")
+          .in("id", unresolvedNpcIds);
+        if (!linkedNpcErr) {
+          const linkedNameByNpcId = new Map<string, string>(
+            (linkedNpcRows ?? [])
+              .map((n: any) => [String(n?.id ?? "").trim().toLowerCase(), String(n?.name ?? "").trim()] as const)
+              .filter(([id, name]) => Boolean(id && name))
+          );
+          for (const rawTargetId of talkTargetIds) {
+            const targetId = rawTargetId.toLowerCase();
+            if (npcNameByTargetId.has(targetId)) continue;
+            const npcId = blockToNpc.get(targetId);
+            if (!npcId) continue;
+            const linkedName = linkedNameByNpcId.get(npcId.toLowerCase());
+            if (linkedName) npcNameByTargetId.set(targetId, linkedName);
+          }
+        }
+      }
+    }
+  }
+  function renderQuestTaskTitle(task: any) {
+    const id = String(task?.id ?? "").trim();
+    const kind = String(task?.kind ?? "").trim().toLowerCase() || "task";
+    const targetNpcId = String(task?.target_npc_block_id ?? "").trim();
+    const explicitName = String(task?.target_npc_name ?? "").trim();
+    const lookupName = targetNpcId ? npcNameByTargetId.get(targetNpcId.toLowerCase()) ?? "" : "";
+    const npcName = explicitName || lookupName;
+    if (kind === "talk_to_npc" && npcName) return `Talk to ${npcName}`;
+    const rawTitle = String(task?.title ?? "").trim();
+    if (rawTitle && !/^talk to npc \(/i.test(rawTitle)) return rawTitle;
+    if (kind === "talk_to_npc" && targetNpcId) {
+      return npcName ? `Talk to ${npcName}` : `Talk to NPC (${targetNpcId.slice(0, 8)}...)`;
+    }
+    return rawTitle || id;
+  }
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-4">
@@ -367,7 +452,7 @@ export default async function DmScreenPage({
                         <div className="space-y-1">
                           {qTasks.map((t: any) => {
                             const tId = String(t?.id ?? "").trim();
-                            const tTitle = String(t?.title ?? "").trim() || tId;
+                            const tTitle = renderQuestTaskTitle(t);
                             if (!tId) return null;
                             return (
                               <div key={tId} className="flex items-center justify-between gap-2 rounded border px-2 py-1">
@@ -791,7 +876,7 @@ export default async function DmScreenPage({
                                           <div className="space-y-1">
                                             {qTasks.map((t: any) => {
                                               const tId = String(t?.id ?? "").trim();
-                                              const tTitle = String(t?.title ?? "").trim() || tId;
+                                              const tTitle = renderQuestTaskTitle(t);
                                               if (!tId) return null;
                                               return (
                                                 <div key={tId} className="flex items-center justify-between gap-2 rounded border px-2 py-1">
