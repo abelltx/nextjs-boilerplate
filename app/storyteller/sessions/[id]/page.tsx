@@ -11,6 +11,7 @@ import {
   storytellerCompleteQuestTaskForAll,
 } from "./actions";
 import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 import { EpisodePicker } from "@/components/EpisodePicker";
 import { presentBlockToPlayersAction, clearPresentedAction } from "@/app/actions/present";
 import DmPlayerRollLineRealtime from "@/components/DmPlayerRollLineRealtime";
@@ -265,6 +266,48 @@ export default async function DmScreenPage({
   const questDirectorDefs = Array.isArray(questDirectorNpcBlock?.meta?.npc_tabs?.quests?.quest_defs)
     ? (questDirectorNpcBlock?.meta?.npc_tabs?.quests?.quest_defs as any[])
     : [];
+  const sessionPlayerIds = Array.from(
+    new Set((joins ?? []).map((j: any) => String(j?.player_id ?? "").trim()).filter(Boolean))
+  );
+  const admin = createAdminClient() ?? supabase;
+  let sessionCharacterIds: string[] = [];
+  if (sessionPlayerIds.length) {
+    const { data: charRows } = await admin
+      .from("characters")
+      .select("id,user_id,created_at")
+      .in("user_id", sessionPlayerIds)
+      .order("created_at", { ascending: true });
+    const firstByUser = new Map<string, string>();
+    for (const row of charRows ?? []) {
+      const userId = String((row as any)?.user_id ?? "").trim();
+      const charId = String((row as any)?.id ?? "").trim();
+      if (!userId || !charId || firstByUser.has(userId)) continue;
+      firstByUser.set(userId, charId);
+    }
+    sessionCharacterIds = sessionPlayerIds
+      .map((id) => firstByUser.get(id) ?? "")
+      .filter((id) => Boolean(id));
+  }
+  const questDirectorIds = questDirectorDefs
+    .map((q: any, i: number) => String(q?.id ?? "").trim() || `quest_${i + 1}`)
+    .filter(Boolean);
+  let questProgressRows: any[] = [];
+  if (sessionCharacterIds.length && questDirectorIds.length) {
+    const { data: qpRows } = await admin
+      .from("player_quest_progress")
+      .select("character_id,quest_id,status,completed_task_ids")
+      .in("character_id", sessionCharacterIds)
+      .in("quest_id", questDirectorIds);
+    questProgressRows = qpRows ?? [];
+  }
+  const questProgressByQuest = new Map<string, any[]>();
+  for (const row of questProgressRows) {
+    const questId = String((row as any)?.quest_id ?? "").trim();
+    if (!questId) continue;
+    const list = questProgressByQuest.get(questId) ?? [];
+    list.push(row);
+    questProgressByQuest.set(questId, list);
+  }
   const talkTargetIds = Array.from(
     new Set(
       (blocks ?? [])
@@ -390,8 +433,23 @@ export default async function DmScreenPage({
                 questDirectorDefs.map((q: any, qi: number) => {
                   const qId = String(q?.id ?? "").trim() || `quest_${qi + 1}`;
                   const qTitle = String(q?.title ?? "").trim() || qId;
+                  const qStorytellerNotes = String(q?.storyteller_notes ?? "").trim();
                   const qTasks = Array.isArray(q?.tasks) ? q.tasks : [];
                   const qTaskIds = qTasks.map((t: any) => String(t?.id ?? "").trim()).filter(Boolean);
+                  const qProgressRows = questProgressByQuest.get(qId) ?? [];
+                  const qTaskDoneCounts = new Map<string, number>();
+                  for (const row of qProgressRows) {
+                    const done = Array.isArray((row as any)?.completed_task_ids)
+                      ? (row as any).completed_task_ids.map((v: any) => String(v ?? "").trim()).filter(Boolean)
+                      : [];
+                    for (const tId of done) {
+                      qTaskDoneCounts.set(tId, (qTaskDoneCounts.get(tId) ?? 0) + 1);
+                    }
+                  }
+                  const qCompletedPlayers = qProgressRows.filter((r: any) => {
+                    const st = String(r?.status ?? "").toLowerCase();
+                    return st === "completed" || st === "claimed";
+                  }).length;
                   const qRewardFaith = Math.max(0, Number(q?.rewards?.faith ?? 0) || 0);
                   const qRewardItemIds = Array.isArray(q?.rewards?.item_ids)
                     ? q.rewards.item_ids.map((v: any) => String(v ?? "").trim()).filter(Boolean)
@@ -448,15 +506,29 @@ export default async function DmScreenPage({
                           </form>
                         </div>
                       </div>
+                      {qStorytellerNotes ? (
+                        <div className="rounded border bg-amber-50 px-2 py-1 text-xs text-amber-900 whitespace-pre-wrap">
+                          {qStorytellerNotes}
+                        </div>
+                      ) : null}
+                      <div className="text-[11px] text-gray-600">
+                        Players completed quest: {qCompletedPlayers}/{sessionCharacterIds.length || 0}
+                      </div>
                       {qTasks.length ? (
                         <div className="space-y-1">
                           {qTasks.map((t: any) => {
                             const tId = String(t?.id ?? "").trim();
                             const tTitle = renderQuestTaskTitle(t);
+                            const doneCount = qTaskDoneCounts.get(tId) ?? 0;
                             if (!tId) return null;
                             return (
                               <div key={tId} className="flex items-center justify-between gap-2 rounded border px-2 py-1">
-                                <div className="text-xs">{tTitle}</div>
+                                <div className="text-xs">
+                                  {tTitle}
+                                  <span className="ml-2 text-[11px] text-gray-500">
+                                    ({doneCount}/{sessionCharacterIds.length || 0})
+                                  </span>
+                                </div>
                                 <form
                                   action={async () => {
                                     "use server";
