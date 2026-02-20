@@ -920,7 +920,7 @@ export default async function DmScreenPage({
 
         <div className="col-span-6 border rounded-xl p-4">
           <div className="text-xs uppercase text-gray-500">Stage Mirror</div>
-          <div className="mt-2 rounded border bg-gray-50 p-3 space-y-3">
+          <div className="mt-2 rounded border bg-gray-50 p-3 space-y-3 max-h-[70vh] overflow-y-auto">
             <div className="rounded border bg-white p-2 space-y-1">
               <div className="text-[11px] uppercase text-gray-500">Storyteller Direction</div>
               {presentedBlock ? (
