@@ -83,6 +83,14 @@ function getBaseDurationSeconds(st: any, sessionRow: any) {
   return 5400; // 90 min fallback
 }
 
+function blockTypeTone(type: string) {
+  const t = String(type ?? "").toLowerCase();
+  if (t === "map") return "bg-emerald-100 text-emerald-800 border-emerald-200";
+  if (t === "npc") return "bg-blue-100 text-blue-800 border-blue-200";
+  if (t === "objective") return "bg-orange-100 text-orange-800 border-orange-200";
+  return "bg-gray-100 text-gray-700 border-gray-200";
+}
+
 export default async function DmScreenPage({
   params,
 }: {
@@ -235,8 +243,31 @@ export default async function DmScreenPage({
   const activeSceneMapBlock =
     activeScene?.children?.find((c) => String(c.block_type).toLowerCase() === "map" && !!c.image_url) ?? null;
   const activeSceneMapMarkers = activeSceneMapBlock ? extractMapMarkers(activeSceneMapBlock.meta) : [];
+  const activeSceneNpcBlock =
+    activeScene?.children?.find((c) => String(c.block_type).toLowerCase() === "npc" && !!c.image_url) ?? null;
+  const stageMapBlock =
+    String(presentedBlock?.block_type ?? "").toLowerCase() === "map" ? presentedBlock : activeSceneMapBlock;
+  const stageMapMarkers = stageMapBlock ? extractMapMarkers(stageMapBlock.meta) : [];
+  const stageNpcBlock =
+    String(presentedBlock?.block_type ?? "").toLowerCase() === "npc" ? presentedBlock : activeSceneNpcBlock;
   const previewIsMap = String(presentedBlock?.block_type ?? "").toLowerCase() === "map";
   const previewMapMarkers = previewIsMap ? extractMapMarkers(presentedBlock?.meta) : [];
+  const presentableFlow = scenes.flatMap((s, si) =>
+    (s.children ?? [])
+      .filter((c) => isPresentable(c))
+      .map((b, bi) => ({
+        block: b,
+        sceneIndex: si + 1,
+        stepIndex: bi + 1,
+      }))
+  );
+  const activeFlowIdx = presentedId ? presentableFlow.findIndex((x) => x.block.id === presentedId) : -1;
+  const upcomingFlow = (() => {
+    if (!presentableFlow.length) return [] as typeof presentableFlow;
+    const maxItems = Math.min(8, presentableFlow.length);
+    const start = activeFlowIdx >= 0 ? activeFlowIdx + 1 : 0;
+    return Array.from({ length: maxItems }, (_, i) => presentableFlow[(start + i) % presentableFlow.length]);
+  })();
   const storytellerDirective = (() => {
     if (!presentedBlock) return "";
     const meta = (presentedBlock.meta ?? {}) as Record<string, any>;
@@ -515,6 +546,37 @@ export default async function DmScreenPage({
 
         <div className="space-y-2">
           <SequenceRail items={runtimeSequence} activeId={activeSceneId} />
+          <div className="rounded-lg border p-2 bg-white">
+            <div className="mb-2 text-[11px] uppercase text-gray-500">Next Up Carousel</div>
+            {upcomingFlow.length ? (
+              <div className="flex gap-2 overflow-x-auto snap-x snap-mandatory pb-1">
+                {upcomingFlow.map((row) => {
+                  const b = row.block;
+                  const bt = String(b.block_type ?? "").toLowerCase();
+                  return (
+                    <div key={b.id} className="snap-start min-w-[240px] rounded border bg-gray-50 p-2 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className={`rounded border px-2 py-0.5 text-[10px] uppercase ${blockTypeTone(bt)}`}>{bt}</span>
+                        <span className="text-[10px] text-gray-500">S{row.sceneIndex} • #{b.sort_order}</span>
+                      </div>
+                      <div className="text-sm font-semibold line-clamp-2">{b.title ?? bt}</div>
+                      <form
+                        action={async () => {
+                          "use server";
+                          await presentBlockToPlayersAction(session.id, b.id);
+                          redirect(`/storyteller/sessions/${session.id}`);
+                        }}
+                      >
+                        <button className="w-full rounded border px-2 py-1 text-xs">Present</button>
+                      </form>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-sm text-gray-600">No presentable blocks yet.</div>
+            )}
+          </div>
           <details className="rounded border p-2">
             <summary className="cursor-pointer text-sm font-semibold">Detailed Scene Controls</summary>
             <div className="mt-2 space-y-2">
@@ -890,36 +952,64 @@ export default async function DmScreenPage({
 
       {/* MAIN BOARD */}
       <div className="grid grid-cols-12 gap-3">
-        <div className="col-span-3 border rounded-xl p-4">
-          <div className="text-xs uppercase text-gray-500">Map / City</div>
-          {activeSceneMapBlock?.image_url ? (
-            <div className="mt-2 h-64 rounded border overflow-hidden bg-gray-100 relative">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={activeSceneMapBlock.image_url}
-                alt={activeSceneMapBlock.title ?? "Scene map"}
-                className="w-full h-full object-cover"
-              />
-              {activeSceneMapMarkers.map((m, i) => (
-                <div
-                  key={m.id}
-                  className="absolute -translate-x-1/2 -translate-y-1/2 w-5 h-5 rounded-full border border-white bg-red-500/90 text-white text-[10px] font-bold flex items-center justify-center shadow"
-                  style={{ left: `${m.x}%`, top: `${m.y}%` }}
-                  title={m.label}
-                >
-                  {i + 1}
+        <div className="col-span-12 lg:col-span-3 border rounded-xl p-4">
+          <div className="text-xs uppercase text-gray-500">Players</div>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            {Array.from({ length: 6 }).map((_, i) => {
+              const pRow = (joins ?? [])[i];
+              const playerId = pRow?.player_id ?? null;
+              return (
+                <div key={i} className="border rounded-lg p-2 text-center">
+                  <div className="text-xs text-gray-500">Player {i + 1}</div>
+                  <div className="text-[11px] font-mono break-all">{playerId ? playerId.slice(0, 8) : "-"}</div>
+                  <DmPlayerRollLineRealtime sessionId={sessionId} playerId={playerId} initialState={state as any} />
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="mt-2 h-64 rounded bg-gray-100 flex items-center justify-center text-gray-500">
-              No map in this scene
-            </div>
-          )}
+              );
+            })}
+          </div>
+          <div className="mt-3 border rounded-lg p-3">
+            <div className="text-xs uppercase text-gray-500 mb-2">Check Prompt</div>
+            <CheckPromptCard
+              sessionId={session.id}
+              joins={joins as any[]}
+              rollOpen={Boolean((state as any).roll_open)}
+              currentPrompt={String((state as any).roll_prompt ?? "")}
+              onSendPrompt={async (fd) => {
+                "use server";
+                const checkKey = String(fd.get("check_key") ?? "Perception").trim();
+                const instruction = String(fd.get("instruction") ?? "").trim();
+                const dcRaw = String(fd.get("dc") ?? "").trim();
+                const target = String(fd.get("target") ?? "all").trim() || "all";
+                const dc = Number(dcRaw);
+                const hasDc = Number.isFinite(dc) && dc > 0;
+
+                const prompt = [
+                  "Roll Request",
+                  `${checkKey} check${hasDc ? ` (DC ${dc})` : ""}.`,
+                  instruction || `Click ${checkKey} in your sheet and report your total.`,
+                ].join(" ");
+
+                await updateState(session.id, {
+                  roll_open: true,
+                  roll_die: "d20",
+                  roll_prompt: prompt,
+                  roll_target: target,
+                  roll_round_id: randomUUID(),
+                  roll_results: {},
+                });
+                redirect(`/storyteller/sessions/${session.id}`);
+              }}
+              onClosePrompt={async () => {
+                "use server";
+                await updateState(session.id, { roll_open: false, roll_die: null, roll_prompt: null, roll_target: "all" });
+                redirect(`/storyteller/sessions/${session.id}`);
+              }}
+            />
+          </div>
         </div>
 
-        <div className="col-span-6 border rounded-xl p-4">
-          <div className="text-xs uppercase text-gray-500">Stage Mirror</div>
+        <div className="col-span-12 lg:col-span-6 border rounded-xl p-4">
+          <div className="text-xs uppercase text-gray-500">Stage</div>
           <div className="mt-2 rounded border bg-gray-50 p-3 space-y-3 max-h-[70vh] overflow-y-auto">
             <div className="rounded border bg-white p-2 space-y-1">
               <div className="text-[11px] uppercase text-gray-500">Storyteller Direction</div>
@@ -1130,76 +1220,47 @@ export default async function DmScreenPage({
           </div>
         </div>
 
-        <div className="col-span-3 border rounded-xl p-4">
-          <div className="text-xs uppercase text-gray-500">NPC Portrait</div>
-          {presentedBlock?.image_url ? (
-            <div className="mt-2 h-64 rounded border overflow-hidden bg-gray-100">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={presentedBlock.image_url} alt={presentedBlock.title ?? "Presented"} className="w-full h-full object-cover" />
-            </div>
-          ) : (
-            <div className="mt-2 h-64 rounded bg-gray-100 flex items-center justify-center text-gray-500">
-              NPC image placeholder
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-12 gap-3">
-        <div className="col-span-12 lg:col-span-7 border rounded-xl p-4">
-          <div className="text-xs uppercase text-gray-500">Players</div>
-          <div className="mt-2 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
-            {Array.from({ length: 6 }).map((_, i) => {
-              const pRow = (joins ?? [])[i];
-              const playerId = pRow?.player_id ?? null;
-              return (
-                <div key={i} className="border rounded-lg p-2 text-center">
-                  <div className="text-xs text-gray-500">Player {i + 1}</div>
-                  <div className="text-[11px] font-mono break-all">{playerId ? playerId.slice(0, 8) : "-"}</div>
-                  <DmPlayerRollLineRealtime sessionId={sessionId} playerId={playerId} initialState={state as any} />
-                </div>
-              );
-            })}
+        <div className="col-span-12 lg:col-span-3 border rounded-xl p-4 space-y-3">
+          <div>
+            <div className="text-xs uppercase text-gray-500">Map / City</div>
+            {stageMapBlock?.image_url ? (
+              <div className="mt-2 h-56 rounded border overflow-hidden bg-gray-100 relative">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={stageMapBlock.image_url}
+                  alt={stageMapBlock.title ?? "Scene map"}
+                  className="w-full h-full object-cover"
+                />
+                {stageMapMarkers.map((m, i) => (
+                  <div
+                    key={m.id}
+                    className="absolute -translate-x-1/2 -translate-y-1/2 w-5 h-5 rounded-full border border-white bg-red-500/90 text-white text-[10px] font-bold flex items-center justify-center shadow"
+                    style={{ left: `${m.x}%`, top: `${m.y}%` }}
+                    title={m.label}
+                  >
+                    {i + 1}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-2 h-56 rounded bg-gray-100 flex items-center justify-center text-gray-500">
+                No map in this scene
+              </div>
+            )}
           </div>
-        </div>
-        <div className="col-span-12 lg:col-span-5 border rounded-xl p-4">
-          <div className="text-xs uppercase text-gray-500 mb-2">Check Prompt</div>
-          <CheckPromptCard
-            sessionId={session.id}
-            joins={joins as any[]}
-            rollOpen={Boolean((state as any).roll_open)}
-            currentPrompt={String((state as any).roll_prompt ?? "")}
-            onSendPrompt={async (fd) => {
-              "use server";
-              const checkKey = String(fd.get("check_key") ?? "Perception").trim();
-              const instruction = String(fd.get("instruction") ?? "").trim();
-              const dcRaw = String(fd.get("dc") ?? "").trim();
-              const target = String(fd.get("target") ?? "all").trim() || "all";
-              const dc = Number(dcRaw);
-              const hasDc = Number.isFinite(dc) && dc > 0;
-
-              const prompt = [
-                "Roll Request",
-                `${checkKey} check${hasDc ? ` (DC ${dc})` : ""}.`,
-                instruction || `Click ${checkKey} in your sheet and report your total.`,
-              ].join(" ");
-
-              await updateState(session.id, {
-                roll_open: true,
-                roll_die: "d20",
-                roll_prompt: prompt,
-                roll_target: target,
-                roll_round_id: randomUUID(),
-                roll_results: {},
-              });
-              redirect(`/storyteller/sessions/${session.id}`);
-            }}
-            onClosePrompt={async () => {
-              "use server";
-              await updateState(session.id, { roll_open: false, roll_die: null, roll_prompt: null, roll_target: "all" });
-              redirect(`/storyteller/sessions/${session.id}`);
-            }}
-          />
+          <div>
+            <div className="text-xs uppercase text-gray-500">NPC Portrait</div>
+            {stageNpcBlock?.image_url ? (
+              <div className="mt-2 h-56 rounded border overflow-hidden bg-gray-100">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={stageNpcBlock.image_url} alt={stageNpcBlock.title ?? "Presented"} className="w-full h-full object-cover" />
+              </div>
+            ) : (
+              <div className="mt-2 h-56 rounded bg-gray-100 flex items-center justify-center text-gray-500">
+                NPC image placeholder
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
