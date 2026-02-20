@@ -808,24 +808,10 @@ function QuestListPanel(props: {
                           ? `Talk to ${task.target_npc_name}`
                           : task.title}
                       </div>
-                      {!doneTask && q.status !== "claimed" ? (
-                        q.storytellerControlled ? null : (
-                        <button
-                          type="button"
-                          className="rounded border border-neutral-700 px-2 py-0.5 text-[11px] hover:bg-neutral-900 disabled:opacity-50"
-                          disabled={props.claimingQuestId === q.questId}
-                          onClick={() => props.onTaskDone?.(q, task)}
-                        >
-                          {props.claimingQuestId === q.questId ? "Saving..." : "Done"}
-                        </button>
-                        )
-                      ) : null}
                     </div>
                   );
                 })}
-                {q.storytellerControlled ? (
-                  <div className="text-[11px] text-amber-300">Progress controlled by storyteller.</div>
-                ) : null}
+                <div className="text-[11px] text-amber-300">Progress controlled by storyteller.</div>
                 <div className="text-xs text-neutral-400">
                   Tasks done: {q.completedTaskIds.length}/{(q.tasks ?? []).length || 0}
                 </div>

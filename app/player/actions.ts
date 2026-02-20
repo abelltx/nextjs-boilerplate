@@ -389,6 +389,8 @@ export async function startNpcQuestAction(input: {
   rewardItemIds?: string[];
 }): Promise<{ ok: boolean; status?: string; error?: string }> {
   "use server";
+  const playerQuestControlLocked = true;
+  if (playerQuestControlLocked) return { ok: false, error: "Storyteller assigns quests." };
   const { user } = await getProfile();
   if (!user) return { ok: false, error: "Not signed in." };
 
@@ -483,6 +485,8 @@ export async function completeNpcQuestTaskAction(input: {
   allTaskIds?: string[];
 }): Promise<{ ok: boolean; status?: string; completedTaskIds?: string[]; error?: string }> {
   "use server";
+  const playerQuestControlLocked = true;
+  if (playerQuestControlLocked) return { ok: false, error: "Storyteller controls quest progress." };
   const { user } = await getProfile();
   if (!user) return { ok: false, error: "Not signed in." };
 

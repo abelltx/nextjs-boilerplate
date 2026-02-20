@@ -371,6 +371,8 @@ export default function NpcTabsCard(props: {
     const onQuestTask = props.playerShop?.onQuestTask;
     const questProgress = props.playerShop?.questProgress ?? {};
     if (!onQuestTask) return;
+    // Player quest progress is storyteller-driven; do not auto-complete talk tasks on NPC open.
+    if (props.playerShop) return;
     const npcTargets = new Set<string>(
       (JSON.parse(npcContextIdKey || "[]") as string[]).map((v) => String(v).toLowerCase())
     );
@@ -620,7 +622,7 @@ export default function NpcTabsCard(props: {
           {questDefs.map((quest) => {
             const progress = questProgress[quest.id];
             const status = String(progress?.status ?? "available").toLowerCase() as QuestProgress["status"];
-            const storytellerControlled = Boolean(quest.storytellerControlled);
+            const storytellerControlled = Boolean(quest.storytellerControlled) || Boolean(props.playerShop);
             const completedSet = new Set((progress?.completedTaskIds ?? []).map((id) => String(id).trim()));
             const allTasksDone = quest.tasks.length > 0 && quest.tasks.every((t) => completedSet.has(t.id));
             const claimable = status === "completed" || (status === "active" && allTasksDone);
@@ -713,14 +715,16 @@ export default function NpcTabsCard(props: {
 
                 <div className="mt-2 flex items-center justify-end gap-2">
                   {status === "available" ? (
-                    <button
-                      type="button"
-                      className="rounded border border-neutral-700 px-2 py-1 text-xs hover:bg-neutral-900 disabled:opacity-50 disabled:cursor-not-allowed"
-                      disabled={storytellerControlled || props.playerShop?.claimingQuestId === quest.id || !props.playerShop?.onQuestStart}
-                      onClick={() => props.playerShop?.onQuestStart?.(quest)}
-                    >
-                      {props.playerShop?.claimingQuestId === quest.id ? "Starting..." : "Start Quest"}
-                    </button>
+                    storytellerControlled ? null : (
+                      <button
+                        type="button"
+                        className="rounded border border-neutral-700 px-2 py-1 text-xs hover:bg-neutral-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={props.playerShop?.claimingQuestId === quest.id || !props.playerShop?.onQuestStart}
+                        onClick={() => props.playerShop?.onQuestStart?.(quest)}
+                      >
+                        {props.playerShop?.claimingQuestId === quest.id ? "Starting..." : "Start Quest"}
+                      </button>
+                    )
                   ) : null}
                   {claimable ? (
                     <button
