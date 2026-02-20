@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { createClient } from "@/utils/supabase/client";
 import PlayerStatusHeader from "./PlayerStatusHeader";
 import JourneyLog from "./JourneyLog";
 import JoinSessionModal from "./JoinSessionModal";
@@ -146,6 +147,7 @@ export default function PlayerHubClient(props: {
   const [claimingTrainingId, setClaimingTrainingId] = useState<string | null>(null);
   const [claimingQuestId, setClaimingQuestId] = useState<string | null>(null);
   const router = useRouter();
+  const supabase = useMemo(() => createClient(), []);
 
   const stat = (props.character?.stat_block ?? {}) as any;
   const derived = stat?.derived ?? {};
@@ -246,6 +248,30 @@ export default function PlayerHubClient(props: {
     (selectedSessionId ? "Current session" : null);
   const isSessionLive = Boolean(optimisticLiveSession?.id || liveSession?.id || (selectedSessionId && stageIsLive));
   const isLiveMode = isSessionLive;
+
+  useEffect(() => {
+    const characterId = String(props.character?.id ?? "").trim();
+    if (!characterId) return;
+    const channel = supabase
+      .channel(`player-quest-progress-${characterId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "player_quest_progress",
+          filter: `character_id=eq.${characterId}`,
+        },
+        () => {
+          router.refresh();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [supabase, router, props.character?.id]);
 
   const rollOpen = Boolean(stageState?.roll_open);
   const rollPrompt = String(stageState?.roll_prompt ?? "");
