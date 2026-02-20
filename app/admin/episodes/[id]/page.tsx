@@ -668,6 +668,16 @@ export default async function AdminEpisodeEditPage({
 
           <input name="title" placeholder="Block title (optional)" className="w-full border rounded p-2" />
           <textarea name="body" placeholder="Body text (optional)" className="w-full border rounded p-2 h-24" />
+          <textarea
+            name="storyteller_script"
+            placeholder="Storyteller Script (read aloud)"
+            className="w-full border rounded p-2 h-24"
+          />
+          <textarea
+            name="storyteller_notes"
+            placeholder="Storyteller Notes (private guidance)"
+            className="w-full border rounded p-2 h-20"
+          />
           <input name="image_url" placeholder="Image URL (optional)" className="w-full border rounded p-2" />
           <input name="image_file" type="file" accept="image/*" className="w-full border rounded p-2" />
           <textarea
@@ -829,6 +839,16 @@ export default async function AdminEpisodeEditPage({
                   </div>
                   <input name="title" className="w-full border rounded p-2 text-sm" placeholder="Step title" />
                   <textarea name="body" className="w-full border rounded p-2 h-20 text-sm" placeholder="Step text (what happens here)" />
+                  <textarea
+                    name="storyteller_script"
+                    className="w-full border rounded p-2 h-20 text-sm"
+                    placeholder="Storyteller Script (read aloud)"
+                  />
+                  <textarea
+                    name="storyteller_notes"
+                    className="w-full border rounded p-2 h-16 text-sm"
+                    placeholder="Storyteller Notes (private guidance)"
+                  />
                   <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                     <input name="image_url" className="w-full border rounded p-2 text-sm" placeholder="Image URL (optional)" />
                     <input name="image_file" type="file" accept="image/*" className="w-full border rounded p-2 text-sm" />
@@ -1228,6 +1248,33 @@ export default async function AdminEpisodeEditPage({
                             className="w-full border rounded p-2 h-28"
                             defaultValue={b.body ?? ""}
                             placeholder="Body"
+                          />
+                          <textarea
+                            name="storyteller_script"
+                            className="w-full border rounded p-2 h-24"
+                            defaultValue={
+                              String(
+                                b.meta?.storyteller_script ??
+                                  b.meta?.storyteller_text ??
+                                  ""
+                              )
+                            }
+                            placeholder="Storyteller Script (read aloud)"
+                          />
+                          <textarea
+                            name="storyteller_notes"
+                            className="w-full border rounded p-2 h-20"
+                            defaultValue={
+                              String(
+                                b.meta?.storyteller_notes ??
+                                  b.meta?.dm_notes ??
+                                  b.meta?.gm_notes ??
+                                  b.meta?.notes ??
+                                  b.meta?.note ??
+                                  ""
+                              )
+                            }
+                            placeholder="Storyteller Notes (private guidance)"
                           />
 
                           <input

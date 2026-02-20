@@ -79,6 +79,21 @@ function parseMetaJson(raw: FormDataEntryValue | null): any {
   }
 }
 
+function withStorytellerMeta(baseMeta: any, fd: FormData) {
+  const next = { ...((baseMeta ?? {}) as Record<string, any>) };
+  if (fd.has("storyteller_script")) {
+    const script = String(fd.get("storyteller_script") ?? "").trim();
+    if (script) next.storyteller_script = script;
+    else delete next.storyteller_script;
+  }
+  if (fd.has("storyteller_notes")) {
+    const notes = String(fd.get("storyteller_notes") ?? "").trim();
+    if (notes) next.storyteller_notes = notes;
+    else delete next.storyteller_notes;
+  }
+  return next;
+}
+
 async function upsertNpcBindingForBlock(input: {
   supabase: Awaited<ReturnType<typeof createClient>>;
   episodeId: string;
@@ -177,7 +192,7 @@ export async function addEpisodeBlockAction(episodeId: string, fd: FormData) {
   const image_url = String(fd.get("image_url") ?? "").trim() || null;
   const uploadedImageUrl = await maybeUploadBlockImage(supabase, episodeId, fd, block_type);
   const finalImageUrl = uploadedImageUrl ?? image_url;
-  const meta = parseMetaJson(fd.get("meta_json"));
+  const meta = withStorytellerMeta(parseMetaJson(fd.get("meta_json")), fd);
   const sceneIdRaw = String(fd.get("scene_id") ?? "").trim();
   const sceneId = sceneIdRaw && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sceneIdRaw)
     ? sceneIdRaw
@@ -289,11 +304,21 @@ export async function updateEpisodeBlockAction(blockId: string, episodeId: strin
     patch.image_url = uploadedImageUrl;
   }
 
-  // Only update meta if the field is present (prevents wiping meta accidentally)
-  if (fd.has("meta_json")) {
-    patch.meta = parseMetaJson(fd.get("meta_json"));
+  const hasStorytellerFields = fd.has("storyteller_script") || fd.has("storyteller_notes");
+  // Only update meta if one of the known meta-related fields is present.
+  if (fd.has("meta_json") || hasStorytellerFields) {
+    let nextMeta: any = fd.has("meta_json") ? parseMetaJson(fd.get("meta_json")) : null;
+    if (!nextMeta && hasStorytellerFields) {
+      const { data: existingRow } = await supabase
+        .from("episode_blocks")
+        .select("meta")
+        .eq("id", blockId)
+        .maybeSingle();
+      nextMeta = (existingRow as any)?.meta ?? {};
+    }
+    patch.meta = withStorytellerMeta(nextMeta ?? {}, fd);
   }
-  if (String(patch.block_type).trim().toLowerCase() === "npc" && fd.has("meta_json")) {
+  if (String(patch.block_type).trim().toLowerCase() === "npc" && (fd.has("meta_json") || hasStorytellerFields)) {
     patch.meta = await upsertNpcBindingForBlock({
       supabase,
       episodeId,

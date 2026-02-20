@@ -262,20 +262,37 @@ export default async function DmScreenPage({
   const storytellerDirective = (() => {
     if (!presentedBlock) return "";
     const meta = (presentedBlock.meta ?? {}) as Record<string, any>;
-    const candidates = [
+    const explicitScript = String(meta.storyteller_script ?? "").trim();
+    if (explicitScript) return explicitScript;
+    const explicitNotes = String(meta.storyteller_notes ?? "").trim();
+    if (explicitNotes) return explicitNotes;
+
+    const kind = String(presentedBlock.block_type ?? "").toLowerCase();
+    if (kind === "npc") {
+      const questDefs = Array.isArray(meta?.npc_tabs?.quests?.quest_defs) ? meta.npc_tabs.quests.quest_defs : [];
+      const questNotes = questDefs
+        .map((q: any) => String(q?.storyteller_notes ?? "").trim())
+        .filter(Boolean);
+      if (questNotes.length) {
+        return questNotes
+          .map((txt: string, idx: number) => `Quest ${idx + 1}: ${txt}`)
+          .join("\n\n");
+      }
+    }
+
+    const legacyCandidates = [
       meta.storyteller_text,
-      meta.storyteller_script,
       meta.narrative,
       meta.note,
       meta.notes,
       meta.dm_notes,
       meta.gm_notes,
     ];
-    for (const c of candidates) {
+    for (const c of legacyCandidates) {
       const value = String(c ?? "").trim();
       if (value) return value;
     }
-    const kind = String(presentedBlock.block_type ?? "").toLowerCase();
+
     if (kind === "map") return "Guide players through the map and use marker reveals as they investigate.";
     if (kind === "npc") return "Read the NPC prompt and drive dialogue before assigning or progressing quests.";
     if (kind === "encounter") return "Set initiative and run encounter pacing from this scene.";
