@@ -817,16 +817,7 @@ function QuestListPanel(props: {
                 </div>
               </div>
               {q.status === "completed" ? (
-                <div className="mt-2 flex justify-end">
-                  <button
-                    type="button"
-                    className="rounded border border-emerald-500/60 bg-emerald-500/20 px-2 py-1 text-xs text-emerald-100 hover:bg-emerald-500/30 disabled:opacity-50"
-                    disabled={props.claimingQuestId === q.questId}
-                    onClick={() => props.onClaim?.(q)}
-                  >
-                    {props.claimingQuestId === q.questId ? "Claiming..." : "Claim Rewards"}
-                  </button>
-                </div>
+                <div className="mt-2 text-[11px] text-amber-300">Rewards are assigned by storyteller.</div>
               ) : null}
             </div>
           ))

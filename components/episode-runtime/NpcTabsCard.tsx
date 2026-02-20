@@ -726,7 +726,10 @@ export default function NpcTabsCard(props: {
                       </button>
                     )
                   ) : null}
-                  {claimable ? (
+                  {claimable && storytellerControlled ? (
+                    <div className="text-[11px] text-amber-300">Rewards are assigned by storyteller.</div>
+                  ) : null}
+                  {claimable && !storytellerControlled ? (
                     <button
                       type="button"
                       className="rounded border border-emerald-500/60 bg-emerald-500/20 px-2 py-1 text-xs text-emerald-100 hover:bg-emerald-500/30 disabled:opacity-50 disabled:cursor-not-allowed"

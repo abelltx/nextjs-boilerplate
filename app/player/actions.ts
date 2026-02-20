@@ -587,6 +587,8 @@ export async function claimNpcQuestRewardsAction(input: {
   rewardItemIds?: string[];
 }): Promise<{ ok: boolean; alreadyClaimed?: boolean; grantedItems?: number; faithAwarded?: number; error?: string }> {
   "use server";
+  const playerQuestControlLocked = true;
+  if (playerQuestControlLocked) return { ok: false, error: "Storyteller assigns quest rewards." };
   const { user } = await getProfile();
   if (!user) return { ok: false, error: "Not signed in." };
 
