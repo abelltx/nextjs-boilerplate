@@ -230,6 +230,12 @@ export default async function DmScreenPage({
   const liveTimerSeconds = getLiveRemainingSeconds(state);
   const timerStatusLabel = String((state as any).timer_status ?? "stopped");
   const presentedBlock = presentedId ? blockById.get(presentedId) ?? null : null;
+  const activeScene = presentedSceneIdx >= 0 ? scenes[presentedSceneIdx] : null;
+  const activeSceneMapBlock =
+    activeScene?.children?.find((c) => String(c.block_type).toLowerCase() === "map" && !!c.image_url) ?? null;
+  const activeSceneMapMarkers = activeSceneMapBlock ? extractMapMarkers(activeSceneMapBlock.meta) : [];
+  const previewIsMap = String(presentedBlock?.block_type ?? "").toLowerCase() === "map";
+  const previewMapMarkers = previewIsMap ? extractMapMarkers(presentedBlock?.meta) : [];
   const storytellerDirective = (() => {
     if (!presentedBlock) return "";
     const meta = (presentedBlock.meta ?? {}) as Record<string, any>;
@@ -885,9 +891,30 @@ export default async function DmScreenPage({
       <div className="grid grid-cols-12 gap-3">
         <div className="col-span-3 border rounded-xl p-4">
           <div className="text-xs uppercase text-gray-500">Map / City</div>
-          <div className="mt-2 h-64 rounded bg-gray-100 flex items-center justify-center text-gray-500">
-            Map image placeholder
-          </div>
+          {activeSceneMapBlock?.image_url ? (
+            <div className="mt-2 h-64 rounded border overflow-hidden bg-gray-100 relative">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={activeSceneMapBlock.image_url}
+                alt={activeSceneMapBlock.title ?? "Scene map"}
+                className="w-full h-full object-cover"
+              />
+              {activeSceneMapMarkers.map((m, i) => (
+                <div
+                  key={m.id}
+                  className="absolute -translate-x-1/2 -translate-y-1/2 w-5 h-5 rounded-full border border-white bg-red-500/90 text-white text-[10px] font-bold flex items-center justify-center shadow"
+                  style={{ left: `${m.x}%`, top: `${m.y}%` }}
+                  title={m.label}
+                >
+                  {i + 1}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-2 h-64 rounded bg-gray-100 flex items-center justify-center text-gray-500">
+              No map in this scene
+            </div>
+          )}
         </div>
 
         <div className="col-span-6 border rounded-xl p-4">
@@ -913,13 +940,23 @@ export default async function DmScreenPage({
             {presentedBlock ? (
               <>
                 {presentedBlock.image_url ? (
-                  <div className="rounded border overflow-hidden bg-gray-100">
+                  <div className="rounded border overflow-hidden bg-gray-100 relative">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={presentedBlock.image_url}
                       alt={presentedBlock.title ?? "Presented"}
                       className="w-full max-h-56 object-cover"
                     />
+                    {previewMapMarkers.map((m, i) => (
+                      <div
+                        key={m.id}
+                        className="absolute -translate-x-1/2 -translate-y-1/2 w-5 h-5 rounded-full border border-white bg-red-500/90 text-white text-[10px] font-bold flex items-center justify-center shadow"
+                        style={{ left: `${m.x}%`, top: `${m.y}%` }}
+                        title={m.label}
+                      >
+                        {i + 1}
+                      </div>
+                    ))}
                   </div>
                 ) : null}
                 {presentedBlock.body ? (
