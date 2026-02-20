@@ -373,3 +373,177 @@ export async function storytellerCompleteQuestForAll(input: {
     }
   }
 }
+
+export async function storytellerAssignQuestRewardsForAll(input: {
+  sessionId: string;
+  questId: string;
+  questTitle?: string;
+  allTaskIds?: string[];
+  taskDefs?: Array<{ id: string; title?: string; kind?: string; target_npc_block_id?: string | null; target_npc_name?: string | null }>;
+  rewardFaith?: number;
+  rewardItemIds?: string[];
+}) {
+  const sessionId = String(input.sessionId ?? "").trim();
+  const questId = String(input.questId ?? "").trim();
+  if (!sessionId || !questId) throw new Error("Missing quest details.");
+
+  const supabase = await createClient();
+  const admin = createAdminClient() ?? supabase;
+  const targets = await getSessionCharacterTargets(sessionId);
+  const allTaskIds = cleanIds(input.allTaskIds);
+  const taskDefs = (Array.isArray(input.taskDefs) ? input.taskDefs : [])
+    .map((t: any) => ({
+      id: String(t?.id ?? "").trim(),
+      title: String(t?.title ?? "").trim(),
+      kind: String(t?.kind ?? "").trim().toLowerCase() || "task",
+      target_npc_block_id: String(t?.target_npc_block_id ?? "").trim() || null,
+      target_npc_name: String(t?.target_npc_name ?? "").trim() || null,
+    }))
+    .filter((t) => t.id.length > 0);
+  const rewardItemIds = cleanIds(input.rewardItemIds);
+  const rewardFaith = Math.max(0, Math.floor(Number(input.rewardFaith ?? 0) || 0));
+
+  for (const t of targets) {
+    const { data: rows, error: rowErr } = await admin
+      .from("player_quest_progress")
+      .select("id,status,reward_meta,created_at")
+      .eq("character_id", t.characterId)
+      .eq("quest_id", questId)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    if (rowErr) throw new Error(rowErr.message);
+    const row = Array.isArray(rows) && rows.length ? (rows[0] as any) : null;
+    if (String(row?.status ?? "").toLowerCase() === "claimed") continue;
+
+    const rewardMeta = {
+      faith: Math.max(0, Math.floor(Number((row as any)?.reward_meta?.faith ?? rewardFaith) || 0)),
+      item_ids: cleanIds(
+        Array.isArray((row as any)?.reward_meta?.item_ids)
+          ? ((row as any).reward_meta.item_ids as string[])
+          : rewardItemIds
+      ),
+      task_ids: allTaskIds.length
+        ? allTaskIds
+        : cleanIds(
+            Array.isArray((row as any)?.reward_meta?.task_ids)
+              ? ((row as any).reward_meta.task_ids as string[])
+              : allTaskIds
+          ),
+      task_defs: taskDefs.length ? taskDefs : Array.isArray((row as any)?.reward_meta?.task_defs) ? (row as any).reward_meta.task_defs : [],
+      storyteller_controlled: true,
+    };
+
+    // Grant item rewards (stack-aware).
+    if (rewardMeta.item_ids.length) {
+      const { data: itemRows, error: itemErr } = await admin
+        .from("items")
+        .select("id,name,is_active,stackable,max_stack")
+        .in("id", rewardMeta.item_ids);
+      if (itemErr) throw new Error(itemErr.message);
+      const validItems = (itemRows ?? []).filter((it: any) => Boolean(it?.id) && it?.is_active !== false);
+      for (const it of validItems as any[]) {
+        const itemId = String(it.id);
+        const isStackable = Boolean(it?.stackable ?? true);
+        const maxStack = Number(it?.max_stack ?? NaN);
+        const stackCap = Number.isFinite(maxStack) && maxStack > 0 ? Math.floor(maxStack) : null;
+
+        const { data: existing, error: exErr } = await admin
+          .from("inventory_items")
+          .select("id,quantity")
+          .eq("character_id", t.characterId)
+          .eq("item_id", itemId)
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        if (exErr) throw new Error(exErr.message);
+
+        if (existing?.id && isStackable) {
+          const qty = Math.max(1, Number((existing as any).quantity ?? 1));
+          if (stackCap && qty >= stackCap) continue;
+          const { error: upInvErr } = await admin
+            .from("inventory_items")
+            .update({ quantity: stackCap ? Math.min(stackCap, qty + 1) : qty + 1 })
+            .eq("id", String((existing as any).id));
+          if (upInvErr) throw new Error(upInvErr.message);
+        } else {
+          const { error: insInvErr } = await admin.from("inventory_items").insert({
+            character_id: t.characterId,
+            item_id: itemId,
+            name: String((it as any).name ?? "Quest Reward"),
+            quantity: 1,
+          });
+          if (insInvErr) throw new Error(insInvErr.message);
+        }
+      }
+    }
+
+    // Grant faith rewards.
+    if (rewardMeta.faith > 0) {
+      const { data: curRow, error: curErr } = await admin
+        .from("character_stats_current")
+        .select("id,stat_block_current")
+        .eq("character_id", t.characterId)
+        .maybeSingle();
+      if (curErr) throw new Error(curErr.message);
+      if (curRow?.id) {
+        const statBlock = ((curRow as any).stat_block_current ?? {}) as Record<string, any>;
+        const resources = { ...(statBlock.resources ?? {}) } as Record<string, any>;
+        const before = Number(resources.faith_available ?? 0);
+        resources.faith_available = (Number.isFinite(before) ? before : 0) + rewardMeta.faith;
+        const nextStatBlock = { ...statBlock, resources };
+        const { error: upCurErr } = await admin
+          .from("character_stats_current")
+          .update({ stat_block_current: nextStatBlock })
+          .eq("id", String((curRow as any).id));
+        if (upCurErr) throw new Error(upCurErr.message);
+      } else {
+        const { data: charRow, error: charErr } = await admin
+          .from("characters")
+          .select("id,stat_block")
+          .eq("id", t.characterId)
+          .maybeSingle();
+        if (charErr) throw new Error(charErr.message);
+        const statBlock = ((charRow as any)?.stat_block ?? {}) as Record<string, any>;
+        const resources = { ...(statBlock.resources ?? {}) } as Record<string, any>;
+        const before = Number(resources.faith_available ?? 0);
+        resources.faith_available = (Number.isFinite(before) ? before : 0) + rewardMeta.faith;
+        const nextStatBlock = { ...statBlock, resources };
+        const { error: upCharErr } = await admin
+          .from("characters")
+          .update({ stat_block: nextStatBlock })
+          .eq("id", t.characterId);
+        if (upCharErr) throw new Error(upCharErr.message);
+      }
+    }
+
+    if (!row?.id) {
+      const { error: insErr } = await admin.from("player_quest_progress").insert({
+        player_id: t.playerId,
+        character_id: t.characterId,
+        quest_id: questId,
+        quest_title: String(input.questTitle ?? "").trim() || questId,
+        status: "claimed",
+        completed_task_ids: rewardMeta.task_ids,
+        completed_at: new Date().toISOString(),
+        claimed_at: new Date().toISOString(),
+        last_task_at: new Date().toISOString(),
+        reward_meta: rewardMeta,
+      });
+      if (insErr) throw new Error(insErr.message);
+    } else {
+      const { error: upErr } = await admin
+        .from("player_quest_progress")
+        .update({
+          status: "claimed",
+          completed_task_ids: rewardMeta.task_ids,
+          completed_at: new Date().toISOString(),
+          claimed_at: new Date().toISOString(),
+          last_task_at: new Date().toISOString(),
+          reward_meta: rewardMeta,
+        })
+        .eq("character_id", t.characterId)
+        .eq("quest_id", questId);
+      if (upErr) throw new Error(upErr.message);
+    }
+  }
+}

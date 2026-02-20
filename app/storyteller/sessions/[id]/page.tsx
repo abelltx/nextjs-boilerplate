@@ -7,6 +7,7 @@ import {
   getDmSession,
   updateState,
   storytellerAssignQuestToAll,
+  storytellerAssignQuestRewardsForAll,
   storytellerCompleteQuestForAll,
   storytellerCompleteQuestTaskForAll,
 } from "./actions";
@@ -891,6 +892,29 @@ export default async function DmScreenPage({
                                             >
                                               <button className="rounded border px-2 py-1 text-xs">Complete Quest for All</button>
                                             </form>
+                                            <form
+                                              action={async () => {
+                                                "use server";
+                                                await storytellerAssignQuestRewardsForAll({
+                                                  sessionId: session.id,
+                                                  questId: qId,
+                                                  questTitle: qTitle,
+                                                  allTaskIds: qTaskIds,
+                                                  taskDefs: qTasks.map((t: any) => ({
+                                                    id: String(t?.id ?? "").trim(),
+                                                    title: String(t?.title ?? "").trim(),
+                                                    kind: String(t?.kind ?? "").trim().toLowerCase() || "task",
+                                                    target_npc_block_id: String(t?.target_npc_block_id ?? "").trim() || null,
+                                                    target_npc_name: String(t?.target_npc_name ?? "").trim() || null,
+                                                  })),
+                                                  rewardFaith: qRewardFaith,
+                                                  rewardItemIds: qRewardItemIds,
+                                                });
+                                                redirect(`/storyteller/sessions/${session.id}`);
+                                              }}
+                                            >
+                                              <button className="rounded border px-2 py-1 text-xs">Assign Rewards to All</button>
+                                            </form>
                                           </div>
                                         </div>
                                         {qTasks.length ? (
@@ -1154,6 +1178,29 @@ export default async function DmScreenPage({
                             >
                               <button className="rounded border px-2 py-1 text-xs">Complete Quest for All</button>
                             </form>
+                            <form
+                              action={async () => {
+                                "use server";
+                                await storytellerAssignQuestRewardsForAll({
+                                  sessionId: session.id,
+                                  questId: qId,
+                                  questTitle: qTitle,
+                                  allTaskIds: qTaskIds,
+                                  taskDefs: qTasks.map((t: any) => ({
+                                    id: String(t?.id ?? "").trim(),
+                                    title: String(t?.title ?? "").trim(),
+                                    kind: String(t?.kind ?? "").trim().toLowerCase() || "task",
+                                    target_npc_block_id: String(t?.target_npc_block_id ?? "").trim() || null,
+                                    target_npc_name: String(t?.target_npc_name ?? "").trim() || null,
+                                  })),
+                                  rewardFaith: qRewardFaith,
+                                  rewardItemIds: qRewardItemIds,
+                                });
+                                redirect(`/storyteller/sessions/${session.id}`);
+                              }}
+                            >
+                              <button className="rounded border px-2 py-1 text-xs">Assign Rewards to All</button>
+                            </form>
                           </div>
                         </div>
                         {qStorytellerNotes ? (
@@ -1220,16 +1267,6 @@ export default async function DmScreenPage({
                 ) : (
                   <div className="text-xs text-gray-600">No quests on this NPC.</div>
                 )}
-                <div className="pt-1 border-t flex items-center justify-end">
-                  <button
-                    type="button"
-                    className="rounded border px-2 py-1 text-xs text-gray-500 cursor-not-allowed"
-                    title="Quest-linked loot assignment coming next."
-                    disabled
-                  >
-                    Assign Loot (Soon)
-                  </button>
-                </div>
               </div>
             ) : null}
             <details className="rounded border bg-white p-2 space-y-2" open>
@@ -1275,24 +1312,40 @@ export default async function DmScreenPage({
           <div>
             <div className="text-xs uppercase text-gray-500">Map / City</div>
             {stageMapBlock?.image_url ? (
-              <div className="mt-2 h-56 rounded border overflow-hidden bg-gray-100 relative">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={stageMapBlock.image_url}
-                  alt={stageMapBlock.title ?? "Scene map"}
-                  className="w-full h-full object-cover"
-                />
-                {stageMapMarkers.map((m, i) => (
-                  <div
-                    key={m.id}
-                    className="absolute -translate-x-1/2 -translate-y-1/2 w-5 h-5 rounded-full border border-white bg-red-500/90 text-white text-[10px] font-bold flex items-center justify-center shadow"
-                    style={{ left: `${m.x}%`, top: `${m.y}%` }}
-                    title={m.label}
-                  >
-                    {i + 1}
+              <form
+                action={async () => {
+                  "use server";
+                  await presentBlockToPlayersAction(session.id, stageMapBlock.id);
+                  redirect(`/storyteller/sessions/${session.id}`);
+                }}
+                className="mt-2"
+              >
+                <button
+                  type="submit"
+                  className="group relative h-56 w-full rounded border overflow-hidden bg-gray-100 text-left"
+                  title="Click to present this scene map to players"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={stageMapBlock.image_url}
+                    alt={stageMapBlock.title ?? "Scene map"}
+                    className="w-full h-full object-cover"
+                  />
+                  {stageMapMarkers.map((m, i) => (
+                    <div
+                      key={m.id}
+                      className="absolute -translate-x-1/2 -translate-y-1/2 w-5 h-5 rounded-full border border-white bg-red-500/90 text-white text-[10px] font-bold flex items-center justify-center shadow"
+                      style={{ left: `${m.x}%`, top: `${m.y}%` }}
+                      title={m.label}
+                    >
+                      {i + 1}
+                    </div>
+                  ))}
+                  <div className="absolute inset-x-0 bottom-0 bg-black/55 px-2 py-1 text-[11px] text-white">
+                    Click map to present to players
                   </div>
-                ))}
-              </div>
+                </button>
+              </form>
             ) : (
               <div className="mt-2 h-56 rounded bg-gray-100 flex items-center justify-center text-gray-500">
                 No map in this scene

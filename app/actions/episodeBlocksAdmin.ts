@@ -208,6 +208,37 @@ export async function addEpisodeBlockAction(episodeId: string, fd: FormData) {
   if (allErr) throw new Error(allErr.message);
   const all = (allRows ?? []) as Array<{ id: string; sort_order: number; block_type: string }>;
 
+  // Enforce one map per scene: if a map already exists in the target scene, update it instead of adding another.
+  if (String(block_type).trim().toLowerCase() === "map" && sceneId) {
+    const sceneIdx = all.findIndex((r) => r.id === sceneId && String(r.block_type).trim().toLowerCase() === "scene");
+    if (sceneIdx >= 0) {
+      let endIdx = sceneIdx;
+      for (let i = sceneIdx + 1; i < all.length; i++) {
+        if (String(all[i].block_type).trim().toLowerCase() === "scene") break;
+        endIdx = i;
+      }
+      const childRows = all.slice(sceneIdx + 1, endIdx + 1);
+      const existingMap = childRows.find((r) => String(r.block_type).trim().toLowerCase() === "map");
+      if (existingMap?.id) {
+        const { error: upErr } = await supabase
+          .from("episode_blocks")
+          .update({
+            block_type,
+            audience,
+            mode,
+            title,
+            body,
+            image_url: finalImageUrl,
+            meta,
+          })
+          .eq("id", existingMap.id);
+        if (upErr) throw new Error(upErr.message);
+        revalidatePath(`/admin/episodes/${episodeId}`);
+        return;
+      }
+    }
+  }
+
   if (!sceneId) {
     const last = all[all.length - 1];
     nextOrder = (last?.sort_order ?? 0) + 10;
