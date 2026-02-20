@@ -940,6 +940,8 @@ function StagePanel({
                 imageUrl={block.image_url ?? null}
                 embedded
                 hideInformationText
+                defaultTab="image"
+                enableImageLightbox
                 npcContextIds={[
                   String(block.id ?? ""),
                   String(block.meta?.npc_binding?.npc_id ?? ""),
@@ -983,6 +985,8 @@ function StagePanel({
                       imageUrl={selectedReveal.image_url ?? null}
                       embedded
                       hideInformationText
+                      defaultTab="image"
+                      enableImageLightbox
                       npcContextIds={[
                         String(selectedReveal.id ?? ""),
                         String(selectedReveal.meta?.npc_binding?.npc_id ?? ""),

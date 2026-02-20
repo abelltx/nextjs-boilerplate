@@ -61,6 +61,8 @@ export default function NpcTabsCard(props: {
   embedded?: boolean;
   hideInformationText?: boolean;
   npcContextIds?: string[];
+  defaultTab?: RuntimeTabKey;
+  enableImageLightbox?: boolean;
   playerShop?: {
     characterId?: string;
     faithPoints: number;
@@ -119,8 +121,13 @@ export default function NpcTabsCard(props: {
   }, [props.meta, mergedFallbackInfo, mergedImageUrl, props.hideInformationText]);
 
   const [active, setActive] = useState<RuntimeTabKey>(
-    (tabs.find((t) => t.key === "information")?.key ?? tabs[0]?.key ?? "information") as RuntimeTabKey
+    (() => {
+      const requested = String(props.defaultTab ?? "").trim() as RuntimeTabKey;
+      if (requested && tabs.some((t) => t.key === requested)) return requested;
+      return (tabs.find((t) => t.key === "information")?.key ?? tabs[0]?.key ?? "information") as RuntimeTabKey;
+    })()
   );
+  const [imageOpen, setImageOpen] = useState(false);
   const snapshotRaw = JSON.stringify(props.meta?.npc_tabs?.gear?.item_snapshots ?? []);
   const supabase = useMemo(() => createClient(), []);
   const gearItemIds = useMemo<string[]>(() => {
@@ -543,8 +550,15 @@ export default function NpcTabsCard(props: {
       </div>
       {activeTab.key === "image" && mergedImageUrl ? (
         <div className="mt-3 rounded-lg border border-neutral-700 overflow-hidden">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={mergedImageUrl} alt="NPC portrait" className="w-full h-auto" />
+          {props.enableImageLightbox !== false ? (
+            <button type="button" className="block w-full text-left" onClick={() => setImageOpen(true)}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={mergedImageUrl} alt="NPC portrait" className="w-full h-auto" />
+            </button>
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={mergedImageUrl} alt="NPC portrait" className="w-full h-auto" />
+          )}
         </div>
       ) : activeTab.key === "gear" && gearItems.length ? (
         <div className="mt-3 space-y-2">
@@ -752,6 +766,21 @@ export default function NpcTabsCard(props: {
       ) : (
         <div className="mt-3 whitespace-pre-wrap text-sm text-neutral-200">{activeTab.content}</div>
       )}
+      {imageOpen && mergedImageUrl ? (
+        <div className="fixed inset-0 z-[120] bg-black/80 p-4 flex items-center justify-center" onClick={() => setImageOpen(false)}>
+          <div className="relative max-h-[92vh] max-w-[92vw] w-full flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setImageOpen(false)}
+              className="absolute right-2 top-2 rounded border border-white/40 bg-black/50 px-2 py-1 text-xs text-white hover:bg-black/70"
+            >
+              Close
+            </button>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={mergedImageUrl} alt="NPC full" className="max-h-[90vh] max-w-[90vw] h-auto w-auto rounded-lg border border-white/30" />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
