@@ -21,6 +21,7 @@ import RevealCard from "@/components/episode-runtime/RevealCard";
 import CheckPromptCard from "@/components/episode-runtime/CheckPromptCard";
 import NpcTabsCard from "@/components/episode-runtime/NpcTabsCard";
 import { buildRuntimeSequence, extractMapMarkers } from "@/lib/episodeRuntime";
+import SubmitGlowButton from "@/components/ui/SubmitGlowButton";
 
 
 
@@ -923,7 +924,11 @@ export default async function DmScreenPage({
                                                       redirect(`/storyteller/sessions/${session.id}`);
                                                     }}
                                                   >
-                                                    <button className="rounded border px-2 py-0.5 text-[11px]">Mark Task Complete</button>
+                                                    <SubmitGlowButton
+                                                      idleLabel="Mark Task Complete"
+                                                      pendingLabel="Marking..."
+                                                      className="rounded border px-2 py-0.5 text-[11px]"
+                                                    />
                                                   </form>
                                                 </div>
                                               );
@@ -1196,7 +1201,11 @@ export default async function DmScreenPage({
                                       redirect(`/storyteller/sessions/${session.id}`);
                                     }}
                                   >
-                                    <button className="rounded border px-2 py-0.5 text-[11px]">Mark Task Complete</button>
+                                    <SubmitGlowButton
+                                      idleLabel="Mark Task Complete"
+                                      pendingLabel="Marking..."
+                                      className="rounded border px-2 py-0.5 text-[11px]"
+                                    />
                                   </form>
                                 </div>
                               );
