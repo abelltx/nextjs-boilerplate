@@ -252,22 +252,13 @@ export default async function DmScreenPage({
     String(presentedBlock?.block_type ?? "").toLowerCase() === "npc" ? presentedBlock : activeSceneNpcBlock;
   const previewIsMap = String(presentedBlock?.block_type ?? "").toLowerCase() === "map";
   const previewMapMarkers = previewIsMap ? extractMapMarkers(presentedBlock?.meta) : [];
-  const presentableFlow = scenes.flatMap((s, si) =>
-    (s.children ?? [])
-      .filter((c) => isPresentable(c))
-      .map((b, bi) => ({
-        block: b,
-        sceneIndex: si + 1,
-        stepIndex: bi + 1,
-      }))
-  );
-  const activeFlowIdx = presentedId ? presentableFlow.findIndex((x) => x.block.id === presentedId) : -1;
-  const upcomingFlow = (() => {
-    if (!presentableFlow.length) return [] as typeof presentableFlow;
-    const maxItems = Math.min(8, presentableFlow.length);
-    const start = activeFlowIdx >= 0 ? activeFlowIdx + 1 : 0;
-    return Array.from({ length: maxItems }, (_, i) => presentableFlow[(start + i) % presentableFlow.length]);
-  })();
+  const carouselSceneIdx = presentedSceneIdx >= 0 ? presentedSceneIdx : scenes.length ? 0 : -1;
+  const carouselScene = carouselSceneIdx >= 0 ? scenes[carouselSceneIdx] : null;
+  const carouselSceneSteps = (carouselScene?.children ?? []).filter((c) => isPresentable(c));
+  const carouselActiveStepIdx = presentedId ? carouselSceneSteps.findIndex((c) => c.id === presentedId) : -1;
+  const carouselNextScene = carouselSceneIdx >= 0 ? scenes[carouselSceneIdx + 1] ?? null : null;
+  const carouselNextSceneFirst =
+    carouselNextScene?.children?.find((c) => isPresentable(c)) ?? null;
   const storytellerDirective = (() => {
     if (!presentedBlock) return "";
     const meta = (presentedBlock.meta ?? {}) as Record<string, any>;
@@ -547,19 +538,31 @@ export default async function DmScreenPage({
         <div className="space-y-2">
           <SequenceRail items={runtimeSequence} activeId={activeSceneId} />
           <div className="rounded-lg border p-2 bg-white">
-            <div className="mb-2 text-[11px] uppercase text-gray-500">Next Up Carousel</div>
-            {upcomingFlow.length ? (
+            <div className="mb-2 text-[11px] uppercase text-gray-500">
+              Scene Step Carousel
+              {carouselScene ? (
+                <span className="ml-2 normal-case text-gray-600">
+                  ({carouselScene.scene.title ?? `Scene ${carouselSceneIdx + 1}`})
+                </span>
+              ) : null}
+            </div>
+            {carouselSceneSteps.length ? (
               <div className="flex gap-2 overflow-x-auto snap-x snap-mandatory pb-1">
-                {upcomingFlow.map((row) => {
-                  const b = row.block;
+                {carouselSceneSteps.map((b, i) => {
                   const bt = String(b.block_type ?? "").toLowerCase();
+                  const isActiveStep = carouselActiveStepIdx === i;
                   return (
-                    <div key={b.id} className="snap-start min-w-[240px] rounded border bg-gray-50 p-2 space-y-2">
+                    <div
+                      key={b.id}
+                      className={`snap-start min-w-[170px] rounded border p-2 space-y-1.5 ${
+                        isActiveStep ? "bg-blue-50 border-blue-300" : "bg-gray-50"
+                      }`}
+                    >
                       <div className="flex items-center justify-between gap-2">
                         <span className={`rounded border px-2 py-0.5 text-[10px] uppercase ${blockTypeTone(bt)}`}>{bt}</span>
-                        <span className="text-[10px] text-gray-500">S{row.sceneIndex} • #{b.sort_order}</span>
+                        <span className="text-[10px] text-gray-500">Step {i + 1}</span>
                       </div>
-                      <div className="text-sm font-semibold line-clamp-2">{b.title ?? bt}</div>
+                      <div className="text-xs font-semibold line-clamp-2">{b.title ?? bt}</div>
                       <form
                         action={async () => {
                           "use server";
@@ -567,14 +570,36 @@ export default async function DmScreenPage({
                           redirect(`/storyteller/sessions/${session.id}`);
                         }}
                       >
-                        <button className="w-full rounded border px-2 py-1 text-xs">Present</button>
+                        <button className="w-full rounded border px-2 py-1 text-[11px]">Go to Step</button>
                       </form>
                     </div>
                   );
                 })}
+                {carouselNextSceneFirst ? (
+                  <div className="snap-start min-w-[170px] rounded border p-2 space-y-1.5 bg-violet-50 border-violet-300">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="rounded border px-2 py-0.5 text-[10px] uppercase bg-violet-100 text-violet-800 border-violet-200">
+                        scene
+                      </span>
+                      <span className="text-[10px] text-gray-500">Final Step</span>
+                    </div>
+                    <div className="text-xs font-semibold line-clamp-2">
+                      Progress to {carouselNextScene?.scene?.title ?? "Next Scene"}
+                    </div>
+                    <form
+                      action={async () => {
+                        "use server";
+                        await presentBlockToPlayersAction(session.id, carouselNextSceneFirst.id);
+                        redirect(`/storyteller/sessions/${session.id}`);
+                      }}
+                    >
+                      <button className="w-full rounded border px-2 py-1 text-[11px]">Next Scene</button>
+                    </form>
+                  </div>
+                ) : null}
               </div>
             ) : (
-              <div className="text-sm text-gray-600">No presentable blocks yet.</div>
+              <div className="text-sm text-gray-600">No presentable steps in this scene yet.</div>
             )}
           </div>
           <details className="rounded border p-2">
