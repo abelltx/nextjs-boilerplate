@@ -273,6 +273,17 @@ export default function PlayerHubClient(props: {
     };
   }, [supabase, router, props.character?.id]);
 
+  // Fallback for environments where realtime isn't enabled/reliable.
+  useEffect(() => {
+    if (!isLiveMode || !selectedSessionId) return;
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        router.refresh();
+      }
+    }, 3000);
+    return () => window.clearInterval(interval);
+  }, [isLiveMode, selectedSessionId, router]);
+
   const rollOpen = Boolean(stageState?.roll_open);
   const rollPrompt = String(stageState?.roll_prompt ?? "");
   const promptTarget = useMemo(() => (rollOpen ? detectPromptTarget(rollPrompt) : null), [rollOpen, rollPrompt]);
