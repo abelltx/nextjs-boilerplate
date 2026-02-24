@@ -20,8 +20,7 @@ export default function ItemCropModal({
   const [zoom, setZoom] = useState(1);
   const [cropPixels, setCropPixels] = useState<Area | null>(null);
 
-  // Same portrait ratio as NPC (334/430). Change later if you want square items.
-  const aspect = 334 / 430;
+  const aspect = 1;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">

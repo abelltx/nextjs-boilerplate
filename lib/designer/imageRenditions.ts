@@ -99,3 +99,21 @@ export async function buildNpcRenditions(file: File, crop: CropPixels) {
     thumb: await canvasToWebpBlob(thumb, 0.86),
   };
 }
+
+export async function buildItemRenditions(file: File, crop: CropPixels) {
+  const img = await loadImage(file);
+  const full = drawFullToCanvas(img);
+  const cropped = drawCroppedToCanvas(img, crop);
+
+  const squareMedium = resizeCanvas(cropped, 334, 334);
+  const squareSmall = resizeCanvas(cropped, 167, 167);
+  const squareThumb = resizeCanvas(cropped, 72, 72);
+
+  return {
+    full: await canvasToWebpBlob(full, 0.94),
+    portrait: await canvasToWebpBlob(squareMedium, 0.92),
+    medium: await canvasToWebpBlob(squareMedium, 0.9),
+    small: await canvasToWebpBlob(squareSmall, 0.88),
+    thumb: await canvasToWebpBlob(squareThumb, 0.86),
+  };
+}

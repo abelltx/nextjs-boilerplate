@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import ItemCropModal from "./ItemCropModal";
-import { buildNpcRenditions } from "@/lib/designer/imageRenditions"; // reuse the same working pipeline
+import { buildItemRenditions } from "@/lib/designer/imageRenditions";
 import { createClient } from "@/utils/supabase/client";
 import { itemClearImageMetaAction, itemSetImageMetaAction } from "./actions";
 
@@ -16,10 +16,7 @@ type ItemImg = {
 };
 
 type ItemWithImg = any & {
-  // new: server page can attach signed urls here
   _img?: ItemImg;
-
-  // backward-compatible: if you ever pass these directly
   thumbUrl?: string;
   mediumUrl?: string;
 };
@@ -101,7 +98,7 @@ export default function ItemImageUploader({ item }: { item: ItemWithImg }) {
     setBusy(true);
     setStatus("Cropping + generating thumbnails...");
     try {
-      const renditions = await buildNpcRenditions(pickedFile, pixels);
+      const renditions = await buildItemRenditions(pickedFile, pixels);
 
       setStatus("Uploading to Storage...");
       await uploadRenditions(item.id, renditions);
@@ -118,22 +115,9 @@ export default function ItemImageUploader({ item }: { item: ItemWithImg }) {
     }
   }
 
-  // ✅ Prefer server-derived signed URLs if provided
-  const mediumUrl =
-    item?._img?.mediumUrl ??
-    item?.mediumUrl ??
-    null;
-
-  const thumbUrl =
-    item?._img?.thumbUrl ??
-    item?.thumbUrl ??
-    null;
-
-  const altText =
-    item?._img?.alt ??
-    item?.image_alt ??
-    item?.name ??
-    "Item";
+  const mediumUrl = item?._img?.mediumUrl ?? item?.mediumUrl ?? null;
+  const thumbUrl = item?._img?.thumbUrl ?? item?.thumbUrl ?? null;
+  const altText = item?._img?.alt ?? item?.image_alt ?? item?.name ?? "Item";
 
   return (
     <div className="flex items-start gap-4">
@@ -143,18 +127,18 @@ export default function ItemImageUploader({ item }: { item: ItemWithImg }) {
           <img
             src={(mediumUrl ?? thumbUrl) as string}
             alt={altText}
-            width={167}
-            height={215}
-            className="rounded-lg border object-cover"
+            width={180}
+            height={180}
+            className="h-[180px] w-[180px] rounded-lg border object-cover"
           />
         ) : (
-          <div className="h-[215px] w-[167px] rounded-lg border bg-muted/40" />
+          <div className="h-[180px] w-[180px] rounded-lg border bg-muted/40" />
         )}
       </div>
 
       <div className="space-y-2">
         <div className="text-sm text-muted-foreground">
-          Upload any image. You’ll crop it to the portrait ratio, and the system will generate all thumbnails.
+          Upload any image. You will crop it square, and the system will generate all thumbnails.
         </div>
 
         <div className="flex flex-wrap gap-2">
