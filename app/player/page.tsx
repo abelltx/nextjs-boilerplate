@@ -16,6 +16,7 @@ type ItemEffectRow = {
   value: number | null;
   notes: string | null;
 };
+type AdvantageMap = Record<string, string[]>;
 type TraitEffectRow = {
   effect_type: string | null;
   effect_key: string | null;
@@ -71,7 +72,8 @@ function toSaveKey(raw: string): AbilityKey | null {
 function applyEffects(
   baseStat: any,
   effects: Array<ItemEffectRow | TraitEffectRow>,
-  itemNameById: Record<string, string> = {}
+  itemNameById: Record<string, string> = {},
+  equippedItemIds: Set<string> = new Set()
 ) {
   const stat = { ...(baseStat ?? {}) } as any;
   const abilities = { ...(stat.abilities ?? {}) } as Record<string, number>;
@@ -81,6 +83,7 @@ function applyEffects(
   const derived = { ...(stat.derived ?? {}) } as Record<string, number>;
   const statusEffects = Array.isArray(stat.effects) ? [...stat.effects] : [];
   const passiveNotes = Array.isArray(stat.passiveNotes) ? [...stat.passiveNotes] : [];
+  const advantages: AdvantageMap = { ...(stat.advantages ?? {}) };
 
   for (const e of effects) {
     const type = String(e.effect_type ?? "").trim().toLowerCase();
@@ -123,8 +126,17 @@ function applyEffects(
     }
 
     if (type === "resistance" || type === "immunity" || type === "advantage") {
+      const sourceId = String((e as ItemEffectRow)?.item_id ?? "").trim();
+      const sourceName =
+        (sourceId ? itemNameById[sourceId] : "") ||
+        (type === "advantage" ? "Feature" : "Effect");
+      if (type === "advantage") {
+        const advKey = key;
+        const existing = Array.isArray(advantages[advKey]) ? advantages[advKey] : [];
+        if (!existing.includes(sourceName)) advantages[advKey] = [...existing, sourceName];
+      }
       statusEffects.push({
-        name: `${type}: ${key}`,
+        name: `${type}: ${key}${type === "advantage" ? ` (${sourceName})` : ""}`,
         kind: "buff",
       });
       continue;
@@ -140,6 +152,10 @@ function applyEffects(
 
     if (type === "passive") {
       const sourceId = String((e as ItemEffectRow)?.item_id ?? "").trim();
+      const activationMode = String(e.mode ?? "").trim().toLowerCase();
+      const activeWhenOwned = activationMode === "owned" || activationMode === "always";
+      const activeWhenEquipped = !activeWhenOwned;
+      if (activeWhenEquipped && (!sourceId || !equippedItemIds.has(sourceId))) continue;
       const sourceName =
         (sourceId ? itemNameById[sourceId] : "") ||
         String(e.effect_key ?? "").trim() ||
@@ -155,6 +171,7 @@ function applyEffects(
   stat.derived = derived;
   stat.effects = statusEffects;
   stat.passiveNotes = passiveNotes;
+  stat.advantages = advantages;
   stat._breakdown = {
     ...(stat._breakdown ?? {}),
     abilities: {
@@ -340,6 +357,7 @@ export default async function PlayerPage() {
       .from("item_effects")
       .select("item_id,effect_type,effect_key,mode,value,notes,sort_order,created_at")
       .in("item_id", equippedItemIds)
+      .neq("effect_type", "passive")
       .order("sort_order", { ascending: true })
       .order("created_at", { ascending: true });
 
@@ -607,7 +625,8 @@ export default async function PlayerPage() {
   const mergedStatBlock = applyEffects(
     baseStatBlock,
     [...itemEffects, ...traitEffects, ...passiveItemEffects],
-    itemNameById
+    itemNameById,
+    new Set(equippedItemIds)
   );
 
   character = { ...character, stat_block: mergedStatBlock };

@@ -109,7 +109,10 @@ const EFFECT_MODES: Record<string, { label: string; value: string }[]> = {
   resistance: [{ label: "grant", value: "grant" }],
   immunity: [{ label: "grant", value: "grant" }],
   advantage: [{ label: "grant", value: "grant" }],
-  passive: [{ label: "note", value: "note" }],
+  passive: [
+    { label: "equipped", value: "equipped" },
+    { label: "owned", value: "owned" },
+  ],
   special: [{ label: "note", value: "note" }],
 };
 

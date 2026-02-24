@@ -97,6 +97,10 @@ function isLiveState(state: any) {
   return false;
 }
 
+function normalizeAdvantageKey(raw: string) {
+  return String(raw ?? "").trim().toLowerCase().replace(/\s+/g, "_");
+}
+
 export default function PlayerHubClient(props: {
   userId: string;
   userEmail: string;
@@ -287,6 +291,33 @@ export default function PlayerHubClient(props: {
   const rollOpen = Boolean(stageState?.roll_open);
   const rollPrompt = String(stageState?.roll_prompt ?? "");
   const promptTarget = useMemo(() => (rollOpen ? detectPromptTarget(rollPrompt) : null), [rollOpen, rollPrompt]);
+  const advantageMap = (stat?.advantages ?? {}) as Record<string, string[]>;
+  const abilityAdvantageMap: Partial<Record<AbilityKey, boolean>> = useMemo(() => {
+    const out: Partial<Record<AbilityKey, boolean>> = {};
+    (["str", "dex", "con", "int", "wis", "cha"] as AbilityKey[]).forEach((k) => {
+      const sources = advantageMap[normalizeAdvantageKey(k)];
+      out[k] = Array.isArray(sources) && sources.length > 0;
+    });
+    return out;
+  }, [advantageMap]);
+  const skillAdvantageMap: Record<string, boolean> = useMemo(() => {
+    const out: Record<string, boolean> = {};
+    SKILL_ALIASES.forEach((s) => {
+      const keys = [s.key, ...s.aliases].map((v) => normalizeAdvantageKey(v));
+      out[s.key] = keys.some((k) => Array.isArray(advantageMap[k]) && advantageMap[k].length > 0);
+    });
+    return out;
+  }, [advantageMap]);
+  const activePromptAdvantageSources = useMemo(() => {
+    if (!rollOpen || !promptTarget) return [] as string[];
+    if (promptTarget.kind === "ability") {
+      return advantageMap[normalizeAdvantageKey(promptTarget.abilityKey)] ?? [];
+    }
+    if (promptTarget.kind === "skill") {
+      return advantageMap[normalizeAdvantageKey(promptTarget.skillKey)] ?? [];
+    }
+    return [] as string[];
+  }, [rollOpen, promptTarget, advantageMap]);
   const stageStoryText = String(stage?.session?.story_text ?? selectedSession?.story_text ?? "");
   const [diceMode, setDiceMode] = useState<"digital" | "manual">("digital");
   const [manualValue, setManualValue] = useState("");
@@ -581,6 +612,7 @@ export default function PlayerHubClient(props: {
               highlightAbility={promptTarget?.kind === "ability" ? promptTarget.abilityKey : null}
               onAbilityRoll={handleAbilityGuidedRoll}
               rollLocked={rollLocked || diceMode === "manual" || submittingRoll}
+              advantageByAbility={abilityAdvantageMap}
             />
             <SavesCard stat={stat} />
             <PassivesCard stat={stat} />
@@ -637,6 +669,7 @@ export default function PlayerHubClient(props: {
                       }}
                       rollLocked={rollLocked}
                       submitting={submittingRoll}
+                      advantageSources={activePromptAdvantageSources}
                     />
                   </div>
                 ) : null}
@@ -740,6 +773,7 @@ export default function PlayerHubClient(props: {
                 highlightSkill={promptTarget?.kind === "skill" ? promptTarget.skillKey : null}
                 onSkillRoll={handleSkillGuidedRoll}
                 rollLocked={rollLocked || diceMode === "manual" || submittingRoll}
+                advantageBySkill={skillAdvantageMap}
               />
             </div>
           </aside>
@@ -1217,6 +1251,7 @@ function RollRequestPanel(props: {
   onSubmitManual: () => void;
   rollLocked: boolean;
   submitting: boolean;
+  advantageSources?: string[];
 }) {
   return (
     <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
@@ -1235,6 +1270,11 @@ function RollRequestPanel(props: {
       </div>
 
       <div className="mt-3 text-sm text-neutral-200">{props.prompt || "Follow the storyteller's roll instruction."}</div>
+      {Array.isArray(props.advantageSources) && props.advantageSources.length ? (
+        <div className="mt-2 rounded-lg border border-emerald-300/60 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
+          Advantage active: {props.advantageSources.join(", ")}
+        </div>
+      ) : null}
 
       {props.diceMode === "manual" ? (
         <div className="mt-3 flex items-center gap-2">

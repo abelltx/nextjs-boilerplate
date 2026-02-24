@@ -11,6 +11,7 @@ export type StatBlock = {
   skills?: Record<string, number>;
   passives?: Record<string, number>;
   passiveNotes?: Array<{ source: string; text: string }>;
+  advantages?: Record<string, string[]>;
   derived?: { hp_current?: number; hp_max?: number; defense?: number; speed?: number };
   resources?: { faith_available?: number; faith_cap?: number };
   effects?: Array<{ name: string; kind?: "buff" | "debuff"; note?: string }>;
@@ -38,11 +39,13 @@ export function AbilitiesCard({
   highlightAbility = null,
   onAbilityRoll,
   rollLocked = false,
+  advantageByAbility,
 }: {
   stat: StatBlock;
   highlightAbility?: AbilityKey | null;
   onAbilityRoll?: (ability: AbilityKey, meta: RollClickMeta, fromRect: DOMRect) => void;
   rollLocked?: boolean;
+  advantageByAbility?: Partial<Record<AbilityKey, boolean>>;
 }) {
   const a = stat.abilities ?? { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
   const rows: Array<{ k: AbilityKey; label: string }> = [
@@ -57,18 +60,29 @@ export function AbilitiesCard({
   return (
     <Card title="Abilities">
       <div className="grid grid-cols-2 gap-2">
-        {rows.map((r) => (
-          <button
+        {rows.map((r) => {
+          const hasAdvantage = Boolean(advantageByAbility?.[r.k]);
+          return (
+            <button
             type="button"
             key={r.k}
             onClick={(e) => {
               const score = Number(a[r.k] ?? 10);
               const bonus = mod(score) + abilityGearBonus(stat, r.k);
-              const roll = Math.floor(Math.random() * 20) + 1;
+              const rollA = Math.floor(Math.random() * 20) + 1;
+              const rollB = hasAdvantage ? Math.floor(Math.random() * 20) + 1 : null;
+              const roll = rollB == null ? rollA : Math.max(rollA, rollB);
               const total = roll + bonus;
               onAbilityRoll?.(
                 r.k,
-                { label: `${r.label} Check`, total, breakdown: `d20(${roll}) ${bonus >= 0 ? "+" : "-"} ${Math.abs(bonus)}` },
+                {
+                  label: `${r.label} Check`,
+                  total,
+                  breakdown:
+                    rollB == null
+                      ? `d20(${roll}) ${bonus >= 0 ? "+" : "-"} ${Math.abs(bonus)}`
+                      : `adv[d20(${rollA}), d20(${rollB})=>${roll}] ${bonus >= 0 ? "+" : "-"} ${Math.abs(bonus)}`,
+                },
                 e.currentTarget.getBoundingClientRect()
               );
             }}
@@ -81,7 +95,7 @@ export function AbilitiesCard({
             ].join(" ")}
           >
             <div className="text-[11px] text-neutral-400">{r.label}</div>
-            <div className="flex items-baseline justify-between">
+              <div className="flex items-baseline justify-between">
               {(() => {
                 const info = stat._breakdown?.abilities?.[r.k];
                 const base = Number(info?.base ?? a[r.k] ?? 10);
@@ -98,10 +112,18 @@ export function AbilitiesCard({
                   </div>
                 );
               })()}
-              <div className="text-sm text-neutral-200">{fmt(mod(a[r.k]))}</div>
+              <div className="flex items-center gap-2">
+                {hasAdvantage ? (
+                  <span className="rounded border border-emerald-300/60 bg-emerald-500/20 px-1 py-0 text-[10px] font-semibold text-emerald-200">
+                    ADV
+                  </span>
+                ) : null}
+                <div className="text-sm text-neutral-200">{fmt(mod(a[r.k]))}</div>
+              </div>
             </div>
-          </button>
-        ))}
+            </button>
+          );
+        })}
       </div>
     </Card>
   );
@@ -145,11 +167,13 @@ export function SkillsCard({
   highlightSkill = null,
   onSkillRoll,
   rollLocked = false,
+  advantageBySkill,
 }: {
   stat: StatBlock;
   highlightSkill?: string | null;
   onSkillRoll?: (skillKey: string, meta: RollClickMeta, fromRect: DOMRect) => void;
   rollLocked?: boolean;
+  advantageBySkill?: Record<string, boolean>;
 }) {
   const skills = stat.skills ?? {};
   const a = stat.abilities ?? { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
@@ -193,16 +217,26 @@ export function SkillsCard({
           const totalBonus = hasOverride ? Number(skills[s.key] ?? 0) + abilityGearBonus(stat, s.ability) : abilityBonus;
           const proficient = totalBonus > abilityBonus;
 
+          const hasAdvantage = Boolean(advantageBySkill?.[s.key]);
           return (
             <button
               type="button"
               key={s.key}
               onClick={(e) => {
-                const roll = Math.floor(Math.random() * 20) + 1;
+                const rollA = Math.floor(Math.random() * 20) + 1;
+                const rollB = hasAdvantage ? Math.floor(Math.random() * 20) + 1 : null;
+                const roll = rollB == null ? rollA : Math.max(rollA, rollB);
                 const total = roll + totalBonus;
                 onSkillRoll?.(
                   s.key,
-                  { label: `${s.label} Check`, total, breakdown: `d20(${roll}) ${totalBonus >= 0 ? "+" : "-"} ${Math.abs(totalBonus)}` },
+                  {
+                    label: `${s.label} Check`,
+                    total,
+                    breakdown:
+                      rollB == null
+                        ? `d20(${roll}) ${totalBonus >= 0 ? "+" : "-"} ${Math.abs(totalBonus)}`
+                        : `adv[d20(${rollA}), d20(${rollB})=>${roll}] ${totalBonus >= 0 ? "+" : "-"} ${Math.abs(totalBonus)}`,
+                  },
                   e.currentTarget.getBoundingClientRect()
                 );
               }}
@@ -228,7 +262,14 @@ export function SkillsCard({
               <div className="text-sm text-neutral-200">
                 <span>{s.label}</span>
               </div>
-              <div className="justify-self-end text-right text-sm font-semibold text-white">{fmt(totalBonus)}</div>
+              <div className="justify-self-end flex items-center gap-1 text-right text-sm font-semibold text-white">
+                {hasAdvantage ? (
+                  <span className="rounded border border-emerald-300/60 bg-emerald-500/20 px-1 py-0 text-[10px] font-semibold text-emerald-200">
+                    ADV
+                  </span>
+                ) : null}
+                <span>{fmt(totalBonus)}</span>
+              </div>
             </button>
           );
         })}
