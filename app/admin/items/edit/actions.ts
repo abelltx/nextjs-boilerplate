@@ -79,16 +79,16 @@ export async function updateItemAction(formData: FormData) {
     ? tagsRaw.split(",").map((s) => s.trim()).filter(Boolean)
     : null;
 
-  if (!payload.name || !payload.category) redirect("/admin/items/edit?err=missing_required");
+  if (!payload.name || !payload.category) redirect(`/admin/items/edit?id=${itemId}&err=missing_required`);
 
   const { error } = await supabase.from("items").update(payload).eq("id", itemId);
 
   if (error) {
     console.error("updateItemAction error:", error);
-    redirect(`/admin/items/edit?err=${encodeURIComponent(error.message ?? "update_failed")}`);
+    redirect(`/admin/items/edit?id=${itemId}&err=${encodeURIComponent(error.message ?? "update_failed")}`);
   }
 
-  redirect("/admin/items/edit?saved=1");
+  redirect(`/admin/items/edit?id=${itemId}&saved=1`);
 }
 
 /**
@@ -111,7 +111,7 @@ export async function itemSetImageMetaAction(itemId: string, imageAlt: string | 
 
   if (error) {
     console.error("itemSetImageMetaAction error:", error);
-    redirect(`/admin/items/edit?err=${encodeURIComponent(error.message ?? "db_update_failed")}`);
+    redirect(`/admin/items/edit?id=${itemId}&err=${encodeURIComponent(error.message ?? "db_update_failed")}`);
   }
 }
 
@@ -131,7 +131,7 @@ export async function itemClearImageMetaAction(itemId: string) {
 
   if (error) {
     console.error("itemClearImageMetaAction error:", error);
-    redirect(`/admin/items/edit?err=${encodeURIComponent(error.message ?? "db_update_failed")}`);
+    redirect(`/admin/items/edit?id=${itemId}&err=${encodeURIComponent(error.message ?? "db_update_failed")}`);
   }
 }
 
@@ -148,14 +148,14 @@ export async function addItemEffectAction(formData: FormData) {
   const valueRaw = formData.get("value");
   const value = valueRaw === null || valueRaw === "" ? null : Number(valueRaw);
 
-  if (!effect_type || !effect_key || !mode) redirect("/admin/items/edit?err=bad_effect");
+  if (!effect_type || !effect_key || !mode) redirect(`/admin/items/edit?id=${itemId}&err=bad_effect`);
 
   if (["ability", "ac", "speed", "skill", "save"].includes(effect_type)) {
-    if (value === null || !isFinite(value)) redirect("/admin/items/edit?err=value_required");
+    if (value === null || !isFinite(value)) redirect(`/admin/items/edit?id=${itemId}&err=value_required`);
   }
 
   if (effect_type === "special") {
-    if (!notes) redirect("/admin/items/edit?err=notes_required");
+    if (!notes) redirect(`/admin/items/edit?id=${itemId}&err=notes_required`);
   }
 
   const supabase = await createClient();
@@ -171,10 +171,10 @@ export async function addItemEffectAction(formData: FormData) {
 
   if (error) {
     console.error("addItemEffectAction error:", error);
-    redirect(`/admin/items/edit?err=${encodeURIComponent(error.message ?? "insert_failed")}`);
+    redirect(`/admin/items/edit?id=${itemId}&err=${encodeURIComponent(error.message ?? "insert_failed")}`);
   }
 
-  redirect("/admin/items/edit");
+  redirect(`/admin/items/edit?id=${itemId}&saved=1`);
 }
 
 export async function deleteItemEffectAction(formData: FormData) {
@@ -187,10 +187,10 @@ export async function deleteItemEffectAction(formData: FormData) {
 
   if (error) {
     console.error("deleteItemEffectAction error:", error);
-    redirect(`/admin/items/edit?err=${encodeURIComponent(error.message ?? "delete_failed")}`);
+    redirect(`/admin/items/edit?id=${itemId}&err=${encodeURIComponent(error.message ?? "delete_failed")}`);
   }
 
-  redirect("/admin/items/edit");
+  redirect(`/admin/items/edit?id=${itemId}&saved=1`);
 }
 
 export async function deleteItemAction(formData: FormData) {

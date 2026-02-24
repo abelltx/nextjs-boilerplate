@@ -121,7 +121,7 @@ export default function ItemImageUploader({ item }: { item: ItemWithImg }) {
 
   return (
     <div className="flex items-start gap-4">
-      <div>
+      <div className="h-[180px] w-[180px] overflow-hidden rounded-lg border bg-muted/40">
         {mediumUrl || thumbUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -129,11 +129,9 @@ export default function ItemImageUploader({ item }: { item: ItemWithImg }) {
             alt={altText}
             width={180}
             height={180}
-            className="h-[180px] w-[180px] rounded-lg border object-cover"
+            className="h-full w-full object-cover object-center"
           />
-        ) : (
-          <div className="h-[180px] w-[180px] rounded-lg border bg-muted/40" />
-        )}
+        ) : null}
       </div>
 
       <div className="space-y-2">
