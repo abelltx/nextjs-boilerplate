@@ -326,6 +326,13 @@ export default async function PlayerPage() {
         .filter((id: string | null): id is string => Boolean(id))
     )
   );
+  const ownedItemIds = Array.from(
+    new Set(
+      (inventory ?? [])
+        .map((r: any) => String(r?.item_id ?? "").trim())
+        .filter(Boolean)
+    )
+  );
 
   let itemEffects: ItemEffectRow[] = [];
   if (equippedItemIds.length) {
@@ -338,6 +345,18 @@ export default async function PlayerPage() {
 
     if (effectsErr) throw new Error(`Failed to load item effects: ${effectsErr.message}`);
     itemEffects = (effectsRows ?? []) as ItemEffectRow[];
+  }
+  let passiveItemEffects: ItemEffectRow[] = [];
+  if (ownedItemIds.length) {
+    const { data: passiveRows, error: passiveErr } = await supabase
+      .from("item_effects")
+      .select("item_id,effect_type,effect_key,mode,value,notes,sort_order,created_at")
+      .in("item_id", ownedItemIds)
+      .eq("effect_type", "passive")
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true });
+    if (passiveErr) throw new Error(`Failed to load passive item effects: ${passiveErr.message}`);
+    passiveItemEffects = (passiveRows ?? []) as ItemEffectRow[];
   }
   const { data: traitLinks, error: traitLinksErr } = await supabase
     .from("player_trait_links")
@@ -585,7 +604,11 @@ export default async function PlayerPage() {
     const name = String((row as any)?.name ?? "").trim();
     if (id && name && !itemNameById[id]) itemNameById[id] = name;
   }
-  const mergedStatBlock = applyEffects(baseStatBlock, [...itemEffects, ...traitEffects], itemNameById);
+  const mergedStatBlock = applyEffects(
+    baseStatBlock,
+    [...itemEffects, ...traitEffects, ...passiveItemEffects],
+    itemNameById
+  );
 
   character = { ...character, stat_block: mergedStatBlock };
 

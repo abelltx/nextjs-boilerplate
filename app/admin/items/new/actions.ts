@@ -39,5 +39,5 @@ export async function createItemAction(formData: FormData) {
     sameSite: "lax",
   });
 
-  redirect("/admin/items/edit");
+  redirect(`/admin/items/edit?id=${data.id}`);
 }

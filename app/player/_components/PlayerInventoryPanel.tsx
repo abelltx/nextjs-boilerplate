@@ -17,8 +17,8 @@ type ItemRow = {
   item: null | {
     id: string;
     name: string;
-    type: string | null;
-    description: string | null;
+    category: string | null;
+    summary: string | null;
     stackable: boolean;
     max_stack: number | null;
     image_url: string | null;
@@ -33,10 +33,10 @@ function safeName(row: ItemRow) {
   return row.item?.name ?? row.name ?? "Unknown Item";
 }
 function safeType(row: ItemRow) {
-  return row.item?.type ?? "Uncategorized";
+  return row.item?.category ?? "Uncategorized";
 }
 function safeDesc(row: ItemRow) {
-  return row.item?.description ?? "No description yet.";
+  return row.item?.summary ?? "No description yet.";
 }
 function safeStackable(row: ItemRow) {
   return row.item?.stackable ?? true;
@@ -81,8 +81,8 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
         item:items (
           id,
           name,
-          type,
-          description,
+          category,
+          summary,
           stackable,
           max_stack,
           image_url,
