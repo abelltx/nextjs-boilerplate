@@ -81,7 +81,7 @@ export function AbilitiesCard({
                   breakdown:
                     rollB == null
                       ? `d20(${roll}) ${bonus >= 0 ? "+" : "-"} ${Math.abs(bonus)}`
-                      : `adv[d20(${rollA}), d20(${rollB})=>${roll}] ${bonus >= 0 ? "+" : "-"} ${Math.abs(bonus)}`,
+                      : `Advantage roll: ${rollA} and ${rollB}, kept ${roll}, ${bonus >= 0 ? "+" : "-"}${Math.abs(bonus)} bonus`,
                 },
                 e.currentTarget.getBoundingClientRect()
               );
@@ -235,7 +235,7 @@ export function SkillsCard({
                     breakdown:
                       rollB == null
                         ? `d20(${roll}) ${totalBonus >= 0 ? "+" : "-"} ${Math.abs(totalBonus)}`
-                        : `adv[d20(${rollA}), d20(${rollB})=>${roll}] ${totalBonus >= 0 ? "+" : "-"} ${Math.abs(totalBonus)}`,
+                        : `Advantage roll: ${rollA} and ${rollB}, kept ${roll}, ${totalBonus >= 0 ? "+" : "-"}${Math.abs(totalBonus)} bonus`,
                   },
                   e.currentTarget.getBoundingClientRect()
                 );

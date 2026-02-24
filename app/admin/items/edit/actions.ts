@@ -38,7 +38,10 @@ export async function updateItemAction(formData: FormData) {
     weight_lb: formData.get("weight_lb") ? Number(formData.get("weight_lb")) : null,
     faith_required: formData.get("faith_required") ? Number(formData.get("faith_required")) : 0,
     summary: (String(formData.get("summary") ?? "").trim() || null) as string | null,
-    rules_text: (String(formData.get("rules_text") ?? "").trim() || null) as string | null,
+    rules_text:
+      (String(formData.get("description") ?? "").trim() ||
+        String(formData.get("rules_text") ?? "").trim() ||
+        null) as string | null,
     image_url: (String(formData.get("image_url") ?? "").trim() || null) as string | null,
 
     is_active: String(formData.get("is_active") ?? "") === "on",

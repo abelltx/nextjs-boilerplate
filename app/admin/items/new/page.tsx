@@ -42,8 +42,17 @@ export default async function NewItemPage() {
             </div>
 
             <div className="md:col-span-2">
-              <label className="text-xs text-muted-foreground">Summary</label>
+              <label className="text-xs text-muted-foreground">Summary (short)</label>
               <input name="summary" className="mt-1 h-9 w-full rounded-md border px-3 text-sm" placeholder="A simple item description shown on cards." />
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="text-xs text-muted-foreground">Description (long)</label>
+              <textarea
+                name="description"
+                className="mt-1 min-h-[110px] w-full rounded-md border p-3 text-sm"
+                placeholder="Detailed item description shown in the player item panel."
+              />
             </div>
           </div>
 

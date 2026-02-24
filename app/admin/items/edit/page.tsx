@@ -304,14 +304,14 @@ export default async function ItemEditPage({
             </div>
 
             <div className="md:col-span-2">
-              <label className="text-xs text-muted-foreground">Summary</label>
+              <label className="text-xs text-muted-foreground">Summary (short)</label>
               <input name="summary" defaultValue={item.summary ?? ""} className="mt-1 h-9 w-full rounded-md border px-3 text-sm" />
             </div>
 
             <div className="md:col-span-2">
-              <label className="text-xs text-muted-foreground">Rules Text</label>
+              <label className="text-xs text-muted-foreground">Description (long)</label>
               <textarea
-                name="rules_text"
+                name="description"
                 defaultValue={item.rules_text ?? ""}
                 className="mt-1 min-h-[90px] w-full rounded-md border p-3 text-sm"
               />

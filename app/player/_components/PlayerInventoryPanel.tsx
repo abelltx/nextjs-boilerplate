@@ -19,6 +19,7 @@ type ItemRow = {
     name: string;
     category: string | null;
     summary: string | null;
+    rules_text: string | null;
     stackable: boolean;
     max_stack: number | null;
     image_url: string | null;
@@ -36,7 +37,7 @@ function safeType(row: ItemRow) {
   return row.item?.category ?? "Uncategorized";
 }
 function safeDesc(row: ItemRow) {
-  return row.item?.summary ?? "No description yet.";
+  return row.item?.summary ?? row.item?.rules_text ?? "No description yet.";
 }
 function safeStackable(row: ItemRow) {
   return row.item?.stackable ?? true;
@@ -83,6 +84,7 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
           name,
           category,
           summary,
+          rules_text,
           stackable,
           max_stack,
           image_url,

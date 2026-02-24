@@ -22,6 +22,7 @@ export async function createItemAction(formData: FormData) {
       category,
       rarity: (String(formData.get("rarity") ?? "").trim() || null) as string | null,
       summary: (String(formData.get("summary") ?? "").trim() || null) as string | null,
+      rules_text: (String(formData.get("description") ?? "").trim() || null) as string | null,
       is_active: true,
     })
     .select("id")
