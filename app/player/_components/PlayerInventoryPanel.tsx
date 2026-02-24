@@ -37,7 +37,13 @@ function safeType(row: ItemRow) {
   return row.item?.category ?? "Uncategorized";
 }
 function safeDesc(row: ItemRow) {
-  return row.item?.summary ?? row.item?.rules_text ?? "No description yet.";
+  return row.item?.rules_text ?? row.item?.summary ?? "No description yet.";
+}
+function safeSummary(row: ItemRow) {
+  return row.item?.summary ?? null;
+}
+function safeLongDesc(row: ItemRow) {
+  return row.item?.rules_text ?? null;
 }
 function safeStackable(row: ItemRow) {
   return row.item?.stackable ?? true;
@@ -428,8 +434,16 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
                 </div>
               ) : null}
               <div className="rounded-lg border p-3">
-                <div className="text-xs opacity-70">Description</div>
-                <div className="text-sm mt-1 whitespace-pre-wrap">{safeDesc(selected)}</div>
+                <div className="text-xs opacity-70">Summary</div>
+                <div className="text-sm mt-1 whitespace-pre-wrap">
+                  {safeSummary(selected) ?? "No summary yet."}
+                </div>
+                {safeLongDesc(selected) ? (
+                  <div className="mt-3">
+                    <div className="text-xs opacity-70">Long Description</div>
+                    <div className="text-sm mt-1 whitespace-pre-wrap">{safeLongDesc(selected)}</div>
+                  </div>
+                ) : null}
               </div>
 
               <div className="rounded-lg border p-3 grid grid-cols-2 gap-3">
