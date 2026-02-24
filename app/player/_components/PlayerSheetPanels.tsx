@@ -10,6 +10,7 @@ export type StatBlock = {
   saves?: Partial<Record<AbilityKey, number>>;
   skills?: Record<string, number>;
   passives?: Record<string, number>;
+  passiveNotes?: Array<{ source: string; text: string }>;
   derived?: { hp_current?: number; hp_max?: number; defense?: number; speed?: number };
   resources?: { faith_available?: number; faith_cap?: number };
   effects?: Array<{ name: string; kind?: "buff" | "debuff"; note?: string }>;
@@ -239,13 +240,23 @@ export function SkillsCard({
 export function PassivesCard({ stat }: { stat: StatBlock }) {
   const passives = stat.passives ?? {};
   const entries = Object.entries(passives);
+  const passiveNotes = Array.isArray(stat.passiveNotes) ? stat.passiveNotes : [];
 
   return (
     <Card title="Passives">
-      {entries.length === 0 ? (
+      {entries.length === 0 && passiveNotes.length === 0 ? (
         <div className="text-sm text-neutral-400">No passives set yet.</div>
       ) : (
         <div className="space-y-1">
+          {passiveNotes.map((p, i) => (
+            <div
+              key={`${p.source}-${p.text}-${i}`}
+              className="rounded-lg border border-neutral-800 bg-neutral-950/40 px-3 py-2"
+            >
+              <div className="text-sm font-semibold text-white">{p.source}</div>
+              <div className="mt-1 text-sm text-neutral-200">{p.text}</div>
+            </div>
+          ))}
           {entries
             .sort((a, b) => a[0].localeCompare(b[0]))
             .map(([name, val]) => <Row key={name} left={name} right={String(val)} />)}

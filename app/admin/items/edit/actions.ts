@@ -154,7 +154,7 @@ export async function addItemEffectAction(formData: FormData) {
     if (value === null || !isFinite(value)) redirect(`/admin/items/edit?id=${itemId}&err=value_required`);
   }
 
-  if (effect_type === "special") {
+  if (effect_type === "special" || effect_type === "passive") {
     if (!notes) redirect(`/admin/items/edit?id=${itemId}&err=notes_required`);
   }
 
@@ -164,8 +164,8 @@ export async function addItemEffectAction(formData: FormData) {
     effect_type,
     effect_key,
     mode,
-    value: ["resistance", "immunity", "advantage", "special"].includes(effect_type) ? null : value,
-    notes: effect_type === "special" ? notes : (notes || null),
+    value: ["resistance", "immunity", "advantage", "special", "passive"].includes(effect_type) ? null : value,
+    notes: ["special", "passive"].includes(effect_type) ? notes : (notes || null),
     sort_order,
   });
 

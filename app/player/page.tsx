@@ -9,6 +9,7 @@ export const revalidate = 0;
 type AbilityKey = "str" | "dex" | "con" | "int" | "wis" | "cha";
 
 type ItemEffectRow = {
+  item_id?: string | null;
   effect_type: string | null;
   effect_key: string | null;
   mode: string | null;
@@ -67,7 +68,11 @@ function toSaveKey(raw: string): AbilityKey | null {
   return null;
 }
 
-function applyEffects(baseStat: any, effects: Array<ItemEffectRow | TraitEffectRow>) {
+function applyEffects(
+  baseStat: any,
+  effects: Array<ItemEffectRow | TraitEffectRow>,
+  itemNameById: Record<string, string> = {}
+) {
   const stat = { ...(baseStat ?? {}) } as any;
   const abilities = { ...(stat.abilities ?? {}) } as Record<string, number>;
   const baseAbilities = { ...abilities } as Record<string, number>;
@@ -75,6 +80,7 @@ function applyEffects(baseStat: any, effects: Array<ItemEffectRow | TraitEffectR
   const skills = { ...(stat.skills ?? {}) } as Record<string, number>;
   const derived = { ...(stat.derived ?? {}) } as Record<string, number>;
   const statusEffects = Array.isArray(stat.effects) ? [...stat.effects] : [];
+  const passiveNotes = Array.isArray(stat.passiveNotes) ? [...stat.passiveNotes] : [];
 
   for (const e of effects) {
     const type = String(e.effect_type ?? "").trim().toLowerCase();
@@ -129,6 +135,17 @@ function applyEffects(baseStat: any, effects: Array<ItemEffectRow | TraitEffectR
         name: e.notes?.trim() || "special item effect",
         kind: "buff",
       });
+      continue;
+    }
+
+    if (type === "passive") {
+      const sourceId = String((e as ItemEffectRow)?.item_id ?? "").trim();
+      const sourceName =
+        (sourceId ? itemNameById[sourceId] : "") ||
+        String(e.effect_key ?? "").trim() ||
+        "Item";
+      const text = String(e.notes ?? "").trim();
+      if (text) passiveNotes.push({ source: sourceName, text });
     }
   }
 
@@ -137,6 +154,7 @@ function applyEffects(baseStat: any, effects: Array<ItemEffectRow | TraitEffectR
   stat.skills = skills;
   stat.derived = derived;
   stat.effects = statusEffects;
+  stat.passiveNotes = passiveNotes;
   stat._breakdown = {
     ...(stat._breakdown ?? {}),
     abilities: {
@@ -313,7 +331,7 @@ export default async function PlayerPage() {
   if (equippedItemIds.length) {
     const { data: effectsRows, error: effectsErr } = await supabase
       .from("item_effects")
-      .select("effect_type,effect_key,mode,value,notes,sort_order,created_at")
+      .select("item_id,effect_type,effect_key,mode,value,notes,sort_order,created_at")
       .in("item_id", equippedItemIds)
       .order("sort_order", { ascending: true })
       .order("created_at", { ascending: true });
@@ -561,7 +579,13 @@ export default async function PlayerPage() {
   }
 
   const baseStatBlock = curRow?.stat_block_current ?? character.stat_block ?? {};
-  const mergedStatBlock = applyEffects(baseStatBlock, [...itemEffects, ...traitEffects]);
+  const itemNameById: Record<string, string> = {};
+  for (const row of inventory ?? []) {
+    const id = String((row as any)?.item_id ?? "").trim();
+    const name = String((row as any)?.name ?? "").trim();
+    if (id && name && !itemNameById[id]) itemNameById[id] = name;
+  }
+  const mergedStatBlock = applyEffects(baseStatBlock, [...itemEffects, ...traitEffects], itemNameById);
 
   character = { ...character, stat_block: mergedStatBlock };
 

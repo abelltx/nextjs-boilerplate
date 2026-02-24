@@ -81,6 +81,7 @@ const EFFECT_KEYS: Record<string, { label: string; value: string }[]> = {
     "persuasion",
     "initiative",
   ].map((k) => ({ label: k, value: k })),
+  passive: [{ label: "Passive", value: "passive" }],
   special: [{ label: "Special", value: "special" }],
 };
 
@@ -108,6 +109,7 @@ const EFFECT_MODES: Record<string, { label: string; value: string }[]> = {
   resistance: [{ label: "grant", value: "grant" }],
   immunity: [{ label: "grant", value: "grant" }],
   advantage: [{ label: "grant", value: "grant" }],
+  passive: [{ label: "note", value: "note" }],
   special: [{ label: "note", value: "note" }],
 };
 
@@ -149,7 +151,7 @@ export default function EffectsComposer({
           const keys = EFFECT_KEYS[row.type] ?? EFFECT_KEYS.ability;
           const modes = EFFECT_MODES[row.type] ?? EFFECT_MODES.ability;
           const needsValue = ["ability", "ac", "speed", "skill", "save"].includes(row.type);
-          const needsNotes = row.type === "special";
+          const needsNotes = row.type === "special" || row.type === "passive";
 
           return (
             <form
