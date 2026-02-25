@@ -265,7 +265,9 @@ export function SkillsCard({
               </div>
               <div className="text-xs uppercase text-neutral-300">{s.ability.toUpperCase()}</div>
               <div className="min-w-0 text-[13px] text-neutral-200">
-                <span>{s.label}</span>
+                <span className="block truncate whitespace-nowrap" title={s.label}>
+                  {s.label}
+                </span>
               </div>
               <div className="justify-self-end flex w-full items-center justify-end gap-1 whitespace-nowrap text-right text-[13px] font-semibold text-white">
                 {hasAdvantage ? (
