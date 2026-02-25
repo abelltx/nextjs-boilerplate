@@ -622,7 +622,7 @@ export default function PlayerHubClient(props: {
             </div>
           </aside>
 
-          <section className="lg:col-span-6">
+          <section className="lg:col-span-7">
             <div className="mb-4 rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4">
               <div className="text-sm font-semibold">Stage</div>
 
@@ -766,7 +766,7 @@ export default function PlayerHubClient(props: {
             </div>
           </section>
 
-          <aside className="lg:col-span-3 space-y-4">
+          <aside className="lg:col-span-2 space-y-4">
             <div className="lg:sticky lg:top-4">
               <SkillsCard
                 stat={stat}
