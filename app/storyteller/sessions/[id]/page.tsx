@@ -402,7 +402,13 @@ export default async function DmScreenPage({
     const inv = inventoryByCharacter.get(charId) ?? [];
     const ownedIds = new Set(inv.map((r) => r.item_id));
     const equippedIds = new Set(inv.filter((r) => r.equipped).map((r) => r.item_id));
-    const passives: Array<{ source: string; playerText: string; storytellerText?: string; mode?: string }> = [];
+    const passives: Array<{
+      source: string;
+      playerText: string;
+      storytellerText?: string;
+      mode?: string;
+      saveTriggerEnabled?: boolean;
+    }> = [];
     for (const itemId of ownedIds) {
       const effects = passiveEffectsByItem.get(itemId) ?? [];
       for (const ef of effects) {
@@ -415,6 +421,7 @@ export default async function DmScreenPage({
           playerText: parsed.playerText || "-",
           storytellerText: parsed.storytellerText || undefined,
           mode,
+          saveTriggerEnabled: Boolean(parsed.saveTriggerEnabled),
         });
       }
     }

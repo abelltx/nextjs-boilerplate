@@ -258,6 +258,10 @@ export default function EffectsComposer({
                     placeholder="Only visible on storyteller player-passives drawer"
                     className="mt-1 h-9 w-full rounded-md border px-3 text-sm"
                   />
+                  <label className="mt-2 inline-flex items-center gap-2 text-xs text-muted-foreground">
+                    <input type="checkbox" name="passive_save_trigger" />
+                    Enable storyteller save-trigger button for this passive
+                  </label>
                 </div>
               ) : null}
 

@@ -148,6 +148,7 @@ export async function addItemEffectAction(formData: FormData) {
   const mode = String(formData.get("mode") ?? "").trim();
   const notes = String(formData.get("notes") ?? "").trim();
   const storytellerNote = String(formData.get("storyteller_note") ?? "").trim();
+  const passiveSaveTrigger = String(formData.get("passive_save_trigger") ?? "") === "on";
   const sort_order = formData.get("sort_order") ? Number(formData.get("sort_order")) : 0;
 
   const valueRaw = formData.get("value");
@@ -164,7 +165,7 @@ export async function addItemEffectAction(formData: FormData) {
   }
   const finalNotes =
     effect_type === "passive"
-      ? buildPassiveEffectNotes(notes, storytellerNote)
+      ? buildPassiveEffectNotes(notes, storytellerNote, passiveSaveTrigger)
       : notes;
 
   const supabase = await createClient();

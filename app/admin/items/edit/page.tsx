@@ -182,6 +182,9 @@ export default async function ItemEditPage({
                                     ST: {parsed.storytellerText}
                                   </div>
                                 ) : null}
+                                {parsed.saveTriggerEnabled ? (
+                                  <div className="text-[11px] font-semibold text-emerald-700">Save trigger enabled</div>
+                                ) : null}
                               </div>
                             );
                           })()
