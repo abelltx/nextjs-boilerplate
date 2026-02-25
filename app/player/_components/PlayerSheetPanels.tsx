@@ -265,7 +265,7 @@ export function SkillsCard({
               </div>
               <div className="text-xs uppercase text-neutral-300">{s.ability.toUpperCase()}</div>
               <div className="min-w-0 text-[13px] text-neutral-200">
-                <span className="block truncate whitespace-nowrap" title={s.label}>
+                <span className="block whitespace-nowrap" title={s.label}>
                   {s.label}
                 </span>
               </div>
