@@ -129,7 +129,7 @@ export function AbilitiesCard({
   );
 }
 
-export function SavesCard({ stat }: { stat: StatBlock }) {
+export function SavesCard({ stat, highlightAbility = null }: { stat: StatBlock; highlightAbility?: AbilityKey | null }) {
   const s = stat.saves ?? {};
   const a = stat.abilities ?? { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
 
@@ -150,7 +150,12 @@ export function SavesCard({ stat }: { stat: StatBlock }) {
           return (
             <div
               key={r.k}
-              className="flex items-center justify-between rounded-lg border border-neutral-800 bg-neutral-950/40 px-2 py-1.5"
+              className={[
+                "flex items-center justify-between rounded-lg border bg-neutral-950/40 px-2 py-1.5",
+                highlightAbility === r.k
+                  ? "border-green-300 bg-green-500/15 shadow-[0_0_0_2px_rgba(74,222,128,0.8),0_0_20px_rgba(34,197,94,0.7)]"
+                  : "border-neutral-800",
+              ].join(" ")}
             >
               <div className="text-xs text-neutral-300">{r.k.toUpperCase()}</div>
               <div className="text-sm font-semibold text-white">{fmt(bonus)}</div>

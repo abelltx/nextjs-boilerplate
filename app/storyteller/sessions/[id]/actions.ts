@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
+import { randomUUID } from "crypto";
 
 /**
  * Loads the DM session, state, and joined players
@@ -546,4 +547,40 @@ export async function storytellerAssignQuestRewardsForAll(input: {
       if (upErr) throw new Error(upErr.message);
     }
   }
+}
+
+export async function requestPassiveSavePrompt(input: {
+  sessionId: string;
+  playerId: string;
+  checkKey: string;
+  dc?: number | null;
+  passiveSource?: string;
+  instruction?: string;
+}) {
+  const sessionId = String(input.sessionId ?? "").trim();
+  const playerId = String(input.playerId ?? "").trim();
+  const checkKey = String(input.checkKey ?? "WIS").trim().toUpperCase();
+  const dc = Number(input.dc ?? NaN);
+  const hasDc = Number.isFinite(dc) && dc > 0;
+  const source = String(input.passiveSource ?? "").trim();
+  const instruction = String(input.instruction ?? "").trim();
+  if (!sessionId || !playerId) throw new Error("Missing session/player.");
+
+  const prompt = [
+    "Roll Request",
+    `${checkKey} saving throw${hasDc ? ` (DC ${Math.floor(dc)})` : ""}.`,
+    instruction || `Click ${checkKey} in your Abilities and report your total.`,
+    source ? `Triggered by: ${source}.` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  await updateState(sessionId, {
+    roll_open: true,
+    roll_die: "d20",
+    roll_prompt: prompt,
+    roll_target: playerId,
+    roll_round_id: randomUUID(),
+    roll_results: {},
+  });
 }

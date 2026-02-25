@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { createClient } from "@/utils/supabase/server";
+import { buildPassiveEffectNotes } from "@/lib/passiveEffectNotes";
 
 const COOKIE_KEY = "item_edit_id";
 const COOKIE_PATH = "/admin/items/edit";
@@ -146,6 +147,7 @@ export async function addItemEffectAction(formData: FormData) {
   const effect_key = String(formData.get("effect_key") ?? "").trim();
   const mode = String(formData.get("mode") ?? "").trim();
   const notes = String(formData.get("notes") ?? "").trim();
+  const storytellerNote = String(formData.get("storyteller_note") ?? "").trim();
   const sort_order = formData.get("sort_order") ? Number(formData.get("sort_order")) : 0;
 
   const valueRaw = formData.get("value");
@@ -160,6 +162,10 @@ export async function addItemEffectAction(formData: FormData) {
   if (effect_type === "special" || effect_type === "passive") {
     if (!notes) redirect(`/admin/items/edit?id=${itemId}&err=notes_required`);
   }
+  const finalNotes =
+    effect_type === "passive"
+      ? buildPassiveEffectNotes(notes, storytellerNote)
+      : notes;
 
   const supabase = await createClient();
   const { error } = await supabase.from("item_effects").insert({
@@ -168,7 +174,7 @@ export async function addItemEffectAction(formData: FormData) {
     effect_key,
     mode,
     value: ["resistance", "immunity", "advantage", "special", "passive"].includes(effect_type) ? null : value,
-    notes: ["special", "passive"].includes(effect_type) ? notes : (notes || null),
+    notes: ["special", "passive"].includes(effect_type) ? finalNotes : (notes || null),
     sort_order,
   });
 

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth/getProfile";
 import { supabaseServer } from "@/lib/supabase/server";
 import PlayerHubClient from "./_components/PlayerHubClient";
+import { parsePassiveEffectNotes } from "@/lib/passiveEffectNotes";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -160,7 +161,8 @@ function applyEffects(
         (sourceId ? itemNameById[sourceId] : "") ||
         String(e.effect_key ?? "").trim() ||
         "Item";
-      const text = String(e.notes ?? "").trim();
+      const parsed = parsePassiveEffectNotes(e.notes);
+      const text = parsed.playerText;
       if (text) passiveNotes.push({ source: sourceName, text });
     }
   }

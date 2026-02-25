@@ -11,6 +11,7 @@ import {
 import DeleteItemButton from "@/app/admin/items/edit/DeleteItemButton";
 import ItemImageUploader from "@/app/admin/items/edit/ItemImageUploader";
 import EffectsComposer from "@/app/admin/items/edit/EffectsComposer";
+import { parsePassiveEffectNotes } from "@/lib/passiveEffectNotes";
 
 const COOKIE_KEY = "item_edit_id";
 
@@ -168,7 +169,25 @@ export default async function ItemEditPage({
                           {e.effect_type} | {e.effect_key} | {e.mode}
                           {e.value != null ? ` | ${e.value}` : ""}
                         </div>
-                        {e.notes ? <div className="mt-1 text-xs text-muted-foreground">{e.notes}</div> : null}
+                        {e.effect_type === "passive" ? (
+                          (() => {
+                            const parsed = parsePassiveEffectNotes(e.notes);
+                            return (
+                              <div className="mt-1 space-y-1">
+                                {parsed.playerText ? (
+                                  <div className="text-xs text-muted-foreground">Player: {parsed.playerText}</div>
+                                ) : null}
+                                {parsed.storytellerText ? (
+                                  <div className="rounded border bg-amber-50 px-2 py-1 text-xs text-amber-900">
+                                    ST: {parsed.storytellerText}
+                                  </div>
+                                ) : null}
+                              </div>
+                            );
+                          })()
+                        ) : e.notes ? (
+                          <div className="mt-1 text-xs text-muted-foreground">{e.notes}</div>
+                        ) : null}
                         <div className="mt-1 text-[11px] text-muted-foreground">sort: {e.sort_order}</div>
                       </div>
                       <form action={deleteItemEffectAction}>

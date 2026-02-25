@@ -240,7 +240,9 @@ export default function EffectsComposer({
                 </div>
 
                 <div>
-                  <label className="text-xs text-muted-foreground">Notes</label>
+                  <label className="text-xs text-muted-foreground">
+                    {needsNotes ? "Player note" : "Notes"}
+                  </label>
                   <input
                     name="notes"
                     placeholder={needsNotes ? "required" : "optional"}
@@ -248,6 +250,16 @@ export default function EffectsComposer({
                   />
                 </div>
               </div>
+              {row.type === "passive" ? (
+                <div className="mt-2">
+                  <label className="text-xs text-muted-foreground">Storyteller note (optional)</label>
+                  <input
+                    name="storyteller_note"
+                    placeholder="Only visible on storyteller player-passives drawer"
+                    className="mt-1 h-9 w-full rounded-md border px-3 text-sm"
+                  />
+                </div>
+              ) : null}
 
               <div className="mt-2 flex justify-end">
                 <button className="h-9 rounded-md border px-3 text-sm hover:bg-muted" type="submit">

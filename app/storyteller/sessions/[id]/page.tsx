@@ -10,12 +10,12 @@ import {
   storytellerAssignQuestRewardsForAll,
   storytellerCompleteQuestForAll,
   storytellerCompleteQuestTaskForAll,
+  requestPassiveSavePrompt,
 } from "./actions";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { EpisodePicker } from "@/components/EpisodePicker";
 import { presentBlockToPlayersAction, clearPresentedAction } from "@/app/actions/present";
-import DmPlayerRollLineRealtime from "@/components/DmPlayerRollLineRealtime";
 import { randomUUID } from "crypto";
 import SequenceRail from "@/components/episode-runtime/SequenceRail";
 import RevealCard from "@/components/episode-runtime/RevealCard";
@@ -23,6 +23,8 @@ import CheckPromptCard from "@/components/episode-runtime/CheckPromptCard";
 import NpcTabsCard from "@/components/episode-runtime/NpcTabsCard";
 import { buildRuntimeSequence, extractMapMarkers } from "@/lib/episodeRuntime";
 import SubmitGlowButton from "@/components/ui/SubmitGlowButton";
+import PlayersPassivePanel from "./PlayersPassivePanel";
+import { parsePassiveEffectNotes } from "@/lib/passiveEffectNotes";
 
 
 
@@ -324,23 +326,105 @@ export default async function DmScreenPage({
   );
   const admin = createAdminClient() ?? supabase;
   let sessionCharacterIds: string[] = [];
+  const firstCharacterByUser = new Map<string, { id: string; name: string }>();
   if (sessionPlayerIds.length) {
     const { data: charRows } = await admin
       .from("characters")
-      .select("id,user_id,created_at")
+      .select("id,user_id,name,created_at")
       .in("user_id", sessionPlayerIds)
       .order("created_at", { ascending: true });
-    const firstByUser = new Map<string, string>();
     for (const row of charRows ?? []) {
       const userId = String((row as any)?.user_id ?? "").trim();
       const charId = String((row as any)?.id ?? "").trim();
-      if (!userId || !charId || firstByUser.has(userId)) continue;
-      firstByUser.set(userId, charId);
+      const charName = String((row as any)?.name ?? "").trim();
+      if (!userId || !charId || firstCharacterByUser.has(userId)) continue;
+      firstCharacterByUser.set(userId, { id: charId, name: charName || "Adventurer" });
     }
     sessionCharacterIds = sessionPlayerIds
-      .map((id) => firstByUser.get(id) ?? "")
+      .map((id) => firstCharacterByUser.get(id)?.id ?? "")
       .filter((id) => Boolean(id));
   }
+  const inventoryByCharacter = new Map<string, Array<{ item_id: string; equipped: boolean; name?: string }>>();
+  const itemIdsForPassives = new Set<string>();
+  if (sessionCharacterIds.length) {
+    const { data: invRows } = await admin
+      .from("inventory_items")
+      .select("character_id,item_id,equipped,name")
+      .in("character_id", sessionCharacterIds);
+    for (const row of invRows ?? []) {
+      const characterId = String((row as any)?.character_id ?? "").trim();
+      const itemId = String((row as any)?.item_id ?? "").trim();
+      if (!characterId || !itemId) continue;
+      const list = inventoryByCharacter.get(characterId) ?? [];
+      list.push({
+        item_id: itemId,
+        equipped: Boolean((row as any)?.equipped),
+        name: String((row as any)?.name ?? "").trim() || undefined,
+      });
+      inventoryByCharacter.set(characterId, list);
+      itemIdsForPassives.add(itemId);
+    }
+  }
+  const passiveEffectsByItem = new Map<string, Array<{ mode: string; notes: string }>>();
+  if (itemIdsForPassives.size) {
+    const ids = Array.from(itemIdsForPassives);
+    const { data: effectRows } = await admin
+      .from("item_effects")
+      .select("item_id,mode,notes,effect_type")
+      .in("item_id", ids)
+      .eq("effect_type", "passive");
+    for (const row of effectRows ?? []) {
+      const itemId = String((row as any)?.item_id ?? "").trim();
+      if (!itemId) continue;
+      const list = passiveEffectsByItem.get(itemId) ?? [];
+      list.push({
+        mode: String((row as any)?.mode ?? "").trim().toLowerCase() || "equipped",
+        notes: String((row as any)?.notes ?? "").trim(),
+      });
+      passiveEffectsByItem.set(itemId, list);
+    }
+  }
+  const itemNameById = new Map<string, string>();
+  if (itemIdsForPassives.size) {
+    const { data: itemRows } = await admin
+      .from("items")
+      .select("id,name")
+      .in("id", Array.from(itemIdsForPassives));
+    for (const row of itemRows ?? []) {
+      const id = String((row as any)?.id ?? "").trim();
+      const name = String((row as any)?.name ?? "").trim();
+      if (id && name) itemNameById.set(id, name);
+    }
+  }
+  const storytellerPlayers = sessionPlayerIds.map((playerId) => {
+    const char = firstCharacterByUser.get(playerId);
+    const charId = char?.id ?? "";
+    const inv = inventoryByCharacter.get(charId) ?? [];
+    const ownedIds = new Set(inv.map((r) => r.item_id));
+    const equippedIds = new Set(inv.filter((r) => r.equipped).map((r) => r.item_id));
+    const passives: Array<{ source: string; playerText: string; storytellerText?: string; mode?: string }> = [];
+    for (const itemId of ownedIds) {
+      const effects = passiveEffectsByItem.get(itemId) ?? [];
+      for (const ef of effects) {
+        const mode = ef.mode === "owned" ? "owned" : "equipped";
+        const isActive = mode === "owned" ? ownedIds.has(itemId) : equippedIds.has(itemId);
+        if (!isActive) continue;
+        const parsed = parsePassiveEffectNotes(ef.notes);
+        passives.push({
+          source: itemNameById.get(itemId) ?? inv.find((r) => r.item_id === itemId)?.name ?? "Item",
+          playerText: parsed.playerText || "-",
+          storytellerText: parsed.storytellerText || undefined,
+          mode,
+        });
+      }
+    }
+    return {
+      playerId,
+      characterId: charId || undefined,
+      characterName: char?.name || undefined,
+      passives,
+    };
+  });
   const questDirectorIds = questDirectorDefs
     .map((q: any, i: number) => String(q?.id ?? "").trim() || `quest_${i + 1}`)
     .filter(Boolean);
@@ -1037,19 +1121,30 @@ export default async function DmScreenPage({
       <div className="grid grid-cols-12 gap-3">
         <div className="col-span-12 lg:col-span-3 border rounded-xl p-4">
           <div className="text-xs uppercase text-gray-500">Players</div>
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            {Array.from({ length: 6 }).map((_, i) => {
-              const pRow = (joins ?? [])[i];
-              const playerId = pRow?.player_id ?? null;
-              return (
-                <div key={i} className="border rounded-lg p-2 text-center">
-                  <div className="text-xs text-gray-500">Player {i + 1}</div>
-                  <div className="text-[11px] font-mono break-all">{playerId ? playerId.slice(0, 8) : "-"}</div>
-                  <DmPlayerRollLineRealtime sessionId={sessionId} playerId={playerId} initialState={state as any} />
-                </div>
-              );
-            })}
-          </div>
+          <PlayersPassivePanel
+            sessionId={sessionId}
+            joins={joins as any[]}
+            initialState={state as any}
+            players={storytellerPlayers as any[]}
+            onRequestSave={async (fd) => {
+              "use server";
+              const playerId = String(fd.get("player_id") ?? "").trim();
+              const checkKey = String(fd.get("check_key") ?? "WIS").trim().toUpperCase();
+              const source = String(fd.get("source") ?? "").trim();
+              const defaultInstruction = String(fd.get("default_instruction") ?? "").trim();
+              const dcRaw = String(fd.get("dc") ?? "").trim();
+              const dc = Number(dcRaw);
+              await requestPassiveSavePrompt({
+                sessionId: session.id,
+                playerId,
+                checkKey,
+                dc: Number.isFinite(dc) ? dc : null,
+                passiveSource: source,
+                instruction: defaultInstruction || undefined,
+              });
+              redirect(`/storyteller/sessions/${session.id}`);
+            }}
+          />
           <div className="mt-3 border rounded-lg p-3">
             <div className="text-xs uppercase text-gray-500 mb-2">Check Prompt</div>
             <CheckPromptCard

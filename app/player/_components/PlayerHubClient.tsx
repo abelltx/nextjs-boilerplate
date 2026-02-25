@@ -614,7 +614,7 @@ export default function PlayerHubClient(props: {
               rollLocked={rollLocked || diceMode === "manual" || submittingRoll}
               advantageByAbility={abilityAdvantageMap}
             />
-            <SavesCard stat={stat} />
+            <SavesCard stat={stat} highlightAbility={promptTarget?.kind === "ability" ? promptTarget.abilityKey : null} />
             <PassivesCard stat={stat} />
 
             <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4 text-xs text-neutral-400">
