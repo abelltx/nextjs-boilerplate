@@ -209,7 +209,7 @@ export function SkillsCard({
       <div className="space-y-1">
         <div
           className="grid items-center rounded-lg border border-neutral-800 bg-neutral-950/40 px-2 py-2 text-[10px] uppercase tracking-wide text-neutral-400"
-          style={{ gridTemplateColumns: "30px 44px minmax(0, 1fr) 64px" }}
+          style={{ gridTemplateColumns: "22px 34px minmax(0, 1fr) 74px" }}
         >
           <div>Prof</div>
           <div>Mod</div>
@@ -252,7 +252,7 @@ export function SkillsCard({
                   ? "border-green-300 bg-green-500/15 shadow-[0_0_0_2px_rgba(74,222,128,0.8),0_0_24px_rgba(34,197,94,0.95),0_0_44px_rgba(34,197,94,0.55)] animate-pulse"
                   : "border-neutral-800",
               ].join(" ")}
-              style={{ gridTemplateColumns: "30px 44px minmax(0, 1fr) 64px" }}
+              style={{ gridTemplateColumns: "22px 34px minmax(0, 1fr) 74px" }}
             >
               <div>
                 <span
@@ -264,10 +264,10 @@ export function SkillsCard({
                 />
               </div>
               <div className="text-xs uppercase text-neutral-300">{s.ability.toUpperCase()}</div>
-              <div className="text-[13px] text-neutral-200">
+              <div className="min-w-0 text-[13px] text-neutral-200">
                 <span>{s.label}</span>
               </div>
-              <div className="justify-self-end flex items-center gap-1 text-right text-[13px] font-semibold text-white">
+              <div className="justify-self-end flex w-full items-center justify-end gap-1 whitespace-nowrap text-right text-[13px] font-semibold text-white">
                 {hasAdvantage ? (
                   <span className="rounded border border-emerald-300/60 bg-emerald-500/20 px-1 py-0 text-[10px] font-semibold text-emerald-200">
                     ADV
