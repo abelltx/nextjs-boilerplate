@@ -151,7 +151,7 @@ try {
           : {},
   };
   if (episodeScopeId && /^[0-9a-f-]{36}$/i.test(episodeScopeId)) {
-    const [{ data: bindings }, { data: npcs }, { data: episodeNpcBlocks }] = await Promise.all([
+    const [{ data: bindings }, { data: npcs }, { data: episodeNpcBlocks }, { data: allRuntimeRows }] = await Promise.all([
       supabase
         .from("episode_npc_bindings")
         .select("npc_id")
@@ -165,6 +165,10 @@ try {
         .select("id,title,meta,block_type")
         .eq("episode_id", episodeScopeId)
         .eq("block_type", "npc"),
+      supabase
+        .from("npc_runtime_configs")
+        .select("npc_id,meta_json")
+        .limit(1000),
     ]);
     const npcNameById = new Map<string, string>();
     for (const n of npcs ?? []) {
@@ -196,6 +200,30 @@ try {
         collected.push(...extractQuestOptionsFromMeta(scopedMeta, npcName));
       }
       episodeQuestOptions = Array.from(new Map(collected.map((q) => [q.questId, q] as const)).values());
+    }
+
+    // Broad fallback: pull from all runtime configs (prevents blank dropdown when bindings are missing/legacy).
+    const allRows = Array.isArray(allRuntimeRows) ? (allRuntimeRows as any[]) : [];
+    if (allRows.length) {
+      const collected: Array<{ questId: string; title: string; npcName?: string | null }> = [];
+      for (const row of allRows) {
+        const npcId = String(row?.npc_id ?? "").trim();
+        if (!npcId) continue;
+        const npcName = npcNameById.get(npcId) ?? "NPC";
+        const rawMeta = (row?.meta_json ?? {}) as any;
+        const scopedMeta =
+          rawMeta?.npc_tabs_by_episode &&
+          typeof rawMeta.npc_tabs_by_episode === "object" &&
+          rawMeta.npc_tabs_by_episode[episodeScopeId]
+            ? { npc_tabs: rawMeta.npc_tabs_by_episode[episodeScopeId] }
+            : rawMeta;
+        collected.push(...extractQuestOptionsFromMeta(scopedMeta, npcName));
+      }
+      if (collected.length) {
+        episodeQuestOptions = Array.from(
+          new Map([...episodeQuestOptions, ...collected].map((q) => [q.questId, q] as const)).values()
+        );
+      }
     }
 
     // Legacy fallback: quests authored directly on episode NPC blocks meta
