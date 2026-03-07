@@ -1,10 +1,14 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { cookies } from "next/headers";
 import { createClient } from "@/utils/supabase/server";
 
-const COOKIE_KEY = "action_edit_id";
+function numberOrNull(raw: FormDataEntryValue | null) {
+  const s = String(raw ?? "").trim();
+  if (!s) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
 
 export async function createActionAction(formData: FormData) {
   const supabase = await createClient();
@@ -19,62 +23,63 @@ export async function createActionAction(formData: FormData) {
     : null;
   const is_active = formData.get("is_active") === "on";
   const uses_attack_roll = formData.get("uses_attack_roll") === "on";
-  const attack_bonus_overrideRaw = String(formData.get("attack_bonus_override") ?? "").trim();
-  const attack_bonus_override = attack_bonus_overrideRaw === "" ? null : Number(attack_bonus_overrideRaw);
-  const range_normalRaw = String(formData.get("range_normal") ?? "").trim();
-  const range_normal = range_normalRaw === "" ? null : Number(range_normalRaw);
-  const range_maxRaw = String(formData.get("range_max") ?? "").trim();
-  const range_max = range_maxRaw === "" ? null : Number(range_maxRaw);
+  const attack_bonus_override = numberOrNull(formData.get("attack_bonus_override"));
+  const range_normal = numberOrNull(formData.get("range_normal"));
+  const range_max = numberOrNull(formData.get("range_max"));
   const damage_dice = String(formData.get("damage_dice") ?? "").trim() || null;
-  const damage_bonusRaw = String(formData.get("damage_bonus") ?? "").trim();
-  const damage_bonus = damage_bonusRaw === "" ? null : Number(damage_bonusRaw);
+  const damage_bonus = numberOrNull(formData.get("damage_bonus"));
   const damage_type = String(formData.get("damage_type") ?? "").trim() || null;
   const save_ability = String(formData.get("save_ability") ?? "").trim() || null;
-  const save_dc_overrideRaw = String(formData.get("save_dc_override") ?? "").trim();
-  const save_dc_override = save_dc_overrideRaw === "" ? null : Number(save_dc_overrideRaw);
+  const save_dc_override = numberOrNull(formData.get("save_dc_override"));
   const on_fail = String(formData.get("on_fail") ?? "").trim() || null;
   const on_success = String(formData.get("on_success") ?? "").trim() || null;
 
   if (!name) redirect("/admin/actions/new?err=missing_name");
   if (!["melee", "ranged", "other"].includes(type)) redirect("/admin/actions/new?err=bad_type");
 
-  const { data, error } = await supabase
+  const payload = {
+    name,
+    type,
+    summary,
+    rules_text,
+    tags,
+    is_active,
+    uses_attack_roll,
+    attack_bonus_override,
+    range_normal,
+    range_max,
+    damage_dice,
+    damage_bonus,
+    damage_type,
+    save_ability,
+    save_dc_override,
+    on_fail,
+    on_success,
+  };
+
+  let { data, error } = await supabase
     .from("actions")
-    .insert({
+    .insert(payload)
+    .select("id")
+    .maybeSingle();
+
+  // Backward-compat fallback if combat columns are not deployed yet.
+  if (error && String(error.message ?? "").toLowerCase().includes("column")) {
+    const fallbackPayload = {
       name,
       type,
       summary,
       rules_text,
       tags,
       is_active,
-      uses_attack_roll,
-      attack_bonus_override,
-      range_normal,
-      range_max,
-      damage_dice,
-      damage_bonus,
-      damage_type,
-      save_ability,
-      save_dc_override,
-      on_fail,
-      on_success,
-    })
-    .select("id")
-    .maybeSingle();
+    };
+    const retry = await supabase.from("actions").insert(fallbackPayload).select("id").maybeSingle();
+    data = retry.data as any;
+    error = retry.error as any;
+  }
 
   if (error) redirect(`/admin/actions/new?err=${encodeURIComponent(error.message)}`);
   if (!data?.id) redirect(`/admin/actions/new?err=insert_failed`);
 
-  // Optional: jump straight to edit by setting cookie (server action OK)
-  // Next 16.0.10 types: cookies() is async -> await it before .set()
-  const cookieStore = await cookies();
-  cookieStore.set(COOKIE_KEY, data.id, {
-    path: "/admin/actions/edit",
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    maxAge: 60 * 60 * 2, // 2 hours
-  });
-
-  redirect("/admin/actions/edit");
+  redirect(`/admin/actions/edit?id=${encodeURIComponent(data.id)}&saved=1`);
 }
