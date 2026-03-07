@@ -55,9 +55,10 @@ export default async function ActionEditPage({
 }) {
   const sp = (await searchParams) ?? {};
   const err = typeof sp.err === "string" ? sp.err : undefined;
+  const idFromQueryRaw = typeof sp.id === "string" ? sp.id.trim() : "";
 
   const cookieStore = await cookies();
-  const id = cookieStore.get(COOKIE_KEY)?.value ?? "";
+  const id = isUuid(idFromQueryRaw) ? idFromQueryRaw : cookieStore.get(COOKIE_KEY)?.value ?? "";
   if (!isUuid(id)) redirect("/admin/actions?err=missing_or_invalid_cookie");
 
   const supabase = await createClient();
@@ -156,7 +157,7 @@ export default async function ActionEditPage({
 
         <div className="rounded-2xl border bg-card p-4 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="font-semibold">Combat Fields</h2>
+            <h2 className="font-semibold">Resolution (Damage / Healing / Utility)</h2>
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
@@ -199,7 +200,7 @@ export default async function ActionEditPage({
             </label>
 
             <label className="grid gap-2">
-              <span className="text-sm font-medium">Damage dice formula</span>
+              <span className="text-sm font-medium">Effect dice formula</span>
               <select
                 name="damage_dice"
                 defaultValue={action.damage_dice ?? ""}
@@ -213,7 +214,7 @@ export default async function ActionEditPage({
             </label>
 
             <label className="grid gap-2">
-              <span className="text-sm font-medium">Damage bonus</span>
+              <span className="text-sm font-medium">Effect bonus</span>
               <input
                 name="damage_bonus"
                 defaultValue={action.damage_bonus ?? ""}
@@ -223,7 +224,7 @@ export default async function ActionEditPage({
             </label>
 
             <label className="grid gap-2">
-              <span className="text-sm font-medium">Damage type</span>
+              <span className="text-sm font-medium">Effect type</span>
               <select
                 name="damage_type"
                 defaultValue={action.damage_type ?? ""}
@@ -234,6 +235,9 @@ export default async function ActionEditPage({
                   <option key={opt} value={opt}>{opt}</option>
                 ))}
               </select>
+              <span className="text-xs text-muted-foreground">
+                Choose <code>healing</code> or <code>temporary_hp</code> for healing actions.
+              </span>
             </label>
 
             <div className="md:col-span-2 rounded-lg border p-3">

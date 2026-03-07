@@ -53,7 +53,7 @@ export async function updateActionAction(formData: FormData) {
   const tagsRaw = String(formData.get("tags") ?? "").trim();
   const tags =
     tagsRaw.length === 0
-      ? null
+      ? []
       : tagsRaw
           .split(",")
           .map((t) => t.trim())

@@ -104,7 +104,7 @@ export default async function ActionNewPage({
 
         <div className="rounded-2xl border bg-card p-4 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="font-semibold">Combat Fields</h2>
+            <h2 className="font-semibold">Resolution (Damage / Healing / Utility)</h2>
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" name="uses_attack_roll" defaultChecked />
               <span>Uses attack roll</span>
@@ -124,7 +124,7 @@ export default async function ActionNewPage({
               <input name="attack_bonus_override" className="w-full rounded-md border px-3 py-2" inputMode="numeric" />
             </label>
             <label className="grid gap-2">
-              <span className="text-sm font-medium">Damage dice</span>
+              <span className="text-sm font-medium">Effect dice</span>
               <select name="damage_dice" defaultValue="" className="w-full rounded-md border px-3 py-2">
                 <option value="">(none)</option>
                 {DAMAGE_DICE_OPTIONS.filter(Boolean).map((opt) => (
@@ -133,17 +133,20 @@ export default async function ActionNewPage({
               </select>
             </label>
             <label className="grid gap-2">
-              <span className="text-sm font-medium">Damage bonus</span>
+              <span className="text-sm font-medium">Effect bonus</span>
               <input name="damage_bonus" className="w-full rounded-md border px-3 py-2" inputMode="numeric" />
             </label>
             <label className="grid gap-2">
-              <span className="text-sm font-medium">Damage type</span>
+              <span className="text-sm font-medium">Effect type</span>
               <select name="damage_type" defaultValue="" className="w-full rounded-md border px-3 py-2">
                 <option value="">(none)</option>
                 {DAMAGE_TYPE_OPTIONS.filter(Boolean).map((opt) => (
                   <option key={opt} value={opt}>{opt}</option>
                 ))}
               </select>
+              <span className="text-xs text-muted-foreground">
+                Choose <code>healing</code> or <code>temporary_hp</code> for healing actions.
+              </span>
             </label>
             <label className="grid gap-2">
               <span className="text-sm font-medium">Save ability</span>
