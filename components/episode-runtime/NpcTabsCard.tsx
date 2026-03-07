@@ -45,6 +45,7 @@ type QuestDef = {
   title: string;
   directions: string;
   storytellerControlled?: boolean;
+  prerequisite?: { enabled: boolean; questId?: string | null };
   tasks: QuestTask[];
   rewards: QuestReward;
 };
@@ -293,6 +294,10 @@ export default function NpcTabsCard(props: {
           title,
           directions,
           storytellerControlled: Boolean(q?.storyteller_controlled),
+          prerequisite: {
+            enabled: Boolean(q?.prerequisite?.enabled),
+            questId: String(q?.prerequisite?.quest_id ?? "").trim() || null,
+          },
           tasks,
           rewards: {
             faith: Math.max(0, Number(rewards?.faith ?? 0) || 0),
@@ -640,6 +645,15 @@ export default function NpcTabsCard(props: {
             const progress = questProgress[quest.id];
             const status = String(progress?.status ?? "available").toLowerCase() as QuestProgress["status"];
             const storytellerControlled = Boolean(quest.storytellerControlled) || Boolean(props.playerShop);
+            const prereqEnabled = Boolean(quest.prerequisite?.enabled);
+            const prereqQuestId = String(quest.prerequisite?.questId ?? "").trim();
+            const prereqProgress = prereqQuestId ? questProgress[prereqQuestId] : null;
+            const prereqMet = !prereqEnabled || Boolean(
+              prereqQuestId &&
+                prereqProgress &&
+                (String(prereqProgress.status).toLowerCase() === "completed" ||
+                  String(prereqProgress.status).toLowerCase() === "claimed")
+            );
             const completedSet = new Set((progress?.completedTaskIds ?? []).map((id) => String(id).trim()));
             const allTasksDone = quest.tasks.length > 0 && quest.tasks.every((t) => completedSet.has(t.id));
             const claimable = status === "completed" || (status === "active" && allTasksDone);
@@ -670,6 +684,11 @@ export default function NpcTabsCard(props: {
                   </div>
                 </div>
                 {quest.directions ? <div className="mt-1 text-xs text-neutral-300">{quest.directions}</div> : null}
+                {!prereqMet ? (
+                  <div className="mt-1 text-[11px] text-amber-300">
+                    Locked: complete {prereqQuestId || "the required quest"} first.
+                  </div>
+                ) : null}
                 {storytellerControlled ? (
                   <div className="mt-1 text-[11px] text-amber-300">Progress controlled by storyteller.</div>
                 ) : null}
@@ -736,7 +755,11 @@ export default function NpcTabsCard(props: {
                       <button
                         type="button"
                         className="rounded border border-neutral-700 px-2 py-1 text-xs hover:bg-neutral-900 disabled:opacity-50 disabled:cursor-not-allowed"
-                        disabled={props.playerShop?.claimingQuestId === quest.id || !props.playerShop?.onQuestStart}
+                        disabled={
+                          !prereqMet ||
+                          props.playerShop?.claimingQuestId === quest.id ||
+                          !props.playerShop?.onQuestStart
+                        }
                         onClick={() => props.playerShop?.onQuestStart?.(quest)}
                       >
                         {props.playerShop?.claimingQuestId === quest.id ? "Starting..." : "Start Quest"}

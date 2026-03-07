@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
+import { useInventoryItemAction } from "@/app/player/actions";
 
 type ItemRow = {
   id: string;
@@ -258,11 +259,23 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
   }
 
   async function useItem(row: ItemRow) {
-    // Phase 1 stub: you said this will update Active Effects later.
-    // For now, just a placeholder so the UX flow exists.
-    // Optional: write to a log table later.
-    setSelected(row);
-    // If you want "use consumes 1" for consumables later, we can add an items.consumable flag.
+    setBusyId(row.id);
+    setErr(null);
+    const res = await useInventoryItemAction({
+      characterId,
+      inventoryItemId: row.id,
+    });
+    if (!res.ok) {
+      setErr(res.error ?? "Could not use item.");
+      setBusyId(null);
+      return;
+    }
+    await load();
+    router.refresh();
+    if (res.message) {
+      window.alert(res.message);
+    }
+    setBusyId(null);
   }
 
   return (
@@ -355,7 +368,6 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
                       useItem(r);
                     }}
                     disabled={busy}
-                    title="Phase 1: stub"
                   >
                     Use
                   </button>
@@ -490,7 +502,7 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
                   className="rounded-md border border-gray-300 bg-gray-100 hover:bg-gray-200 px-3 py-2 text-sm font-medium text-gray-900"
                   onClick={() => useItem(selected)}
                 >
-                  Use (stub)
+                  Use
                 </button>
 
                 {selected.equipped ? (
@@ -517,9 +529,7 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
                 </button>
               </div>
 
-              <div className="text-xs opacity-60">
-                Effects / weight / value are Phase 2; this drawer is ready for them.
-              </div>
+              <div className="text-xs opacity-60">Use item will apply any configured on-use behavior.</div>
             </div>
           </div>
         </div>

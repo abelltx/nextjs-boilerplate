@@ -22,6 +22,8 @@ type QuestDraft = {
   talkNpcIds: string;
   rewardItemIds: string;
   rewardFaith: number;
+  prereqEnabled: boolean;
+  prereqQuestId: string;
 };
 
 function makeUiKey(seed?: string) {
@@ -79,6 +81,8 @@ function parseQuestDrafts(initialMeta: any): QuestDraft[] {
         talkNpcIds: npcTasks.join("\n"),
         rewardItemIds: rewardItems.map((v: any) => String(v ?? "").trim()).filter(Boolean).join("\n"),
         rewardFaith: Number.isFinite(rewardFaith) ? Math.max(0, Math.floor(rewardFaith)) : 0,
+        prereqEnabled: Boolean(raw?.prerequisite?.enabled),
+        prereqQuestId: String(raw?.prerequisite?.quest_id ?? "").trim(),
       } satisfies QuestDraft;
     });
   } catch {
@@ -198,6 +202,8 @@ export default function NpcTabsEditorClient(props: {
         talkNpcIds: String((q as any)?.talkNpcIds ?? ""),
         rewardItemIds: String((q as any)?.rewardItemIds ?? ""),
         rewardFaith: Math.max(0, Math.floor(Number((q as any)?.rewardFaith ?? 0) || 0)),
+        prereqEnabled: Boolean((q as any)?.prereqEnabled),
+        prereqQuestId: String((q as any)?.prereqQuestId ?? ""),
       })),
     [quests]
   );
@@ -315,6 +321,10 @@ export default function NpcTabsEditorClient(props: {
           const npcIds = normalizeUuidList(q.talkNpcIds);
           const rewardItemIds = normalizeUuidList(q.rewardItemIds);
           const rewardFaith = Math.max(0, Math.floor(Number(q.rewardFaith ?? 0) || 0));
+          const prerequisiteEnabled = Boolean(q.prereqEnabled && String(q.prereqQuestId ?? "").trim());
+          const prerequisiteQuestId = prerequisiteEnabled
+            ? String(q.prereqQuestId ?? "").trim()
+            : "";
           const tasks = [
             ...taskLines.map((line, taskIdx) => ({
               id: `${id}_task_${taskIdx + 1}`,
@@ -338,6 +348,10 @@ export default function NpcTabsEditorClient(props: {
             directions,
             storyteller_notes: storytellerNotes,
             storyteller_controlled: storytellerControlled,
+            prerequisite: {
+              enabled: prerequisiteEnabled,
+              quest_id: prerequisiteQuestId || null,
+            },
             tasks,
             rewards: {
               faith: rewardFaith,
@@ -540,6 +554,8 @@ export default function NpcTabsEditorClient(props: {
                           talkNpcIds: "",
                           rewardItemIds: "",
                           rewardFaith: 0,
+                          prereqEnabled: false,
+                          prereqQuestId: "",
                         },
                       ])
                     }
@@ -639,6 +655,49 @@ export default function NpcTabsEditorClient(props: {
                         />
                         Storyteller controls start/progress for this quest
                       </label>
+                      <div className="rounded border bg-gray-50 p-2 space-y-2">
+                        <label className="flex items-center gap-2 text-xs text-gray-700">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(q.prereqEnabled)}
+                            onChange={(e) => {
+                              const checked = e.currentTarget.checked;
+                              setQuests((prev) =>
+                                prev.map((row, i) =>
+                                  i === idx
+                                    ? { ...row, prereqEnabled: checked, prereqQuestId: checked ? row.prereqQuestId : "" }
+                                    : row
+                                )
+                              );
+                            }}
+                          />
+                          Require previous quest completion
+                        </label>
+                        {q.prereqEnabled ? (
+                          <select
+                            className="w-full border rounded p-2 text-sm"
+                            value={q.prereqQuestId}
+                            onChange={(e) => {
+                              const value = String(e.currentTarget.value ?? "");
+                              setQuests((prev) =>
+                                prev.map((row, i) => (i === idx ? { ...row, prereqQuestId: value } : row))
+                              );
+                            }}
+                          >
+                            <option value="">Select prerequisite quest...</option>
+                            {safeQuests
+                              .filter((_, qIdx) => qIdx !== idx)
+                              .map((other, qIdx) => {
+                                const otherId = toQuestId(other.id) || toQuestId(other.title) || `quest_${qIdx + 1}`;
+                                return (
+                                  <option key={`${other.uiKey}-pr`} value={otherId}>
+                                    {other.title || otherId} ({otherId})
+                                  </option>
+                                );
+                              })}
+                          </select>
+                        ) : null}
+                      </div>
 
                       <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                         <label className="space-y-1">

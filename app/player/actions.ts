@@ -784,3 +784,128 @@ export async function claimNpcQuestRewardsAction(input: {
   revalidatePath("/player");
   return { ok: true, grantedItems, faithAwarded: rewardFaith };
 }
+
+export async function useInventoryItemAction(input: {
+  characterId: string;
+  inventoryItemId: string;
+}): Promise<{ ok: boolean; message?: string; error?: string }> {
+  "use server";
+  const { user } = await getProfile();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const characterId = String(input.characterId ?? "").trim();
+  const inventoryItemId = String(input.inventoryItemId ?? "").trim();
+  if (!characterId || !inventoryItemId) return { ok: false, error: "Missing item or character." };
+
+  const supabase = await supabaseServer();
+  const owner = await requireOwnedCharacter(supabase, user.id, characterId);
+  if (!owner.ok) return { ok: false, error: owner.error };
+
+  const { data: invRow, error: invErr } = await supabase
+    .from("inventory_items")
+    .select("id,character_id,item_id,name,quantity")
+    .eq("id", inventoryItemId)
+    .eq("character_id", characterId)
+    .maybeSingle();
+  if (invErr) return { ok: false, error: invErr.message };
+  if (!invRow?.id) return { ok: false, error: "Inventory item not found." };
+
+  const itemId = String((invRow as any).item_id ?? "").trim();
+  if (!itemId) return { ok: false, error: "This item cannot be used." };
+
+  const { data: itemRow, error: itemErr } = await supabase
+    .from("items")
+    .select("id,name")
+    .eq("id", itemId)
+    .maybeSingle();
+  if (itemErr) return { ok: false, error: itemErr.message };
+  if (!itemRow?.id) return { ok: false, error: "Item record missing." };
+
+  const { data: effects, error: effectsErr } = await supabase
+    .from("item_effects")
+    .select("effect_type,effect_key,mode,notes")
+    .eq("item_id", itemId);
+  if (effectsErr) return { ok: false, error: effectsErr.message };
+
+  const classPkgEffect = (effects ?? []).find(
+    (e: any) =>
+      String(e?.effect_type ?? "").trim().toLowerCase() === "special" &&
+      String(e?.effect_key ?? "").trim().toLowerCase() === "class_package"
+  ) as any;
+  if (!classPkgEffect) {
+    return { ok: false, error: "This item has no usable class package configured." };
+  }
+
+  let cfg: any = null;
+  try {
+    cfg = JSON.parse(String(classPkgEffect?.notes ?? "{}"));
+  } catch {
+    return { ok: false, error: "Class package JSON is invalid on this item." };
+  }
+
+  const packageId = String(cfg?.package_id ?? itemId).trim();
+  const className = String(cfg?.class_name ?? "").trim();
+  const replaceStatBlock =
+    cfg && typeof cfg.replace_stat_block === "object" && cfg.replace_stat_block
+      ? (cfg.replace_stat_block as Record<string, any>)
+      : null;
+  const grantItemIds = Array.from(
+    new Set(
+      (Array.isArray(cfg?.grant_item_ids) ? cfg.grant_item_ids : [])
+        .map((v: any) => String(v ?? "").trim())
+        .filter((v: string) => isUuid(v))
+    )
+  );
+  const grantTraitIds = Array.from(
+    new Set(
+      (Array.isArray(cfg?.grant_trait_ids) ? cfg.grant_trait_ids : [])
+        .map((v: any) => String(v ?? "").trim())
+        .filter((v: string) => isUuid(v))
+    )
+  );
+  const grantActionIds = Array.from(
+    new Set(
+      (Array.isArray(cfg?.grant_action_ids) ? cfg.grant_action_ids : [])
+        .map((v: any) => String(v ?? "").trim())
+        .filter((v: string) => isUuid(v))
+    )
+  );
+  const consumeOnUse = Boolean(cfg?.consume_on_use);
+  const { data: rpcData, error: rpcErr } = await supabase.rpc("apply_class_package_from_inventory", {
+    p_character_id: characterId,
+    p_inventory_item_id: inventoryItemId,
+    p_package_id: packageId,
+    p_class_name: className || null,
+    p_replace_stat_block: replaceStatBlock ?? null,
+    p_grant_item_ids: grantItemIds,
+    p_grant_trait_ids: grantTraitIds,
+    p_grant_action_ids: grantActionIds,
+    p_consume_on_use: consumeOnUse,
+  });
+  if (rpcErr) {
+    const msg = String(rpcErr?.message ?? "");
+    if (msg.toLowerCase().includes("function public.apply_class_package_from_inventory")) {
+      return {
+        ok: false,
+        error: "Class-package RPC is missing. Run scripts/class-package-rpc.sql in Supabase SQL editor.",
+      };
+    }
+    return { ok: false, error: msg || "Failed to apply class package." };
+  }
+
+  const rpcObj = (rpcData && typeof rpcData === "object" && !Array.isArray(rpcData) ? rpcData : {}) as any;
+  const alreadyApplied = Boolean(rpcObj?.already_applied);
+  const resultMessage = String(rpcObj?.message ?? "").trim() || (alreadyApplied ? "Class package already applied." : "Class package applied.");
+
+  await appendGameLogSafe(supabase, {
+    userId: user.id,
+    characterId,
+    eventType: "class_package_applied",
+    title: `Class package applied: ${className || String(itemRow?.name ?? "Class Item")}`,
+    summary: `Used item: ${String(itemRow?.name ?? itemId)}`,
+    itemId,
+  });
+
+  revalidatePath("/player");
+  return { ok: true, message: resultMessage };
+}

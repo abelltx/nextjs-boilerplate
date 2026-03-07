@@ -82,7 +82,10 @@ const EFFECT_KEYS: Record<string, { label: string; value: string }[]> = {
     "initiative",
   ].map((k) => ({ label: k, value: k })),
   passive: [{ label: "Passive", value: "passive" }],
-  special: [{ label: "Special", value: "special" }],
+  special: [
+    { label: "Special", value: "special" },
+    { label: "Class Package", value: "class_package" },
+  ],
 };
 
 const EFFECT_MODES: Record<string, { label: string; value: string }[]> = {
