@@ -151,7 +151,7 @@ try {
           : {},
   };
   if (episodeScopeId && /^[0-9a-f-]{36}$/i.test(episodeScopeId)) {
-    const [{ data: bindings }, { data: npcs }] = await Promise.all([
+    const [{ data: bindings }, { data: npcs }, { data: episodeNpcBlocks }] = await Promise.all([
       supabase
         .from("episode_npc_bindings")
         .select("npc_id")
@@ -160,6 +160,11 @@ try {
         .from("npcs")
         .select("id,name")
         .eq("is_archived", false),
+      supabase
+        .from("episode_blocks")
+        .select("id,title,meta,block_type")
+        .eq("episode_id", episodeScopeId)
+        .eq("block_type", "npc"),
     ]);
     const npcNameById = new Map<string, string>();
     for (const n of npcs ?? []) {
@@ -190,8 +195,23 @@ try {
             : rawMeta;
         collected.push(...extractQuestOptionsFromMeta(scopedMeta, npcName));
       }
+      episodeQuestOptions = Array.from(new Map(collected.map((q) => [q.questId, q] as const)).values());
+    }
+
+    // Legacy fallback: quests authored directly on episode NPC blocks meta
+    const legacyCollected: Array<{ questId: string; title: string; npcName?: string | null }> = [];
+    for (const b of episodeNpcBlocks ?? []) {
+      const row: any = b ?? {};
+      const meta = row?.meta ?? {};
+      const npcName =
+        String(meta?.npc_library?.name ?? "").trim() ||
+        String(row?.title ?? "").trim() ||
+        "NPC";
+      legacyCollected.push(...extractQuestOptionsFromMeta(meta, npcName));
+    }
+    if (legacyCollected.length) {
       episodeQuestOptions = Array.from(
-        new Map(collected.map((q) => [q.questId, q] as const)).values()
+        new Map([...episodeQuestOptions, ...legacyCollected].map((q) => [q.questId, q] as const)).values()
       );
     }
   }
