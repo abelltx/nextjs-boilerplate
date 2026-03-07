@@ -107,6 +107,18 @@ function resolveBlockImageUrl(block: any): string | null {
   return null;
 }
 
+function toBool(value: unknown, fallback = false) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string") {
+    const v = value.trim().toLowerCase();
+    if (!v) return fallback;
+    if (["true", "1", "yes", "on"].includes(v)) return true;
+    if (["false", "0", "no", "off", "null", "undefined"].includes(v)) return false;
+  }
+  return fallback;
+}
+
 export default async function DmScreenPage({
   params,
 }: {
@@ -452,6 +464,57 @@ export default async function DmScreenPage({
     list.push(row);
     questProgressByQuest.set(questId, list);
   }
+  const characterNameById = new Map<string, string>();
+  for (const [, ch] of firstCharacterByUser.entries()) {
+    if (ch?.id) characterNameById.set(ch.id, ch.name || "Adventurer");
+  }
+  let sessionQuestRows: any[] = [];
+  if (sessionCharacterIds.length) {
+    const { data: allQuestRows } = await admin
+      .from("player_quest_progress")
+      .select("character_id,quest_id,quest_title,status,reward_meta,updated_at")
+      .in("character_id", sessionCharacterIds)
+      .in("status", ["active", "completed", "claimed"]);
+    sessionQuestRows = (allQuestRows ?? []) as any[];
+  }
+  const groupQuestById = new Map<
+    string,
+    { questId: string; title: string; players: Array<{ name: string; status: string; updatedAt?: string | null }> }
+  >();
+  const individualQuestByPlayer = new Map<string, Array<{ questId: string; title: string; status: string }>>();
+  for (const row of sessionQuestRows) {
+    const questId = String((row as any)?.quest_id ?? "").trim();
+    const characterId = String((row as any)?.character_id ?? "").trim();
+    if (!questId || !characterId) continue;
+    const title = String((row as any)?.quest_title ?? "").trim() || questId;
+    const status = String((row as any)?.status ?? "active").trim().toLowerCase();
+    const playerName = characterNameById.get(characterId) ?? "Adventurer";
+    const isGroup = toBool((row as any)?.reward_meta?.storyteller_controlled, false);
+    if (isGroup) {
+      const existing = groupQuestById.get(questId) ?? { questId, title, players: [] };
+      existing.players.push({
+        name: playerName,
+        status,
+        updatedAt: String((row as any)?.updated_at ?? "").trim() || null,
+      });
+      groupQuestById.set(questId, existing);
+    } else {
+      const existing = individualQuestByPlayer.get(characterId) ?? [];
+      existing.push({ questId, title, status });
+      individualQuestByPlayer.set(characterId, existing);
+    }
+  }
+  const groupQuestCards = Array.from(groupQuestById.values()).sort((a, b) => a.title.localeCompare(b.title));
+  for (const card of groupQuestCards) {
+    card.players.sort((a, b) => a.name.localeCompare(b.name));
+  }
+  const individualQuestCards = Array.from(individualQuestByPlayer.entries())
+    .map(([characterId, quests]) => ({
+      characterId,
+      playerName: characterNameById.get(characterId) ?? "Adventurer",
+      quests: [...quests].sort((a, b) => a.title.localeCompare(b.title)),
+    }))
+    .sort((a, b) => a.playerName.localeCompare(b.playerName));
   const talkTargetIds = Array.from(
     new Set(
       (blocks ?? [])
@@ -1482,6 +1545,49 @@ export default async function DmScreenPage({
                 NPC image placeholder
               </div>
             )}
+          </div>
+          <div>
+            <div className="text-xs uppercase text-gray-500">Active Quests</div>
+            <div className="mt-2 rounded border bg-gray-50 p-2 space-y-2 max-h-64 overflow-y-auto">
+              <div className="rounded border bg-white p-2 space-y-1">
+                <div className="text-[11px] uppercase text-gray-500">Group Quests</div>
+                {groupQuestCards.length ? (
+                  groupQuestCards.map((q) => (
+                    <div key={`g-${q.questId}`} className="rounded border bg-gray-50 px-2 py-1">
+                      <div className="text-xs font-semibold">{q.title}</div>
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {q.players.map((p) => (
+                          <span key={`${q.questId}-${p.name}`} className="rounded border bg-white px-1.5 py-0.5 text-[11px]">
+                            {p.name} - {p.status}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-xs text-gray-500">No active group quests.</div>
+                )}
+              </div>
+              <div className="rounded border bg-white p-2 space-y-1">
+                <div className="text-[11px] uppercase text-gray-500">Individual Quests</div>
+                {individualQuestCards.length ? (
+                  individualQuestCards.map((player) => (
+                    <div key={`i-${player.characterId}`} className="rounded border bg-gray-50 px-2 py-1">
+                      <div className="text-xs font-semibold">{player.playerName}</div>
+                      <div className="mt-1 space-y-1">
+                        {player.quests.map((q) => (
+                          <div key={`${player.characterId}-${q.questId}`} className="text-[11px] text-gray-700">
+                            {q.title} - {q.status}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-xs text-gray-500">No active individual quests.</div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>
