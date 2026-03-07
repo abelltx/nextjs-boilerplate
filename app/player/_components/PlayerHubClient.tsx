@@ -10,6 +10,7 @@ import { AbilitiesCard, SavesCard, SkillsCard, PassivesCard, type AbilityKey } f
 import RollPanel from "./RollPanel";
 import PlayerInventoryPanel from "./PlayerInventoryPanel";
 import {
+  abandonNpcQuestAction,
   claimNpcActionAction,
   claimNpcGearItemAction,
   claimNpcQuestRewardsAction,
@@ -571,6 +572,34 @@ export default function PlayerHubClient(props: {
       setClaimingQuestId(null);
     }
   }
+  async function handleAbandonNpcQuest(entry: {
+    questId: string;
+    title: string;
+    storytellerControlled?: boolean;
+  }) {
+    if (entry.storytellerControlled) {
+      alert("This quest is controlled by the storyteller.");
+      return;
+    }
+    const ok = window.confirm(`Abandon "${entry.title}"?\n\nProgress on this quest will be removed.`);
+    if (!ok) return;
+    setClaimingQuestId(entry.questId);
+    try {
+      const res = await abandonNpcQuestAction({
+        characterId: String(props.character?.id ?? ""),
+        questId: String(entry.questId ?? ""),
+      });
+      if (!res.ok) {
+        alert(res.error ?? "Could not abandon quest.");
+        return;
+      }
+      router.refresh();
+    } catch (e: any) {
+      alert(e?.message ?? "Could not abandon quest.");
+    } finally {
+      setClaimingQuestId(null);
+    }
+  }
 
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100">
@@ -722,6 +751,13 @@ export default function PlayerHubClient(props: {
                       rewards: { faith: Number(entry.rewards?.faith ?? 0), itemIds: entry.rewards?.itemIds ?? [] },
                     })
                   }
+                  onAbandon={(entry) =>
+                    handleAbandonNpcQuest({
+                      questId: entry.questId,
+                      title: entry.title,
+                      storytellerControlled: entry.storytellerControlled,
+                    })
+                  }
                 />
               ) : tab === "journey" ? (
                 <div>
@@ -841,6 +877,16 @@ function QuestListPanel(props: {
     rewards?: { faith?: number; itemIds?: string[] };
     storytellerControlled?: boolean;
   }) => void | Promise<void>;
+  onAbandon?: (entry: {
+    questId: string;
+    title: string;
+    status: "available" | "active" | "completed" | "claimed";
+    completedTaskIds: string[];
+    claimedAt?: string | null;
+    tasks?: Array<{ id: string; title: string; kind?: string; target_npc_name?: string | null; target_npc_block_id?: string | null }>;
+    rewards?: { faith?: number; itemIds?: string[] };
+    storytellerControlled?: boolean;
+  }) => void | Promise<void>;
 }) {
   const active = props.entries.filter((q) => q.status === "active" || q.status === "completed");
   const done = props.entries.filter((q) => q.status === "claimed");
@@ -891,6 +937,18 @@ function QuestListPanel(props: {
               </div>
               {q.status === "completed" && q.storytellerControlled ? (
                 <div className="mt-2 text-[11px] text-amber-300">Rewards are assigned by storyteller.</div>
+              ) : null}
+              {q.status === "active" && !q.storytellerControlled && props.onAbandon ? (
+                <div className="mt-2 flex justify-end">
+                  <button
+                    type="button"
+                    className="rounded border border-red-700/70 px-2 py-1 text-[11px] text-red-300 hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={props.claimingQuestId === q.questId}
+                    onClick={() => props.onAbandon?.(q)}
+                  >
+                    {props.claimingQuestId === q.questId ? "Abandoning..." : "Abandon Quest"}
+                  </button>
+                </div>
               ) : null}
             </div>
           ))

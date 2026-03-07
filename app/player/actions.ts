@@ -791,6 +791,59 @@ export async function claimNpcQuestRewardsAction(input: {
   return { ok: true, grantedItems, faithAwarded: rewardFaith };
 }
 
+export async function abandonNpcQuestAction(input: {
+  characterId: string;
+  questId: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  "use server";
+  const { user } = await getProfile();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const characterId = String(input.characterId ?? "").trim();
+  const questId = String(input.questId ?? "").trim();
+  if (!characterId || !questId) return { ok: false, error: "Missing quest or character." };
+
+  const supabase = await supabaseServer();
+  const owner = await requireOwnedCharacter(supabase, user.id, characterId);
+  if (!owner.ok) return { ok: false, error: owner.error };
+
+  const { data: row, error: rowErr } = await supabase
+    .from("player_quest_progress")
+    .select("id,status,quest_title")
+    .eq("character_id", characterId)
+    .eq("quest_id", questId)
+    .maybeSingle();
+  if (rowErr) {
+    if (hasMissingTableError(rowErr, "player_quest_progress")) {
+      return { ok: false, error: "Quest table missing. Run scripts/player-quest-progress.sql in Supabase SQL editor." };
+    }
+    return { ok: false, error: rowErr.message };
+  }
+  if (!(row as any)?.id) return { ok: false, error: "Quest not found on this character." };
+
+  const status = String((row as any)?.status ?? "").trim().toLowerCase();
+  if (status === "claimed") {
+    return { ok: false, error: "Claimed quests cannot be abandoned." };
+  }
+
+  const { error: delErr } = await supabase
+    .from("player_quest_progress")
+    .delete()
+    .eq("id", String((row as any).id));
+  if (delErr) return { ok: false, error: delErr.message };
+
+  await appendGameLogSafe(supabase, {
+    userId: user.id,
+    characterId,
+    eventType: "quest_abandoned",
+    title: `Quest Abandoned: ${String((row as any)?.quest_title ?? questId)}`,
+    summary: "Player abandoned this quest.",
+  });
+
+  revalidatePath("/player");
+  return { ok: true };
+}
+
 export async function useInventoryItemAction(input: {
   characterId: string;
   inventoryItemId: string;

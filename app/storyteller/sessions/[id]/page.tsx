@@ -474,7 +474,7 @@ export default async function DmScreenPage({
       .from("player_quest_progress")
       .select("character_id,quest_id,quest_title,status,reward_meta,updated_at")
       .in("character_id", sessionCharacterIds)
-      .in("status", ["active", "completed", "claimed"]);
+      .eq("status", "active");
     sessionQuestRows = (allQuestRows ?? []) as any[];
   }
   const groupQuestById = new Map<
