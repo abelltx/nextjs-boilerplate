@@ -51,6 +51,18 @@ function normalizeUuidList(text: unknown) {
   );
 }
 
+function toBool(value: unknown, fallback = false) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string") {
+    const v = value.trim().toLowerCase();
+    if (!v) return fallback;
+    if (["true", "1", "yes", "on"].includes(v)) return true;
+    if (["false", "0", "no", "off", "null", "undefined"].includes(v)) return false;
+  }
+  return fallback;
+}
+
 function parseQuestDrafts(initialMeta: any): QuestDraft[] {
   try {
     const defs = initialMeta?.npc_tabs?.quests?.quest_defs;
@@ -76,12 +88,12 @@ function parseQuestDrafts(initialMeta: any): QuestDraft[] {
         title: String(raw?.title ?? "").trim() || `Quest ${idx + 1}`,
         directions: String(raw?.directions ?? "").trim(),
         storytellerNotes: String(raw?.storyteller_notes ?? "").trim(),
-        storytellerControlled: Boolean(raw?.storyteller_controlled),
+        storytellerControlled: toBool(raw?.storyteller_controlled, false),
         taskLines: plainTasks.join("\n"),
         talkNpcIds: npcTasks.join("\n"),
         rewardItemIds: rewardItems.map((v: any) => String(v ?? "").trim()).filter(Boolean).join("\n"),
         rewardFaith: Number.isFinite(rewardFaith) ? Math.max(0, Math.floor(rewardFaith)) : 0,
-        prereqEnabled: Boolean(raw?.prerequisite?.enabled),
+        prereqEnabled: toBool(raw?.prerequisite?.enabled, false),
         prereqQuestId: String(raw?.prerequisite?.quest_id ?? "").trim(),
       } satisfies QuestDraft;
     });

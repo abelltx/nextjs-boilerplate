@@ -14,6 +14,18 @@ function hasMissingTableError(err: any, table: string) {
   return msg.includes(`relation "${table}" does not exist`) || msg.includes(`relation "public.${table}" does not exist`);
 }
 
+function toBool(value: unknown, fallback = false) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string") {
+    const v = value.trim().toLowerCase();
+    if (!v) return fallback;
+    if (["true", "1", "yes", "on"].includes(v)) return true;
+    if (["false", "0", "no", "off", "null", "undefined"].includes(v)) return false;
+  }
+  return fallback;
+}
+
 async function requireOwnedCharacter(
   supabase: Awaited<ReturnType<typeof supabaseServer>>,
   userId: string,
@@ -510,7 +522,7 @@ export async function completeNpcQuestTaskAction(input: {
   }
 
   const currentDone = Array.isArray((row as any)?.completed_task_ids) ? (row as any).completed_task_ids : [];
-  const storytellerControlled = Boolean((row as any)?.reward_meta?.storyteller_controlled);
+  const storytellerControlled = toBool((row as any)?.reward_meta?.storyteller_controlled, false);
   if (storytellerControlled) {
     return { ok: false, error: "Storyteller controls this quest's progress." };
   }

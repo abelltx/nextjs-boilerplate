@@ -55,6 +55,18 @@ type QuestProgress = {
   claimedAt?: string | null;
 };
 
+function toBool(value: unknown, fallback = false) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string") {
+    const v = value.trim().toLowerCase();
+    if (!v) return fallback;
+    if (["true", "1", "yes", "on"].includes(v)) return true;
+    if (["false", "0", "no", "off", "null", "undefined"].includes(v)) return false;
+  }
+  return fallback;
+}
+
 export default function NpcTabsCard(props: {
   meta: any;
   fallbackInfo?: string | null;
@@ -293,9 +305,9 @@ export default function NpcTabsCard(props: {
           id: questId,
           title,
           directions,
-          storytellerControlled: Boolean(q?.storyteller_controlled),
+          storytellerControlled: toBool(q?.storyteller_controlled, false),
           prerequisite: {
-            enabled: Boolean(q?.prerequisite?.enabled),
+            enabled: toBool(q?.prerequisite?.enabled, false),
             questId: String(q?.prerequisite?.quest_id ?? "").trim() || null,
           },
           tasks,
@@ -644,7 +656,7 @@ export default function NpcTabsCard(props: {
           {questDefs.map((quest) => {
             const progress = questProgress[quest.id];
             const status = String(progress?.status ?? "available").toLowerCase() as QuestProgress["status"];
-            const storytellerControlled = Boolean(quest.storytellerControlled) || Boolean(props.playerShop);
+            const storytellerControlled = toBool(quest.storytellerControlled, false);
             const prereqEnabled = Boolean(quest.prerequisite?.enabled);
             const prereqQuestId = String(quest.prerequisite?.questId ?? "").trim();
             const prereqProgress = prereqQuestId ? questProgress[prereqQuestId] : null;

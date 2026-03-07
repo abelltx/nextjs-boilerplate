@@ -882,12 +882,14 @@ function QuestListPanel(props: {
                     </div>
                   );
                 })}
-                <div className="text-[11px] text-amber-300">Progress controlled by storyteller.</div>
+                {q.storytellerControlled ? (
+                  <div className="text-[11px] text-amber-300">Progress controlled by storyteller.</div>
+                ) : null}
                 <div className="text-xs text-neutral-400">
                   Tasks done: {q.completedTaskIds.length}/{(q.tasks ?? []).length || 0}
                 </div>
               </div>
-              {q.status === "completed" ? (
+              {q.status === "completed" && q.storytellerControlled ? (
                 <div className="mt-2 text-[11px] text-amber-300">Rewards are assigned by storyteller.</div>
               ) : null}
             </div>

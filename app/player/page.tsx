@@ -70,6 +70,18 @@ function toSaveKey(raw: string): AbilityKey | null {
   return null;
 }
 
+function toBool(value: unknown, fallback = false) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string") {
+    const v = value.trim().toLowerCase();
+    if (!v) return fallback;
+    if (["true", "1", "yes", "on"].includes(v)) return true;
+    if (["false", "0", "no", "off", "null", "undefined"].includes(v)) return false;
+  }
+  return fallback;
+}
+
 function applyEffects(
   baseStat: any,
   effects: Array<ItemEffectRow | TraitEffectRow>,
@@ -612,7 +624,7 @@ export default async function PlayerPage() {
             ? (row as any).reward_meta.item_ids.map((v: any) => String(v ?? "").trim()).filter(Boolean)
             : [],
         },
-        storytellerControlled: Boolean((row as any)?.reward_meta?.storyteller_controlled),
+        storytellerControlled: toBool((row as any)?.reward_meta?.storyteller_controlled, false),
       });
     }
   }
