@@ -108,6 +108,7 @@ export default function NpcTabsEditorClient(props: {
   libraryOnly?: boolean;
   showLibraryLink?: boolean;
   showAdvancedMeta?: boolean;
+  episodeQuestOptions?: Array<{ questId: string; title: string; npcName?: string | null }>;
 }) {
   const rawTabs = (props.initialMeta?.npc_tabs ?? {}) as Record<string, any>;
   const [tabs, setTabs] = useState<Record<TabKey, { enabled: boolean; content: string }>>({
@@ -206,6 +207,17 @@ export default function NpcTabsEditorClient(props: {
         prereqQuestId: String((q as any)?.prereqQuestId ?? ""),
       })),
     [quests]
+  );
+  const episodePrereqOptions = useMemo(
+    () =>
+      (props.episodeQuestOptions ?? [])
+        .map((q: any) => ({
+          questId: String(q?.questId ?? "").trim(),
+          title: String(q?.title ?? "").trim(),
+          npcName: String(q?.npcName ?? "").trim() || null,
+        }))
+        .filter((q) => q.questId.length > 0),
+    [props.episodeQuestOptions]
   );
   const trainingIds = useMemo(() => normalizeUuidList(trainingText), [trainingText]);
   const optionMap = useMemo(() => {
@@ -571,6 +583,23 @@ export default function NpcTabsEditorClient(props: {
                 ) : null}
                 {safeQuests.map((q, idx) => {
                   const rewardItemIds = normalizeUuidList(q.rewardItemIds);
+                  const localPrereqOptions = safeQuests
+                    .filter((_, qIdx) => qIdx !== idx)
+                    .map((other, qIdx) => {
+                      const otherId = toQuestId(other.id) || toQuestId(other.title) || `quest_${qIdx + 1}`;
+                      return {
+                        questId: otherId,
+                        title: other.title || otherId,
+                        npcName: null as string | null,
+                      };
+                    });
+                  const mergedPrereqOptions = Array.from(
+                    new Map(
+                      [...localPrereqOptions, ...episodePrereqOptions]
+                        .filter((opt) => opt.questId !== (toQuestId(q.id) || toQuestId(q.title) || `quest_${idx + 1}`))
+                        .map((opt) => [opt.questId, opt] as const)
+                    ).values()
+                  );
                   return (
                     <div key={q.uiKey} className="rounded border bg-white p-2 space-y-2">
                       <div className="flex items-center justify-between gap-2">
@@ -685,16 +714,12 @@ export default function NpcTabsEditorClient(props: {
                             }}
                           >
                             <option value="">Select prerequisite quest...</option>
-                            {safeQuests
-                              .filter((_, qIdx) => qIdx !== idx)
-                              .map((other, qIdx) => {
-                                const otherId = toQuestId(other.id) || toQuestId(other.title) || `quest_${qIdx + 1}`;
-                                return (
-                                  <option key={`${other.uiKey}-pr`} value={otherId}>
-                                    {other.title || otherId} ({otherId})
-                                  </option>
-                                );
-                              })}
+                            {mergedPrereqOptions.map((opt, prIdx) => (
+                              <option key={`${opt.questId}-${prIdx}`} value={opt.questId}>
+                                {opt.npcName ? `${opt.npcName} - ` : ""}
+                                {opt.title || opt.questId} ({opt.questId})
+                              </option>
+                            ))}
                           </select>
                         ) : null}
                       </div>

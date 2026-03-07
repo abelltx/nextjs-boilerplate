@@ -26,6 +26,29 @@ function isUuid(v: string) {
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
+function toQuestId(value: unknown) {
+  return String(value ?? "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 64);
+}
+
+function extractQuestOptionsFromMeta(meta: any, npcName: string) {
+  const out: Array<{ questId: string; title: string; npcName: string }> = [];
+  const defs = meta?.npc_tabs?.quests?.quest_defs;
+  if (!Array.isArray(defs)) return out;
+  for (let i = 0; i < defs.length; i += 1) {
+    const q = defs[i] ?? {};
+    const title = String(q?.title ?? "").trim() || `Quest ${i + 1}`;
+    const questId = toQuestId(q?.id) || toQuestId(title) || `quest_${i + 1}`;
+    if (!questId) continue;
+    out.push({ questId, title, npcName });
+  }
+  return out;
+}
+
 export default async function EditNpcByQueryPage({
   searchParams,
 }: {
@@ -85,6 +108,7 @@ let runtimeMeta: any = { npc_tabs: {} };
 let runtimeMetaRaw: any = {};
 let episodeOptions: Array<{ id: string; title: string; episode_code?: string | null }> = [];
 let scopedRuntimeMeta: any = { npc_tabs: {} };
+let episodeQuestOptions: Array<{ questId: string; title: string; npcName?: string | null }> = [];
 
 try {
   [
@@ -126,6 +150,51 @@ try {
           ? runtimeMetaRaw.npc_tabs
           : {},
   };
+  if (episodeScopeId && /^[0-9a-f-]{36}$/i.test(episodeScopeId)) {
+    const [{ data: bindings }, { data: npcs }] = await Promise.all([
+      supabase
+        .from("episode_npc_bindings")
+        .select("npc_id")
+        .eq("episode_id", episodeScopeId),
+      supabase
+        .from("npcs")
+        .select("id,name")
+        .eq("is_archived", false),
+    ]);
+    const npcNameById = new Map<string, string>();
+    for (const n of npcs ?? []) {
+      const id = String((n as any)?.id ?? "").trim();
+      if (!id) continue;
+      npcNameById.set(id, String((n as any)?.name ?? "").trim() || "NPC");
+    }
+    const boundNpcIds = Array.from(
+      new Set((bindings ?? []).map((r: any) => String(r?.npc_id ?? "").trim()).filter(Boolean))
+    );
+    if (boundNpcIds.length > 0) {
+      const { data: cfgRows } = await supabase
+        .from("npc_runtime_configs")
+        .select("npc_id,meta_json")
+        .in("npc_id", boundNpcIds);
+      const rows = Array.isArray(cfgRows) ? cfgRows : [];
+      const collected: Array<{ questId: string; title: string; npcName?: string | null }> = [];
+      for (const row of rows as any[]) {
+        const npcId = String(row?.npc_id ?? "").trim();
+        if (!npcId) continue;
+        const npcName = npcNameById.get(npcId) ?? "NPC";
+        const rawMeta = (row?.meta_json ?? {}) as any;
+        const scopedMeta =
+          rawMeta?.npc_tabs_by_episode &&
+          typeof rawMeta.npc_tabs_by_episode === "object" &&
+          rawMeta.npc_tabs_by_episode[episodeScopeId]
+            ? { npc_tabs: rawMeta.npc_tabs_by_episode[episodeScopeId] }
+            : rawMeta;
+        collected.push(...extractQuestOptionsFromMeta(scopedMeta, npcName));
+      }
+      episodeQuestOptions = Array.from(
+        new Map(collected.map((q) => [q.questId, q] as const)).values()
+      );
+    }
+  }
 } catch (err) {
   console.error("Failed to load traits/actions for NPC", err);
 }
@@ -388,6 +457,7 @@ try {
       itemOptions={itemOptions}
       traitOptions={allTraits.map((t: any) => ({ id: t.id, name: t.name, is_active: !t.is_archived }))}
       actionOptions={allActions.map((a: any) => ({ id: a.id, name: a.name, is_active: !a.is_archived }))}
+      episodeQuestOptions={episodeQuestOptions}
       showLibraryLink={false}
       showAdvancedMeta={false}
     />
