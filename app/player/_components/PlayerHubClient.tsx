@@ -913,7 +913,6 @@ function QuestListPanel(props: {
                   {q.status === "completed" ? "Ready to claim" : "Active"}
                 </span>
               </div>
-              <div className="mt-1 text-xs text-neutral-400 font-mono">{q.questId}</div>
               <div className="mt-2 space-y-1">
                 {(q.tasks ?? []).map((task) => {
                   const doneTask = (q.completedTaskIds ?? []).includes(task.id);
