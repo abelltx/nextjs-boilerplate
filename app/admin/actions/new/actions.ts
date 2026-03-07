@@ -20,7 +20,7 @@ export async function createActionAction(formData: FormData) {
   const tagsRaw = String(formData.get("tags") ?? "").trim();
   const tags = tagsRaw
     ? tagsRaw.split(",").map((t) => t.trim()).filter(Boolean)
-    : null;
+    : [];
   const is_active = formData.get("is_active") === "on";
   const uses_attack_roll = formData.get("uses_attack_roll") === "on";
   const attack_bonus_override = numberOrNull(formData.get("attack_bonus_override"));
