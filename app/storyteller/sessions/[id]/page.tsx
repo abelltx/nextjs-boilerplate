@@ -291,44 +291,36 @@ export default async function DmScreenPage({
   const carouselNextScene = carouselSceneIdx >= 0 ? scenes[carouselSceneIdx + 1] ?? null : null;
   const carouselNextSceneFirst =
     carouselNextScene?.children?.find((c) => isPresentable(c)) ?? null;
-  const storytellerDirective = (() => {
-    if (!presentedBlock) return "";
+  const storytellerGuidance = (() => {
+    if (!presentedBlock) return { script: "", notes: "" };
     const meta = (presentedBlock.meta ?? {}) as Record<string, any>;
-    const explicitScript = String(meta.storyteller_script ?? "").trim();
-    if (explicitScript) return explicitScript;
-    const explicitNotes = String(meta.storyteller_notes ?? "").trim();
-    if (explicitNotes) return explicitNotes;
-
     const kind = String(presentedBlock.block_type ?? "").toLowerCase();
-    if (kind === "npc") {
-      const questDefs = Array.isArray(meta?.npc_tabs?.quests?.quest_defs) ? meta.npc_tabs.quests.quest_defs : [];
-      const questNotes = questDefs
-        .map((q: any) => String(q?.storyteller_notes ?? "").trim())
-        .filter(Boolean);
-      if (questNotes.length) {
-        return questNotes
-          .map((txt: string, idx: number) => `Quest ${idx + 1}: ${txt}`)
-          .join("\n\n");
-      }
+
+    const explicitScript =
+      String(meta.storyteller_script ?? "").trim() || String(meta.storyteller_text ?? "").trim() || String(meta.narrative ?? "").trim();
+    const explicitNotes =
+      String(meta.storyteller_notes ?? "").trim() ||
+      String(meta.note ?? "").trim() ||
+      String(meta.notes ?? "").trim() ||
+      String(meta.dm_notes ?? "").trim() ||
+      String(meta.gm_notes ?? "").trim();
+
+    let script = explicitScript;
+    let notes = explicitNotes;
+
+    if (!script) {
+      if (kind === "npc") script = "Read the NPC prompt and drive dialogue before assigning or progressing quests.";
+      else if (kind === "map") script = "Describe what players see and ask how they approach it.";
+      else if (kind === "image") script = "Present the image, pause for player observations, then call for checks as needed.";
+      else if (kind === "encounter") script = "Set initiative and run encounter pacing from this scene.";
     }
 
-    const legacyCandidates = [
-      meta.storyteller_text,
-      meta.narrative,
-      meta.note,
-      meta.notes,
-      meta.dm_notes,
-      meta.gm_notes,
-    ];
-    for (const c of legacyCandidates) {
-      const value = String(c ?? "").trim();
-      if (value) return value;
+    if (!notes) {
+      if (kind === "map") notes = "Use markers/reveals if players investigate specific details.";
+      else if (kind === "image") notes = "Use this as a visual aid; keep challenge mechanics in Check Prompt and quest controls.";
     }
 
-    if (kind === "map") return "Guide players through the map and use marker reveals as they investigate.";
-    if (kind === "npc") return "Read the NPC prompt and drive dialogue before assigning or progressing quests.";
-    if (kind === "encounter") return "Set initiative and run encounter pacing from this scene.";
-    return "";
+    return { script, notes };
   })();
   const questDirectorNpcBlock =
     presentedBlock && String(presentedBlock.block_type).toLowerCase() === "npc"
@@ -1317,8 +1309,17 @@ export default async function DmScreenPage({
                   <div className="text-sm font-semibold">
                     {presentedBlock.title ?? presentedBlock.block_type ?? "Presented"}
                   </div>
-                  <div className="text-sm whitespace-pre-wrap text-gray-700">
-                    {storytellerDirective || "No storyteller notes on this block. Use block title/body and quest controls to run this moment."}
+                  <div className="mt-1 rounded border border-green-200 bg-green-50 px-2 py-1.5">
+                    <div className="text-[10px] uppercase text-green-800">Script</div>
+                    <div className="text-sm whitespace-pre-wrap text-green-900">
+                      {storytellerGuidance.script || "No read-aloud script on this block yet."}
+                    </div>
+                  </div>
+                  <div className="mt-1 rounded border border-orange-200 bg-orange-50 px-2 py-1.5">
+                    <div className="text-[10px] uppercase text-orange-800">ST Notes</div>
+                    <div className="text-sm whitespace-pre-wrap text-orange-900">
+                      {storytellerGuidance.notes || "No private guidance notes on this block yet."}
+                    </div>
                   </div>
                 </>
               ) : (
