@@ -1186,6 +1186,9 @@ function StagePanel({
                 if (m.targetBlockId) setSelectedMarkerBlockId(m.targetBlockId);
               }}
             />
+          ) : block.image_url && String(block.block_type ?? "").toLowerCase() !== "npc" ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={block.image_url} alt={block.title ?? "Presented"} className="w-full rounded-lg border border-neutral-800" />
           ) : null}
         </RevealCard>
 

@@ -406,7 +406,7 @@ export default async function AdminEpisodeEditPage({
                 <div className="space-y-2 p-3">
                   {g.items.length === 0 ? (
                     <div className="rounded-lg border border-dashed p-3 text-sm text-gray-600">
-                      No blocks in this scene yet. Add objectives, narrative, map, or encounter blocks.
+                      No blocks in this scene yet. Add objectives, narrative, image/map, or encounter blocks.
                     </div>
                   ) : (
                     g.items.map((b: any, idx: number) => (
@@ -630,6 +630,7 @@ export default async function AdminEpisodeEditPage({
               <select name="block_type" className="w-full border rounded p-2">
                 <option value="scene">scene</option>
                 <option value="objective">objective</option>
+                <option value="image">image</option>
                 <option value="map">map</option>
                 <option value="npc">npc</option>
                 <option value="loot">loot</option>
@@ -817,6 +818,7 @@ export default async function AdminEpisodeEditPage({
                   <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
                     <select name="block_type" className="border rounded p-2 text-sm" defaultValue="objective">
                       <option value="objective">Objective (players can see)</option>
+                      <option value="image">Image (players can see)</option>
                       <option value="map">Map (players can see)</option>
                       <option value="narrative">Narrative (storyteller read)</option>
                       <option value="note">Note (storyteller awareness)</option>
@@ -937,6 +939,46 @@ export default async function AdminEpisodeEditPage({
                           placeholder="Short map note (optional)"
                         />
                         <button className="px-3 py-2 rounded bg-black text-white">Add Map</button>
+                      </form>
+                    </div>
+                  </details>
+
+                  {/* Image */}
+                  <details className="rounded-lg border">
+                    <summary className="cursor-pointer px-3 py-2 text-sm font-semibold">
+                      Image <span className="text-xs font-normal text-gray-500">| players can see (share visual)</span>
+                    </summary>
+                    <div className="p-3 border-t space-y-2">
+                      <div className="text-xs text-gray-600">
+                        Use Image for extra visuals in a scene. This does not replace your scene map.
+                      </div>
+                      <form
+                        className="space-y-2"
+                        encType="multipart/form-data"
+                        action={async (fd) => {
+                          "use server";
+                          await addEpisodeBlockAction(episode.id, fd);
+                          redirect(`/admin/episodes/${episode.id}`);
+                        }}
+                      >
+                        <input type="hidden" name="block_type" value="image" />
+                        <input type="hidden" name="audience" value="players" />
+                        <input type="hidden" name="mode" value="display" />
+                        <input type="hidden" name="scene_id" value={g.scene?.id ?? ""} />
+                        <input
+                          name="title"
+                          className="w-full border rounded p-2"
+                          placeholder="Image title (optional)"
+                          defaultValue="Scene Visual"
+                        />
+                        <input name="image_url" className="w-full border rounded p-2" placeholder="Image URL (optional)" />
+                        <input name="image_file" type="file" accept="image/*" className="w-full border rounded p-2" />
+                        <textarea
+                          name="body"
+                          className="w-full border rounded p-2 h-20"
+                          placeholder="Caption or context text (optional)"
+                        />
+                        <button className="px-3 py-2 rounded bg-black text-white">Add Image</button>
                       </form>
                     </div>
                   </details>
