@@ -584,3 +584,103 @@ export async function requestPassiveSavePrompt(input: {
     roll_results: {},
   });
 }
+
+export async function approvePlayerRollRequest(input: {
+  sessionId: string;
+  requestId: string;
+  instruction?: string;
+  dc?: number | null;
+}) {
+  const sessionId = String(input.sessionId ?? "").trim();
+  const requestId = String(input.requestId ?? "").trim();
+  const instruction = String(input.instruction ?? "").trim();
+  const dc = Number(input.dc ?? NaN);
+  const hasDc = Number.isFinite(dc) && dc > 0;
+  if (!sessionId || !requestId) throw new Error("Missing request details.");
+
+  const supabase = await createClient();
+  const { data: st, error: stErr } = await supabase
+    .from("session_state")
+    .select("roll_requests")
+    .eq("session_id", sessionId)
+    .maybeSingle();
+  if (stErr) throw new Error(stErr.message);
+  if (!st) throw new Error("Session state not found.");
+
+  const requests = Array.isArray((st as any)?.roll_requests) ? ([...(st as any).roll_requests] as any[]) : [];
+  const idx = requests.findIndex((r: any) => String(r?.id ?? "").trim() === requestId);
+  if (idx < 0) throw new Error("Roll request not found.");
+  const req = requests[idx] ?? {};
+  const status = String(req?.status ?? "pending").trim().toLowerCase();
+  if (status !== "pending") return;
+
+  const checkKey = String(req?.check_key ?? "Perception").trim();
+  const playerId = String(req?.player_id ?? "").trim();
+  const playerMessage = String(req?.message ?? "").trim();
+  if (!playerId) throw new Error("Roll request has no player.");
+
+  requests[idx] = {
+    ...req,
+    status: "approved",
+    approved_at: new Date().toISOString(),
+  };
+
+  const prompt = [
+    "Roll Request",
+    `${checkKey} check${hasDc ? ` (DC ${Math.floor(dc)})` : ""}.`,
+    instruction || `Click ${checkKey} in your sheet and report your total.`,
+    playerMessage ? `Player plan: ${playerMessage}` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const { error: upErr } = await supabase
+    .from("session_state")
+    .update({
+      roll_requests: requests,
+      roll_open: true,
+      roll_die: "d20",
+      roll_prompt: prompt,
+      roll_target: playerId,
+      roll_round_id: randomUUID(),
+      roll_results: {},
+      roll_request_id: requestId,
+      roll_request_source: "player",
+    } as any)
+    .eq("session_id", sessionId);
+  if (upErr) throw new Error(upErr.message);
+}
+
+export async function declinePlayerRollRequest(input: {
+  sessionId: string;
+  requestId: string;
+}) {
+  const sessionId = String(input.sessionId ?? "").trim();
+  const requestId = String(input.requestId ?? "").trim();
+  if (!sessionId || !requestId) throw new Error("Missing request details.");
+
+  const supabase = await createClient();
+  const { data: st, error: stErr } = await supabase
+    .from("session_state")
+    .select("roll_requests")
+    .eq("session_id", sessionId)
+    .maybeSingle();
+  if (stErr) throw new Error(stErr.message);
+  if (!st) throw new Error("Session state not found.");
+
+  const requests = Array.isArray((st as any)?.roll_requests) ? ([...(st as any).roll_requests] as any[]) : [];
+  const idx = requests.findIndex((r: any) => String(r?.id ?? "").trim() === requestId);
+  if (idx < 0) return;
+  const req = requests[idx] ?? {};
+  requests[idx] = {
+    ...req,
+    status: "declined",
+    declined_at: new Date().toISOString(),
+  };
+
+  const { error: upErr } = await supabase
+    .from("session_state")
+    .update({ roll_requests: requests })
+    .eq("session_id", sessionId);
+  if (upErr) throw new Error(upErr.message);
+}

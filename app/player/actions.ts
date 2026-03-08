@@ -3,6 +3,7 @@
 import { supabaseServer } from "@/lib/supabase/server";
 import { getProfile } from "@/lib/auth/getProfile";
 import { revalidatePath } from "next/cache";
+import { randomUUID } from "crypto";
 
 function isUuid(value: string) {
   const v = value.trim();
@@ -210,6 +211,67 @@ export async function submitRollResultAction(input: {
     .eq("session_id", input.sessionId);
 
   if (upErr) return { ok: false, error: upErr.message };
+  return { ok: true };
+}
+
+export async function requestRollApprovalAction(input: {
+  sessionId: string;
+  checkKey: string;
+  message?: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  "use server";
+  const { user } = await getProfile();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const sessionId = String(input.sessionId ?? "").trim();
+  const checkKey = String(input.checkKey ?? "").trim();
+  const message = String(input.message ?? "").trim();
+  if (!sessionId || !checkKey) return { ok: false, error: "Missing session or check." };
+
+  const supabase = await supabaseServer();
+  const { data: joinRow, error: joinErr } = await supabase
+    .from("session_players")
+    .select("player_id")
+    .eq("session_id", sessionId)
+    .eq("player_id", user.id)
+    .maybeSingle();
+  if (joinErr) return { ok: false, error: joinErr.message };
+  if (!joinRow?.player_id) return { ok: false, error: "You are not in this session." };
+
+  const { data: st, error: stErr } = await supabase
+    .from("session_state")
+    .select("roll_requests,roll_open,roll_target")
+    .eq("session_id", sessionId)
+    .maybeSingle();
+  if (stErr) return { ok: false, error: stErr.message };
+  if (!st) return { ok: false, error: "Session state not found." };
+
+  const existing = Array.isArray((st as any)?.roll_requests) ? ((st as any).roll_requests as any[]) : [];
+  const hasPending = existing.some(
+    (r: any) =>
+      String(r?.player_id ?? "").trim() === user.id &&
+      String(r?.status ?? "pending").trim().toLowerCase() === "pending"
+  );
+  if (hasPending) return { ok: true };
+
+  const next = [
+    ...existing,
+    {
+      id: randomUUID(),
+      player_id: user.id,
+      check_key: checkKey,
+      message: message || null,
+      status: "pending",
+      created_at: new Date().toISOString(),
+    },
+  ];
+
+  const { error: upErr } = await supabase
+    .from("session_state")
+    .update({ roll_requests: next })
+    .eq("session_id", sessionId);
+  if (upErr) return { ok: false, error: upErr.message };
+  revalidatePath("/player");
   return { ok: true };
 }
 

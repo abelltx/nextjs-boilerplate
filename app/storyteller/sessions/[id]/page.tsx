@@ -11,6 +11,8 @@ import {
   storytellerCompleteQuestForAll,
   storytellerCompleteQuestTaskForAll,
   requestPassiveSavePrompt,
+  approvePlayerRollRequest,
+  declinePlayerRollRequest,
 } from "./actions";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
@@ -445,6 +447,28 @@ export default async function DmScreenPage({
       passives,
     };
   });
+  const playerLabelById = new Map<string, string>();
+  for (const p of storytellerPlayers) {
+    const pid = String((p as any)?.playerId ?? "").trim();
+    if (!pid) continue;
+    const label = String((p as any)?.characterName ?? "").trim() || `Player ${pid.slice(0, 8)}`;
+    playerLabelById.set(pid, label);
+  }
+  const pendingRollRequests = (Array.isArray((state as any)?.roll_requests) ? ((state as any).roll_requests as any[]) : [])
+    .map((r: any) => ({
+      id: String(r?.id ?? "").trim(),
+      playerId: String(r?.player_id ?? "").trim(),
+      checkKey: String(r?.check_key ?? "").trim() || "Check",
+      message: String(r?.message ?? "").trim() || null,
+      status: String(r?.status ?? "pending").trim().toLowerCase(),
+      createdAt: String(r?.created_at ?? "").trim() || null,
+    }))
+    .filter((r) => r.id && r.playerId && r.status === "pending")
+    .map((r) => ({
+      ...r,
+      playerLabel: playerLabelById.get(r.playerId) ?? `Player ${r.playerId.slice(0, 8)}`,
+    }))
+    .sort((a, b) => String(a.createdAt ?? "").localeCompare(String(b.createdAt ?? "")));
   const questDirectorIds = questDirectorDefs
     .map((q: any, i: number) => String(q?.id ?? "").trim() || `quest_${i + 1}`)
     .filter(Boolean);
@@ -1224,6 +1248,7 @@ export default async function DmScreenPage({
               joins={joins as any[]}
               rollOpen={Boolean((state as any).roll_open)}
               currentPrompt={String((state as any).roll_prompt ?? "")}
+              pendingRequests={pendingRollRequests as any[]}
               onSendPrompt={async (fd) => {
                 "use server";
                 const checkKey = String(fd.get("check_key") ?? "Perception").trim();
@@ -1246,6 +1271,29 @@ export default async function DmScreenPage({
                   roll_target: target,
                   roll_round_id: randomUUID(),
                   roll_results: {},
+                });
+                redirect(`/storyteller/sessions/${session.id}`);
+              }}
+              onApproveRequest={async (fd) => {
+                "use server";
+                const requestId = String(fd.get("request_id") ?? "").trim();
+                const instruction = String(fd.get("instruction") ?? "").trim();
+                const dcRaw = String(fd.get("dc") ?? "").trim();
+                const dc = Number(dcRaw);
+                await approvePlayerRollRequest({
+                  sessionId: session.id,
+                  requestId,
+                  instruction: instruction || undefined,
+                  dc: Number.isFinite(dc) ? dc : null,
+                });
+                redirect(`/storyteller/sessions/${session.id}`);
+              }}
+              onDeclineRequest={async (fd) => {
+                "use server";
+                const requestId = String(fd.get("request_id") ?? "").trim();
+                await declinePlayerRollRequest({
+                  sessionId: session.id,
+                  requestId,
                 });
                 redirect(`/storyteller/sessions/${session.id}`);
               }}

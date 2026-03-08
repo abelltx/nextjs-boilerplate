@@ -44,6 +44,21 @@ export default function QuestProgressAutoRefresh(props: {
         }
       )
       .subscribe();
+    const stateChannel = supabase
+      .channel(`session-state:${props.sessionId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "session_state",
+          filter: `session_id=eq.${props.sessionId}`,
+        },
+        () => {
+          maybeRefresh();
+        }
+      )
+      .subscribe();
 
     const poll = window.setInterval(() => {
       if (document.visibilityState === "visible") maybeRefresh();
@@ -52,9 +67,9 @@ export default function QuestProgressAutoRefresh(props: {
     return () => {
       window.clearInterval(poll);
       void supabase.removeChannel(channel);
+      void supabase.removeChannel(stateChannel);
     };
   }, [supabase, router, props.sessionId, ids]);
 
   return null;
 }
-

@@ -32,6 +32,16 @@ export default function CheckPromptCard(props: {
   currentPrompt: string;
   onSendPrompt: (formData: FormData) => Promise<void>;
   onClosePrompt: () => Promise<void>;
+  pendingRequests?: Array<{
+    id: string;
+    playerId: string;
+    playerLabel: string;
+    checkKey: string;
+    message?: string | null;
+    createdAt?: string | null;
+  }>;
+  onApproveRequest?: (formData: FormData) => Promise<void>;
+  onDeclineRequest?: (formData: FormData) => Promise<void>;
 }) {
   return (
     <div className="border rounded-xl p-4 space-y-3">
@@ -94,6 +104,50 @@ export default function CheckPromptCard(props: {
       <div className="rounded border bg-gray-50 p-2 text-xs">
         <div className="font-semibold text-gray-700">Live Prompt</div>
         <div className="mt-1 text-gray-600">{props.rollOpen ? props.currentPrompt || "Prompt open (no text)." : "No active prompt."}</div>
+      </div>
+
+      <div className="rounded border bg-gray-50 p-2 text-xs space-y-2">
+        <div className="font-semibold text-gray-700">Player Roll Requests</div>
+        {(props.pendingRequests ?? []).length ? (
+          <div className="space-y-2">
+            {(props.pendingRequests ?? []).map((r) => (
+              <div key={r.id} className="rounded border bg-white p-2 space-y-2">
+                <div className="text-[11px]">
+                  <span className="font-semibold">{r.playerLabel}</span> requests <span className="font-semibold">{r.checkKey}</span>
+                </div>
+                {r.message ? <div className="text-[11px] text-gray-600">Plan: {r.message}</div> : null}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {props.onApproveRequest ? (
+                    <form action={props.onApproveRequest} className="space-y-1">
+                      <input type="hidden" name="request_id" value={r.id} />
+                      <label className="space-y-1 block">
+                        <div className="text-[10px] uppercase text-gray-500">DC (optional)</div>
+                        <input name="dc" type="number" min={1} max={40} className="w-full border rounded p-1.5 text-xs" />
+                      </label>
+                      <label className="space-y-1 block">
+                        <div className="text-[10px] uppercase text-gray-500">Instruction (optional)</div>
+                        <input name="instruction" className="w-full border rounded p-1.5 text-xs" placeholder={`Click ${r.checkKey} and roll.`} />
+                      </label>
+                      <button className="w-full rounded border border-green-700 bg-green-50 px-2 py-1 text-xs text-green-800">
+                        Approve
+                      </button>
+                    </form>
+                  ) : null}
+                  {props.onDeclineRequest ? (
+                    <form action={props.onDeclineRequest} className="flex items-end">
+                      <input type="hidden" name="request_id" value={r.id} />
+                      <button className="w-full rounded border border-red-700 bg-red-50 px-2 py-1 text-xs text-red-700">
+                        Decline
+                      </button>
+                    </form>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-gray-600">No pending player requests.</div>
+        )}
       </div>
     </div>
   );

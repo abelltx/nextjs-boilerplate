@@ -17,6 +17,7 @@ import {
   claimNpcTrainingTraitAction,
   completeNpcQuestTaskAction,
   leaveSessionAction,
+  requestRollApprovalAction,
   startNpcQuestAction,
   submitRollResultAction,
 } from "../actions";
@@ -63,6 +64,28 @@ const SKILL_ALIASES: Array<{ key: string; aliases: string[] }> = [
   { key: "sleight_of_hand", aliases: ["sleight of hand", "sleight_of_hand"] },
   { key: "stealth", aliases: ["stealth"] },
   { key: "survival", aliases: ["survival"] },
+];
+const REQUESTABLE_CHECKS = [
+  "Perception",
+  "Investigation",
+  "Insight",
+  "Medicine",
+  "Athletics",
+  "Acrobatics",
+  "Stealth",
+  "Survival",
+  "Arcana",
+  "Religion",
+  "History",
+  "Persuasion",
+  "Deception",
+  "Intimidation",
+  "STR",
+  "DEX",
+  "CON",
+  "INT",
+  "WIS",
+  "CHA",
 ];
 
 function detectPromptTarget(prompt: string): PromptTarget {
@@ -323,6 +346,9 @@ export default function PlayerHubClient(props: {
   const [diceMode, setDiceMode] = useState<"digital" | "manual">("digital");
   const [manualValue, setManualValue] = useState("");
   const [submittingRoll, setSubmittingRoll] = useState(false);
+  const [requestingRoll, setRequestingRoll] = useState(false);
+  const [requestCheckKey, setRequestCheckKey] = useState("Perception");
+  const [requestMessage, setRequestMessage] = useState("");
   const promptBoxRef = useRef<HTMLDivElement | null>(null);
   const [guidedResult, setGuidedResult] = useState<GuidedRoll | null>(null);
   const [flight, setFlight] = useState<{
@@ -340,6 +366,13 @@ export default function PlayerHubClient(props: {
     rollOpen && currentRoundId && myExistingResult?.round_id && String(myExistingResult.round_id) === currentRoundId
   );
   const rollLocked = rollOpen && (Boolean(guidedResult) || Boolean(flight) || alreadySubmittedRound);
+  const rollRequests = Array.isArray(stageState?.roll_requests) ? (stageState.roll_requests as any[]) : [];
+  const myPendingRequest = rollRequests.find(
+    (r: any) =>
+      String(r?.player_id ?? "").trim() === props.userId &&
+      String(r?.status ?? "pending").trim().toLowerCase() === "pending"
+  );
+  const myActiveRoll = rollOpen && (String(stageState?.roll_target ?? "all").trim() === "all" || String(stageState?.roll_target ?? "").trim() === props.userId);
 
   useEffect(() => {
     if (!rollOpen) {
@@ -364,6 +397,26 @@ export default function PlayerHubClient(props: {
       return;
     }
     router.refresh();
+  }
+
+  async function handleRequestRoll() {
+    if (!selectedSessionId || requestingRoll || myPendingRequest) return;
+    setRequestingRoll(true);
+    try {
+      const res = await requestRollApprovalAction({
+        sessionId: selectedSessionId,
+        checkKey: requestCheckKey,
+        message: requestMessage.trim() || undefined,
+      });
+      if (!res.ok) {
+        alert(res.error ?? "Could not send roll request.");
+        return;
+      }
+      setRequestMessage("");
+      router.refresh();
+    } finally {
+      setRequestingRoll(false);
+    }
   }
 
   function launchRollFlight(fromRect: DOMRect, result: GuidedRoll) {
@@ -782,6 +835,47 @@ export default function PlayerHubClient(props: {
               ) : (
                 <div className="space-y-3">
                   <div className="text-sm font-semibold">Actions</div>
+                  {isLiveMode && selectedSessionId ? (
+                    <div className="rounded-xl border border-neutral-800 bg-neutral-950/50 p-3 space-y-2">
+                      <div className="text-xs uppercase tracking-wide text-neutral-400">Request Roll</div>
+                      <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+                        <select
+                          className="rounded border border-neutral-700 bg-neutral-950 px-2 py-2 text-sm"
+                          value={requestCheckKey}
+                          onChange={(e) => setRequestCheckKey(e.currentTarget.value)}
+                          disabled={Boolean(myPendingRequest) || requestingRoll}
+                        >
+                          {REQUESTABLE_CHECKS.map((k) => (
+                            <option key={k} value={k}>
+                              {k}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          className="md:col-span-2 rounded border border-neutral-700 bg-neutral-950 px-2 py-2 text-sm"
+                          placeholder="Optional plan for storyteller..."
+                          value={requestMessage}
+                          onChange={(e) => setRequestMessage(e.currentTarget.value)}
+                          disabled={Boolean(myPendingRequest) || requestingRoll}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleRequestRoll}
+                        disabled={Boolean(myPendingRequest) || requestingRoll}
+                        className={[
+                          "rounded border px-3 py-2 text-sm font-semibold transition",
+                          myActiveRoll
+                            ? "border-emerald-400 bg-emerald-500/20 text-emerald-200 shadow-[0_0_0_2px_rgba(74,222,128,0.35),0_0_22px_rgba(34,197,94,0.45)]"
+                            : myPendingRequest
+                              ? "border-amber-400 bg-amber-500/20 text-amber-200 shadow-[0_0_0_2px_rgba(251,191,36,0.25),0_0_14px_rgba(245,158,11,0.35)] animate-pulse"
+                              : "border-amber-400 bg-amber-500/20 text-amber-100 hover:bg-amber-500/30",
+                        ].join(" ")}
+                      >
+                        {myActiveRoll ? "Roll Active" : myPendingRequest ? "Request Pending" : requestingRoll ? "Sending..." : "Request Roll"}
+                      </button>
+                    </div>
+                  ) : null}
                   <RollPanel
                     stat={stat}
                     disabled={isLiveMode && !rollOpen}
