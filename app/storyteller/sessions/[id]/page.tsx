@@ -13,6 +13,9 @@ import {
   requestPassiveSavePrompt,
   approvePlayerRollRequest,
   declinePlayerRollRequest,
+  storytellerSetHexFocus,
+  storytellerClearHexFocus,
+  storytellerResolveHexReward,
 } from "./actions";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
@@ -23,7 +26,7 @@ import SequenceRail from "@/components/episode-runtime/SequenceRail";
 import RevealCard from "@/components/episode-runtime/RevealCard";
 import CheckPromptCard from "@/components/episode-runtime/CheckPromptCard";
 import NpcTabsCard from "@/components/episode-runtime/NpcTabsCard";
-import { buildRuntimeSequence, extractMapMarkers } from "@/lib/episodeRuntime";
+import { buildRuntimeSequence, extractHexMarkers, extractMapMarkers } from "@/lib/episodeRuntime";
 import SubmitGlowButton from "@/components/ui/SubmitGlowButton";
 import PlayersPassivePanel from "./PlayersPassivePanel";
 import { parsePassiveEffectNotes } from "@/lib/passiveEffectNotes";
@@ -282,8 +285,16 @@ export default async function DmScreenPage({
   const stageMapMarkers = stageMapBlock ? extractMapMarkers(stageMapBlock.meta) : [];
   const stageNpcBlock =
     String(presentedBlock?.block_type ?? "").toLowerCase() === "npc" ? presentedBlock : activeSceneNpcBlock;
-  const previewIsMap = String(presentedBlock?.block_type ?? "").toLowerCase() === "map";
-  const previewMapMarkers = previewIsMap ? extractMapMarkers(presentedBlock?.meta) : [];
+  const stageHexBlock =
+    String(presentedBlock?.block_type ?? "").toLowerCase() === "hex_crawl" ? presentedBlock : null;
+  const stageHexMarkers = stageHexBlock ? extractHexMarkers(stageHexBlock.meta) : [];
+  const hexFocus = ((state as any)?.hex_focus ?? null) as Record<string, any> | null;
+  const stageHexFocus =
+    hexFocus && String(hexFocus?.block_id ?? "").trim() === String(stageHexBlock?.id ?? "").trim() ? hexFocus : null;
+  const previewType = String(presentedBlock?.block_type ?? "").toLowerCase();
+  const previewIsMap = previewType === "map";
+  const previewIsHex = previewType === "hex_crawl";
+  const previewMapMarkers = previewIsMap ? extractMapMarkers(presentedBlock?.meta) : previewIsHex ? extractHexMarkers(presentedBlock?.meta) : [];
   const carouselSceneIdx = presentedSceneIdx >= 0 ? presentedSceneIdx : scenes.length ? 0 : -1;
   const carouselScene = carouselSceneIdx >= 0 ? scenes[carouselSceneIdx] : null;
   const carouselSceneSteps = (carouselScene?.children ?? []).filter((c) => isPresentable(c));
@@ -311,12 +322,14 @@ export default async function DmScreenPage({
     if (!script) {
       if (kind === "npc") script = "Read the NPC prompt and drive dialogue before assigning or progressing quests.";
       else if (kind === "map") script = "Describe what players see and ask how they approach it.";
+      else if (kind === "hex_crawl") script = "Pick the hex marker players investigate, then run the check and decide reward timing.";
       else if (kind === "image") script = "Present the image, pause for player observations, then call for checks as needed.";
       else if (kind === "encounter") script = "Set initiative and run encounter pacing from this scene.";
     }
 
     if (!notes) {
       if (kind === "map") notes = "Use markers/reveals if players investigate specific details.";
+      else if (kind === "hex_crawl") notes = "Use Focus Marker below to push a zoomed area and optional reward decision to players.";
       else if (kind === "image") notes = "Use this as a visual aid; keep challenge mechanics in Check Prompt and quest controls.";
     }
 
@@ -1340,6 +1353,142 @@ export default async function DmScreenPage({
                 <div className="text-sm text-gray-500">Nothing presented to players yet.</div>
               )}
             </div>
+            {stageHexBlock ? (
+              <div className="rounded border bg-white p-2 space-y-2">
+                <div className="text-[11px] uppercase text-gray-500">Hex Director (Live)</div>
+                {stageHexMarkers.length ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {stageHexMarkers.map((m) => (
+                      <form
+                        key={m.id}
+                        action={async () => {
+                          "use server";
+                          await storytellerSetHexFocus({
+                            sessionId: session.id,
+                            blockId: String(stageHexBlock.id),
+                            markerId: String(m.id),
+                            label: String(m.label ?? ""),
+                            focusImageUrl: String(m.focusImageUrl ?? ""),
+                            checkKey: String(m.checkKey ?? ""),
+                            checkDc: Number(m.checkDc ?? NaN),
+                            rewardItemIds: Array.isArray(m.rewardItemIds) ? m.rewardItemIds : [],
+                            playerText: String(m.playerText ?? ""),
+                            storytellerNotes: String(m.storytellerNotes ?? ""),
+                          });
+                          redirect(`/storyteller/sessions/${session.id}`);
+                        }}
+                      >
+                        <button className="rounded border px-2 py-1 text-xs">Focus: {m.label}</button>
+                      </form>
+                    ))}
+                    <form
+                      action={async () => {
+                        "use server";
+                        await storytellerClearHexFocus({ sessionId: session.id });
+                        redirect(`/storyteller/sessions/${session.id}`);
+                      }}
+                    >
+                      <button className="rounded border px-2 py-1 text-xs">Clear Focus</button>
+                    </form>
+                  </div>
+                ) : (
+                  <div className="text-xs text-gray-600">No hex markers configured on this block yet.</div>
+                )}
+
+                {stageHexFocus ? (
+                  <div className="rounded border bg-gray-50 p-2 space-y-2">
+                    <div className="text-xs font-semibold">
+                      Active Hex: {String(stageHexFocus.label ?? "Hex")}
+                    </div>
+                    {String(stageHexFocus.storyteller_notes ?? "").trim() ? (
+                      <div className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-900 whitespace-pre-wrap">
+                        {String(stageHexFocus.storyteller_notes)}
+                      </div>
+                    ) : null}
+                    <div className="text-[11px] text-gray-700">
+                      Check: {String(stageHexFocus.check_key ?? "").trim() || "n/a"}
+                      {Number.isFinite(Number(stageHexFocus.check_dc ?? NaN))
+                        ? ` | DC ${Math.max(0, Math.floor(Number(stageHexFocus.check_dc)))}`
+                        : ""}
+                    </div>
+                    <div className="text-[11px] text-gray-700">
+                      Reward status: {String(stageHexFocus.reward_status ?? "pending")}
+                    </div>
+                    {Array.isArray(stageHexFocus.reward_item_ids) && stageHexFocus.reward_item_ids.length ? (
+                      <div className="space-y-1">
+                        <div className="text-[11px] text-gray-700">
+                          Reward item IDs: {stageHexFocus.reward_item_ids.join(", ")}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <form
+                            action={async () => {
+                              "use server";
+                              await storytellerResolveHexReward({
+                                sessionId: session.id,
+                                decision: "grant",
+                                targetMode: "highest_roll",
+                              });
+                              redirect(`/storyteller/sessions/${session.id}`);
+                            }}
+                          >
+                            <button className="rounded border px-2 py-1 text-xs">Grant (Highest Roll)</button>
+                          </form>
+                          <form
+                            action={async () => {
+                              "use server";
+                              await storytellerResolveHexReward({
+                                sessionId: session.id,
+                                decision: "hold",
+                              });
+                              redirect(`/storyteller/sessions/${session.id}`);
+                            }}
+                          >
+                            <button className="rounded border px-2 py-1 text-xs">Hold</button>
+                          </form>
+                          <form
+                            action={async () => {
+                              "use server";
+                              await storytellerResolveHexReward({
+                                sessionId: session.id,
+                                decision: "skip",
+                              });
+                              redirect(`/storyteller/sessions/${session.id}`);
+                            }}
+                          >
+                            <button className="rounded border px-2 py-1 text-xs">Skip</button>
+                          </form>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {storytellerPlayers.map((p) => (
+                            <form
+                              key={`hex-grant-${p.playerId}`}
+                              action={async () => {
+                                "use server";
+                                await storytellerResolveHexReward({
+                                  sessionId: session.id,
+                                  decision: "grant",
+                                  targetMode: "manual",
+                                  playerId: p.playerId,
+                                });
+                                redirect(`/storyteller/sessions/${session.id}`);
+                              }}
+                            >
+                              <button className="rounded border px-2 py-1 text-[11px]">
+                                Grant to {playerLabelById.get(p.playerId) ?? p.playerId.slice(0, 8)}
+                              </button>
+                            </form>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-gray-600">No reward item configured on this marker.</div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-xs text-gray-600">No focused hex selected yet.</div>
+                )}
+              </div>
+            ) : null}
             {questDirectorNpcBlock ? (
               <div className="rounded border bg-white p-2 space-y-2">
                 <div className="text-[11px] uppercase text-gray-500">Quest Director (Live NPC)</div>

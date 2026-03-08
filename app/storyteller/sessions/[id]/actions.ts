@@ -111,6 +111,12 @@ function cleanIds(input: string[] | undefined) {
   );
 }
 
+function isUuid(value: unknown) {
+  if (typeof value !== "string") return false;
+  const v = value.trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
+}
+
 async function getSessionCharacterTargets(sessionId: string) {
   const supabase = await createClient();
   const admin = createAdminClient() ?? supabase;
@@ -682,5 +688,170 @@ export async function declinePlayerRollRequest(input: {
     .from("session_state")
     .update({ roll_requests: requests })
     .eq("session_id", sessionId);
+  if (upErr) throw new Error(upErr.message);
+}
+
+export async function storytellerSetHexFocus(input: {
+  sessionId: string;
+  blockId: string;
+  markerId: string;
+  label?: string;
+  focusImageUrl?: string | null;
+  checkKey?: string | null;
+  checkDc?: number | null;
+  rewardItemIds?: string[];
+  playerText?: string | null;
+  storytellerNotes?: string | null;
+}) {
+  const sessionId = String(input.sessionId ?? "").trim();
+  const blockId = String(input.blockId ?? "").trim();
+  const markerId = String(input.markerId ?? "").trim();
+  if (!isUuid(sessionId) || !isUuid(blockId) || !markerId) throw new Error("Invalid hex focus payload.");
+
+  const checkDcRaw = Number(input.checkDc ?? NaN);
+  const focus = {
+    block_id: blockId,
+    marker_id: markerId,
+    label: String(input.label ?? "").trim() || "Hex",
+    focus_image_url: String(input.focusImageUrl ?? "").trim() || null,
+    check_key: String(input.checkKey ?? "").trim() || null,
+    check_dc: Number.isFinite(checkDcRaw) ? Math.max(0, Math.floor(checkDcRaw)) : null,
+    reward_item_ids: cleanIds(input.rewardItemIds),
+    player_text: String(input.playerText ?? "").trim() || null,
+    storyteller_notes: String(input.storytellerNotes ?? "").trim() || null,
+    reward_status: "pending",
+    reward_target_player_id: null,
+    updated_at: new Date().toISOString(),
+  };
+
+  await updateState(sessionId, { hex_focus: focus });
+}
+
+export async function storytellerClearHexFocus(input: { sessionId: string }) {
+  const sessionId = String(input.sessionId ?? "").trim();
+  if (!isUuid(sessionId)) throw new Error("Invalid session id.");
+  await updateState(sessionId, { hex_focus: null });
+}
+
+async function grantItemsToCharacter(admin: any, characterId: string, itemIds: string[]) {
+  const cleanItemIds = cleanIds(itemIds).filter((id) => isUuid(id));
+  if (!cleanItemIds.length) return;
+
+  const { data: itemRows, error: itemErr } = await admin
+    .from("items")
+    .select("id,name,is_active,stackable,max_stack")
+    .in("id", cleanItemIds);
+  if (itemErr) throw new Error(itemErr.message);
+  const validItems = (itemRows ?? []).filter((it: any) => Boolean(it?.id) && it?.is_active !== false);
+  for (const it of validItems as any[]) {
+    const itemId = String(it.id);
+    const isStackable = Boolean(it?.stackable ?? true);
+    const maxStack = Number(it?.max_stack ?? NaN);
+    const stackCap = Number.isFinite(maxStack) && maxStack > 0 ? Math.floor(maxStack) : null;
+
+    const { data: existing, error: exErr } = await admin
+      .from("inventory_items")
+      .select("id,quantity")
+      .eq("character_id", characterId)
+      .eq("item_id", itemId)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (exErr) throw new Error(exErr.message);
+
+    if (existing?.id && isStackable) {
+      const qty = Math.max(1, Number((existing as any).quantity ?? 1));
+      if (stackCap && qty >= stackCap) continue;
+      const { error: upInvErr } = await admin
+        .from("inventory_items")
+        .update({ quantity: stackCap ? Math.min(stackCap, qty + 1) : qty + 1 })
+        .eq("id", String((existing as any).id));
+      if (upInvErr) throw new Error(upInvErr.message);
+    } else {
+      const { error: insInvErr } = await admin.from("inventory_items").insert({
+        character_id: characterId,
+        item_id: itemId,
+        name: String((it as any).name ?? "Hex Reward"),
+        quantity: 1,
+      });
+      if (insInvErr) throw new Error(insInvErr.message);
+    }
+  }
+}
+
+export async function storytellerResolveHexReward(input: {
+  sessionId: string;
+  decision: "grant" | "hold" | "skip";
+  targetMode?: "highest_roll" | "manual";
+  playerId?: string | null;
+}) {
+  const sessionId = String(input.sessionId ?? "").trim();
+  const decision = String(input.decision ?? "").trim().toLowerCase();
+  if (!isUuid(sessionId) || !["grant", "hold", "skip"].includes(decision)) throw new Error("Invalid reward decision.");
+
+  const supabase = await createClient();
+  const admin = createAdminClient() ?? supabase;
+  const { data: st, error: stErr } = await supabase
+    .from("session_state")
+    .select("hex_focus,roll_results")
+    .eq("session_id", sessionId)
+    .maybeSingle();
+  if (stErr) throw new Error(stErr.message);
+  if (!st) throw new Error("Session state not found.");
+
+  const focus = ((st as any).hex_focus ?? null) as Record<string, any> | null;
+  if (!focus) throw new Error("No active hex focus.");
+
+  if (decision === "hold" || decision === "skip") {
+    const next = {
+      ...focus,
+      reward_status: decision,
+      reward_target_player_id: null,
+      updated_at: new Date().toISOString(),
+    };
+    const { error: upErr } = await supabase.from("session_state").update({ hex_focus: next }).eq("session_id", sessionId);
+    if (upErr) throw new Error(upErr.message);
+    return;
+  }
+
+  const rewardItemIds = cleanIds(Array.isArray(focus.reward_item_ids) ? focus.reward_item_ids : []);
+  if (!rewardItemIds.length) throw new Error("This hex has no reward items configured.");
+
+  const targets = await getSessionCharacterTargets(sessionId);
+  if (!targets.length) throw new Error("No joined players to reward.");
+  const charByPlayer = new Map<string, string>(targets.map((t) => [t.playerId, t.characterId]));
+
+  const targetMode = String(input.targetMode ?? "highest_roll").trim().toLowerCase();
+  let winnerPlayerId = String(input.playerId ?? "").trim();
+  if (targetMode === "highest_roll") {
+    const raw = ((st as any).roll_results ?? {}) as Record<string, any>;
+    let best: { playerId: string; total: number } | null = null;
+    for (const [playerId, row] of Object.entries(raw)) {
+      const pid = String(playerId ?? "").trim();
+      if (!pid || !charByPlayer.has(pid)) continue;
+      const total = Number((row as any)?.total ?? NaN);
+      if (!Number.isFinite(total)) continue;
+      if (!best || total > best.total) best = { playerId: pid, total };
+    }
+    if (!best) throw new Error("No roll results found for highest-roll reward.");
+    winnerPlayerId = best.playerId;
+  }
+
+  if (!winnerPlayerId || !charByPlayer.has(winnerPlayerId)) {
+    throw new Error("Select a valid player for reward.");
+  }
+  const characterId = String(charByPlayer.get(winnerPlayerId) ?? "").trim();
+  if (!characterId) throw new Error("Selected player has no character.");
+
+  await grantItemsToCharacter(admin, characterId, rewardItemIds);
+
+  const next = {
+    ...focus,
+    reward_status: "granted",
+    reward_target_player_id: winnerPlayerId,
+    reward_granted_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+  const { error: upErr } = await supabase.from("session_state").update({ hex_focus: next }).eq("session_id", sessionId);
   if (upErr) throw new Error(upErr.message);
 }

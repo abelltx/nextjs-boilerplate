@@ -998,7 +998,7 @@ export default async function AdminEpisodeEditPage({
                         }}
                       >
                         <input type="hidden" name="block_type" value="narrative" />
-                        <input type="hidden" name="audience" value="storyteller" />
+                        <input type="hidden" name="audience" value="both" />
                         <input type="hidden" name="mode" value="read" />
                         <input type="hidden" name="scene_id" value={g.scene?.id ?? ""} />
                         <input
@@ -1073,7 +1073,7 @@ export default async function AdminEpisodeEditPage({
                         <textarea
                           name="meta_json"
                           className="w-full border rounded p-2 h-24 font-mono text-[12px]"
-                          placeholder={`Meta JSON (placeholder)\n{\n  "hex_id": "A3",\n  "terrain": "forest",\n  "travel_dc": 12\n}`}
+                          placeholder={`Meta JSON (optional)\n{\n  "private_guidance": "Read this only on ST dashboard.",\n  "markers": []\n}`}
                         />
                         <button className="px-3 py-2 rounded bg-black text-white">Add Hex Crawl</button>
                       </form>
@@ -1326,10 +1326,11 @@ export default async function AdminEpisodeEditPage({
                             placeholder="Image URL"
                           />
                           <input name="image_file" type="file" accept="image/*" className="w-full border rounded p-2" />
-                          {String(b.block_type).toLowerCase() === "map" && (b.image_url ?? "").trim() ? (
+                          {["map", "hex_crawl"].includes(String(b.block_type).toLowerCase()) && (b.image_url ?? "").trim() ? (
                             <MapMarkerEditorClient
                               imageUrl={b.image_url as string}
                               initialMeta={b.meta ?? {}}
+                              mode={String(b.block_type).toLowerCase() === "hex_crawl" ? "hex" : "map"}
                               revealCandidates={blocksResolved
                                 .filter((x: any) => x.id !== b.id && x.block_type !== "scene")
                                 .map((x: any) => ({
@@ -1337,9 +1338,9 @@ export default async function AdminEpisodeEditPage({
                                   title: `${x.block_type}${x.title ? ` - ${x.title}` : ""}`,
                                 }))}
                             />
-                          ) : String(b.block_type).toLowerCase() === "map" ? (
+                          ) : ["map", "hex_crawl"].includes(String(b.block_type).toLowerCase()) ? (
                             <div className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800">
-                              Save an image URL or upload an image for this map block first, then reopen this block to place markers.
+                              Save an image URL or upload an image for this block first, then reopen to place markers.
                             </div>
                           ) : String(b.block_type).toLowerCase() === "npc" ? (
                             <NpcTabsEditorClient

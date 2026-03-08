@@ -24,7 +24,7 @@ import {
 import RevealCard from "@/components/episode-runtime/RevealCard";
 import SceneMap from "@/components/episode-runtime/SceneMap";
 import NpcTabsCard from "@/components/episode-runtime/NpcTabsCard";
-import { extractMapMarkers } from "@/lib/episodeRuntime";
+import { extractHexMarkers, extractMapMarkers } from "@/lib/episodeRuntime";
 
 type TabKey = "inventory" | "quests" | "actions" | "talents" | "journey";
 
@@ -755,6 +755,7 @@ export default function PlayerHubClient(props: {
               <div className="mt-4 space-y-4">
                 <StagePanel
                   block={stageBlock}
+                  stageState={stageState}
                   linkedBlocks={stage?.linkedBlocks ?? {}}
                   playerShop={{
                     characterId: String(props.character?.id ?? ""),
@@ -1152,10 +1153,12 @@ function Tab(props: {
 
 function StagePanel({
   block,
+  stageState,
   linkedBlocks,
   playerShop,
 }: {
   block: any;
+  stageState?: any;
   linkedBlocks?: Record<string, any>;
   playerShop?: {
     characterId?: string;
@@ -1191,8 +1194,14 @@ function StagePanel({
     }) => void | Promise<void>;
   };
 }) {
-  const markers = extractMapMarkers(block?.meta);
+  const blockType = String(block?.block_type ?? "").toLowerCase();
+  const markers = blockType === "hex_crawl" ? extractHexMarkers(block?.meta) : extractMapMarkers(block?.meta);
   const [selectedMarkerBlockId, setSelectedMarkerBlockId] = useState<string | null>(null);
+  const hexFocus =
+    blockType === "hex_crawl" &&
+    String(stageState?.hex_focus?.block_id ?? "").trim() === String(block?.id ?? "").trim()
+      ? (stageState?.hex_focus ?? null)
+      : null;
 
   useEffect(() => {
     setSelectedMarkerBlockId(null);
@@ -1229,14 +1238,14 @@ function StagePanel({
             ) : undefined
           }
         >
-          {block.image_url && String(block.block_type ?? "").toLowerCase() === "map" ? (
+          {block.image_url && ["map", "hex_crawl"].includes(blockType) ? (
             <SceneMap
               src={block.image_url}
               alt={block.title ?? "Presented"}
               markers={markers as any}
               showMagnifier
               onMarkerClick={(m) => {
-                if (m.targetBlockId) setSelectedMarkerBlockId(m.targetBlockId);
+                if (blockType === "map" && m.targetBlockId) setSelectedMarkerBlockId(m.targetBlockId);
               }}
             />
           ) : block.image_url && String(block.block_type ?? "").toLowerCase() !== "npc" ? (
@@ -1284,6 +1293,31 @@ function StagePanel({
               </RevealCard>
             </div>
           </details>
+        ) : null}
+        {blockType === "hex_crawl" && hexFocus ? (
+          <div className="rounded-xl border border-neutral-700 bg-neutral-950/60 p-3 space-y-2">
+            <div className="text-xs uppercase tracking-wide text-neutral-400">Focused Hex</div>
+            <div className="text-sm font-semibold text-neutral-100">{String(hexFocus?.label ?? "Hex")}</div>
+            {String(hexFocus?.player_text ?? "").trim() ? (
+              <div className="text-sm text-neutral-200 whitespace-pre-wrap">{String(hexFocus.player_text)}</div>
+            ) : null}
+            {String(hexFocus?.focus_image_url ?? "").trim() ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={String(hexFocus.focus_image_url)}
+                alt={String(hexFocus?.label ?? "Focused hex")}
+                className="w-full rounded-lg border border-neutral-700"
+              />
+            ) : null}
+            {(String(hexFocus?.check_key ?? "").trim() || Number.isFinite(Number(hexFocus?.check_dc ?? NaN))) ? (
+              <div className="text-xs text-emerald-300">
+                Check: {String(hexFocus?.check_key ?? "").trim() || "n/a"}
+                {Number.isFinite(Number(hexFocus?.check_dc ?? NaN))
+                  ? ` | DC ${Math.max(0, Math.floor(Number(hexFocus.check_dc)))}`
+                  : ""}
+              </div>
+            ) : null}
+          </div>
         ) : null}
       </div>
     ) : (

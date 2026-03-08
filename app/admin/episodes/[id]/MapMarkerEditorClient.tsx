@@ -8,6 +8,12 @@ type Marker = {
   x: number;
   y: number;
   target_block_id: string | null;
+  focus_image_url?: string;
+  check_key?: string;
+  check_dc?: number | null;
+  reward_item_ids?: string[];
+  player_text?: string;
+  storyteller_notes?: string;
 };
 
 function clamp(n: number, min = 0, max = 100) {
@@ -26,6 +32,16 @@ function normalizeMarkers(input: any): Marker[] {
     x: round3(clamp(Number(m?.x ?? 50))),
     y: round3(clamp(Number(m?.y ?? 50))),
     target_block_id: m?.target_block_id ? String(m.target_block_id) : null,
+    focus_image_url: String(m?.focus_image_url ?? "").trim(),
+    check_key: String(m?.check_key ?? "").trim(),
+    check_dc: Number.isFinite(Number(m?.check_dc ?? NaN)) ? Math.max(0, Math.floor(Number(m?.check_dc))) : null,
+    reward_item_ids: Array.isArray(m?.reward_item_ids)
+      ? m.reward_item_ids.map((v: any) => String(v ?? "").trim()).filter(Boolean)
+      : typeof m?.reward_item_ids === "string"
+        ? m.reward_item_ids.split(",").map((v: string) => v.trim()).filter(Boolean)
+        : [],
+    player_text: String(m?.player_text ?? "").trim(),
+    storyteller_notes: String(m?.storyteller_notes ?? "").trim(),
   }));
 }
 
@@ -33,6 +49,7 @@ export default function MapMarkerEditorClient(props: {
   imageUrl: string;
   initialMeta: any;
   revealCandidates: Array<{ id: string; title: string }>;
+  mode?: "map" | "hex";
 }) {
   const [markers, setMarkers] = useState<Marker[]>(() => normalizeMarkers(props.initialMeta));
   const [selectedId, setSelectedId] = useState<string | null>(markers[0]?.id ?? null);
@@ -41,6 +58,7 @@ export default function MapMarkerEditorClient(props: {
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
   const selected = markers.find((m) => m.id === selectedId) ?? null;
+  const isHex = props.mode === "hex";
   const extraMeta = useMemo(() => {
     const raw = props.initialMeta ?? {};
     const copy = { ...(raw as Record<string, any>) };
@@ -100,7 +118,8 @@ export default function MapMarkerEditorClient(props: {
     <div className="space-y-2 rounded-lg border p-2">
       <div className="text-xs uppercase text-gray-500">Map Marker Editor</div>
       <div className="text-xs text-gray-600">
-        Click image to add marker. Drag marker to move. Use "No linked reveal card" dropdown to link what gets revealed.
+        Click image to add marker. Drag marker to move.
+        {isHex ? " Configure check/reward fields per hex below." : " Use linked reveal dropdown for map reveals."}
       </div>
 
       <div
@@ -202,6 +221,60 @@ export default function MapMarkerEditorClient(props: {
               </option>
             ))}
           </select>
+          {isHex ? (
+            <>
+              <input
+                className="border rounded p-2 text-sm md:col-span-2"
+                value={selected.focus_image_url ?? ""}
+                onChange={(e) => updateSelected({ focus_image_url: e.target.value })}
+                placeholder="Focused hex image URL (optional)"
+              />
+              <input
+                className="border rounded p-2 text-sm"
+                value={selected.check_key ?? ""}
+                onChange={(e) => updateSelected({ check_key: e.target.value })}
+                placeholder="Check key (e.g. Perception)"
+              />
+              <input
+                className="border rounded p-2 text-sm"
+                type="number"
+                min={0}
+                step="1"
+                value={selected.check_dc ?? ""}
+                onChange={(e) =>
+                  updateSelected({
+                    check_dc: e.target.value.trim() ? Math.max(0, Math.floor(Number(e.target.value))) : null,
+                  })
+                }
+                placeholder="DC"
+              />
+              <input
+                className="border rounded p-2 text-sm md:col-span-2"
+                value={(selected.reward_item_ids ?? []).join(", ")}
+                onChange={(e) =>
+                  updateSelected({
+                    reward_item_ids: e.target.value
+                      .split(",")
+                      .map((v) => v.trim())
+                      .filter(Boolean),
+                  })
+                }
+                placeholder="Reward item UUIDs (comma-separated)"
+              />
+              <input
+                className="border rounded p-2 text-sm md:col-span-2"
+                value={selected.player_text ?? ""}
+                onChange={(e) => updateSelected({ player_text: e.target.value })}
+                placeholder="Player text for this hex (optional)"
+              />
+              <input
+                className="border rounded p-2 text-sm md:col-span-2"
+                value={selected.storyteller_notes ?? ""}
+                onChange={(e) => updateSelected({ storyteller_notes: e.target.value })}
+                placeholder="Storyteller notes for this hex (optional)"
+              />
+            </>
+          ) : null}
           <div className="md:col-span-4">
             <button type="button" className="rounded border px-2 py-1 text-xs text-red-700" onClick={removeSelected}>
               Remove selected marker
