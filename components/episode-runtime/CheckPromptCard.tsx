@@ -42,7 +42,10 @@ export default function CheckPromptCard(props: {
   }>;
   onApproveRequest?: (formData: FormData) => Promise<void>;
   onDeclineRequest?: (formData: FormData) => Promise<void>;
+  showRequestQueueWhenEmpty?: boolean;
 }) {
+  const pending = props.pendingRequests ?? [];
+  const showQueue = pending.length > 0 || props.showRequestQueueWhenEmpty !== false;
   return (
     <div className="border rounded-xl p-4 space-y-3">
       <div className="text-xs uppercase text-gray-500">Check Prompt</div>
@@ -106,11 +109,12 @@ export default function CheckPromptCard(props: {
         <div className="mt-1 text-gray-600">{props.rollOpen ? props.currentPrompt || "Prompt open (no text)." : "No active prompt."}</div>
       </div>
 
+      {showQueue ? (
       <div className="rounded border bg-gray-50 p-2 text-xs space-y-2">
         <div className="font-semibold text-gray-700">Player Roll Requests</div>
-        {(props.pendingRequests ?? []).length ? (
+        {pending.length ? (
           <div className="space-y-2">
-            {(props.pendingRequests ?? []).map((r) => (
+            {pending.map((r) => (
               <div key={r.id} className="rounded border bg-white p-2 space-y-2">
                 <div className="text-[11px]">
                   <span className="font-semibold">{r.playerLabel}</span> requests <span className="font-semibold">{r.checkKey}</span>
@@ -149,6 +153,7 @@ export default function CheckPromptCard(props: {
           <div className="text-gray-600">No pending player requests.</div>
         )}
       </div>
+      ) : null}
     </div>
   );
 }

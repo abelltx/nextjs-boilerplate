@@ -1234,68 +1234,46 @@ export default async function DmScreenPage({
               redirect(`/storyteller/sessions/${session.id}`);
             }}
           />
-          <div className="mt-3 border rounded-lg p-3">
-            <div className="text-xs uppercase text-gray-500 mb-2">Check Prompt</div>
-            <CheckPromptCard
-              sessionId={session.id}
-              joins={joins as any[]}
-              rollOpen={Boolean((state as any).roll_open)}
-              currentPrompt={String((state as any).roll_prompt ?? "")}
-              pendingRequests={pendingRollRequests as any[]}
-              onSendPrompt={async (fd) => {
-                "use server";
-                const checkKey = String(fd.get("check_key") ?? "Perception").trim();
-                const instruction = String(fd.get("instruction") ?? "").trim();
-                const dcRaw = String(fd.get("dc") ?? "").trim();
-                const target = String(fd.get("target") ?? "all").trim() || "all";
-                const dc = Number(dcRaw);
-                const hasDc = Number.isFinite(dc) && dc > 0;
-
-                const prompt = [
-                  "Roll Request",
-                  `${checkKey} check${hasDc ? ` (DC ${dc})` : ""}.`,
-                  instruction || `Click ${checkKey} in your sheet and report your total.`,
-                ].join(" ");
-
-                await updateState(session.id, {
-                  roll_open: true,
-                  roll_die: "d20",
-                  roll_prompt: prompt,
-                  roll_target: target,
-                  roll_round_id: randomUUID(),
-                  roll_results: {},
-                });
-                redirect(`/storyteller/sessions/${session.id}`);
-              }}
-              onApproveRequest={async (fd) => {
-                "use server";
-                const requestId = String(fd.get("request_id") ?? "").trim();
-                const instruction = String(fd.get("instruction") ?? "").trim();
-                const dcRaw = String(fd.get("dc") ?? "").trim();
-                const dc = Number(dcRaw);
-                await approvePlayerRollRequest({
-                  sessionId: session.id,
-                  requestId,
-                  instruction: instruction || undefined,
-                  dc: Number.isFinite(dc) ? dc : null,
-                });
-                redirect(`/storyteller/sessions/${session.id}`);
-              }}
-              onDeclineRequest={async (fd) => {
-                "use server";
-                const requestId = String(fd.get("request_id") ?? "").trim();
-                await declinePlayerRollRequest({
-                  sessionId: session.id,
-                  requestId,
-                });
-                redirect(`/storyteller/sessions/${session.id}`);
-              }}
-              onClosePrompt={async () => {
-                "use server";
-                await updateState(session.id, { roll_open: false, roll_die: null, roll_prompt: null, roll_target: "all" });
-                redirect(`/storyteller/sessions/${session.id}`);
-              }}
-            />
+          <div className="mt-3 rounded border bg-gray-50 p-2 space-y-2 max-h-64 overflow-y-auto">
+            <div className="text-xs uppercase text-gray-500">Active Quests</div>
+            <div className="rounded border bg-white p-2 space-y-1">
+              <div className="text-[11px] uppercase text-gray-500">Group Quests</div>
+              {groupQuestCards.length ? (
+                groupQuestCards.map((q) => (
+                  <div key={`g-${q.questId}`} className="rounded border bg-gray-50 px-2 py-1">
+                    <div className="text-xs font-semibold">{q.title}</div>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {q.players.map((p) => (
+                        <span key={`${q.questId}-${p.name}`} className="rounded border bg-white px-1.5 py-0.5 text-[11px]">
+                          {p.name} - {p.status}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-xs text-gray-500">No active group quests.</div>
+              )}
+            </div>
+            <div className="rounded border bg-white p-2 space-y-1">
+              <div className="text-[11px] uppercase text-gray-500">Individual Quests</div>
+              {individualQuestCards.length ? (
+                individualQuestCards.map((player) => (
+                  <div key={`i-${player.characterId}`} className="rounded border bg-gray-50 px-2 py-1">
+                    <div className="text-xs font-semibold">{player.playerName}</div>
+                    <div className="mt-1 space-y-1">
+                      {player.quests.map((q) => (
+                        <div key={`${player.characterId}-${q.questId}`} className="text-[11px] text-gray-700">
+                          {q.title} - {q.status}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-xs text-gray-500">No active individual quests.</div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -1538,109 +1516,68 @@ export default async function DmScreenPage({
         </div>
 
         <div className="col-span-12 lg:col-span-3 border rounded-xl p-4 space-y-3">
-          <div>
-            <div className="text-xs uppercase text-gray-500">Map / City</div>
-            {stageMapBlock?.image_url ? (
-              <form
-                action={async () => {
-                  "use server";
-                  await presentBlockToPlayersAction(session.id, stageMapBlock.id);
-                  redirect(`/storyteller/sessions/${session.id}`);
-                }}
-                className="mt-2"
-              >
-                <button
-                  type="submit"
-                  className="group relative h-56 w-full rounded border overflow-hidden bg-gray-100 text-left"
-                  title="Click to present this scene map to players"
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={stageMapBlock.image_url}
-                    alt={stageMapBlock.title ?? "Scene map"}
-                    className="w-full h-full object-cover"
-                  />
-                  {stageMapMarkers.map((m, i) => (
-                    <div
-                      key={m.id}
-                      className="absolute -translate-x-1/2 -translate-y-1/2 w-5 h-5 rounded-full border border-white bg-red-500/90 text-white text-[10px] font-bold flex items-center justify-center shadow"
-                      style={{ left: `${m.x}%`, top: `${m.y}%` }}
-                      title={m.label}
-                    >
-                      {i + 1}
-                    </div>
-                  ))}
-                  <div className="absolute inset-x-0 bottom-0 bg-black/55 px-2 py-1 text-[11px] text-white">
-                    Click map to present to players
-                  </div>
-                </button>
-              </form>
-            ) : (
-              <div className="mt-2 h-56 rounded bg-gray-100 flex items-center justify-center text-gray-500">
-                No map in this scene
-              </div>
-            )}
-          </div>
-          <div>
-            <div className="text-xs uppercase text-gray-500">NPC Portrait</div>
-            {resolveBlockImageUrl(stageNpcBlock) ? (
-              <div className="mt-2 h-56 rounded border overflow-hidden bg-gray-100">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={resolveBlockImageUrl(stageNpcBlock) as string}
-                  alt={stageNpcBlock?.title ?? "Presented"}
-                  className="w-full h-full object-cover"
-                />
-              </div>
-            ) : (
-              <div className="mt-2 h-56 rounded bg-gray-100 flex items-center justify-center text-gray-500">
-                NPC image placeholder
-              </div>
-            )}
-          </div>
-          <div>
-            <div className="text-xs uppercase text-gray-500">Active Quests</div>
-            <div className="mt-2 rounded border bg-gray-50 p-2 space-y-2 max-h-64 overflow-y-auto">
-              <div className="rounded border bg-white p-2 space-y-1">
-                <div className="text-[11px] uppercase text-gray-500">Group Quests</div>
-                {groupQuestCards.length ? (
-                  groupQuestCards.map((q) => (
-                    <div key={`g-${q.questId}`} className="rounded border bg-gray-50 px-2 py-1">
-                      <div className="text-xs font-semibold">{q.title}</div>
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {q.players.map((p) => (
-                          <span key={`${q.questId}-${p.name}`} className="rounded border bg-white px-1.5 py-0.5 text-[11px]">
-                            {p.name} - {p.status}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-xs text-gray-500">No active group quests.</div>
-                )}
-              </div>
-              <div className="rounded border bg-white p-2 space-y-1">
-                <div className="text-[11px] uppercase text-gray-500">Individual Quests</div>
-                {individualQuestCards.length ? (
-                  individualQuestCards.map((player) => (
-                    <div key={`i-${player.characterId}`} className="rounded border bg-gray-50 px-2 py-1">
-                      <div className="text-xs font-semibold">{player.playerName}</div>
-                      <div className="mt-1 space-y-1">
-                        {player.quests.map((q) => (
-                          <div key={`${player.characterId}-${q.questId}`} className="text-[11px] text-gray-700">
-                            {q.title} - {q.status}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-xs text-gray-500">No active individual quests.</div>
-                )}
-              </div>
-            </div>
-          </div>
+          <div className="text-xs uppercase text-gray-500 mb-2">Check Prompt</div>
+          <CheckPromptCard
+            sessionId={session.id}
+            joins={joins as any[]}
+            rollOpen={Boolean((state as any).roll_open)}
+            currentPrompt={String((state as any).roll_prompt ?? "")}
+            pendingRequests={pendingRollRequests as any[]}
+            showRequestQueueWhenEmpty={false}
+            onSendPrompt={async (fd) => {
+              "use server";
+              const checkKey = String(fd.get("check_key") ?? "Perception").trim();
+              const instruction = String(fd.get("instruction") ?? "").trim();
+              const dcRaw = String(fd.get("dc") ?? "").trim();
+              const target = String(fd.get("target") ?? "all").trim() || "all";
+              const dc = Number(dcRaw);
+              const hasDc = Number.isFinite(dc) && dc > 0;
+
+              const prompt = [
+                "Roll Request",
+                `${checkKey} check${hasDc ? ` (DC ${dc})` : ""}.`,
+                instruction || `Click ${checkKey} in your sheet and report your total.`,
+              ].join(" ");
+
+              await updateState(session.id, {
+                roll_open: true,
+                roll_die: "d20",
+                roll_prompt: prompt,
+                roll_target: target,
+                roll_round_id: randomUUID(),
+                roll_results: {},
+              });
+              redirect(`/storyteller/sessions/${session.id}`);
+            }}
+            onApproveRequest={async (fd) => {
+              "use server";
+              const requestId = String(fd.get("request_id") ?? "").trim();
+              const instruction = String(fd.get("instruction") ?? "").trim();
+              const dcRaw = String(fd.get("dc") ?? "").trim();
+              const dc = Number(dcRaw);
+              await approvePlayerRollRequest({
+                sessionId: session.id,
+                requestId,
+                instruction: instruction || undefined,
+                dc: Number.isFinite(dc) ? dc : null,
+              });
+              redirect(`/storyteller/sessions/${session.id}`);
+            }}
+            onDeclineRequest={async (fd) => {
+              "use server";
+              const requestId = String(fd.get("request_id") ?? "").trim();
+              await declinePlayerRollRequest({
+                sessionId: session.id,
+                requestId,
+              });
+              redirect(`/storyteller/sessions/${session.id}`);
+            }}
+            onClosePrompt={async () => {
+              "use server";
+              await updateState(session.id, { roll_open: false, roll_die: null, roll_prompt: null, roll_target: "all" });
+              redirect(`/storyteller/sessions/${session.id}`);
+            }}
+          />
         </div>
       </div>
 
