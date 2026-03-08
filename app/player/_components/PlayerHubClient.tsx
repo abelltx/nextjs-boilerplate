@@ -1413,16 +1413,30 @@ function RollRequestPanel(props: {
     <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
       <div className="flex items-center justify-between gap-3">
         <div className="text-sm font-semibold">Roll Request</div>
-        <label className="flex items-center gap-2 rounded-lg border border-neutral-700 px-2 py-1 text-xs text-neutral-200">
-          <input
-            type="checkbox"
-            checked={props.diceMode === "manual"}
-            onChange={(e) => props.setDiceMode(e.currentTarget.checked ? "manual" : "digital")}
-            className="accent-emerald-400"
+        <div className="flex items-center gap-1 rounded-lg border border-neutral-700 p-1 text-xs">
+          <button
+            type="button"
             disabled={props.rollLocked || props.submitting}
-          />
-          {props.diceMode === "manual" ? "Real Dice" : "Digital Dice"}
-        </label>
+            onClick={() => props.setDiceMode("digital")}
+            className={[
+              "rounded px-2 py-1",
+              props.diceMode === "digital" ? "bg-neutral-200 text-neutral-900 font-semibold" : "text-neutral-300 hover:bg-neutral-800",
+            ].join(" ")}
+          >
+            Digital Dice
+          </button>
+          <button
+            type="button"
+            disabled={props.rollLocked || props.submitting}
+            onClick={() => props.setDiceMode("manual")}
+            className={[
+              "rounded px-2 py-1",
+              props.diceMode === "manual" ? "bg-neutral-200 text-neutral-900 font-semibold" : "text-neutral-300 hover:bg-neutral-800",
+            ].join(" ")}
+          >
+            Table Dice
+          </button>
+        </div>
       </div>
 
       <div className="mt-3 text-sm text-neutral-200">{props.prompt || "Follow the storyteller's roll instruction."}</div>
