@@ -125,6 +125,12 @@ function normalizeAdvantageKey(raw: string) {
   return String(raw ?? "").trim().toLowerCase().replace(/\s+/g, "_");
 }
 
+function abilityModifier(score: unknown) {
+  const n = Number(score);
+  if (!Number.isFinite(n)) return 0;
+  return Math.floor((n - 10) / 2);
+}
+
 export default function PlayerHubClient(props: {
   userId: string;
   userEmail: string;
@@ -345,6 +351,7 @@ export default function PlayerHubClient(props: {
   const stageStoryText = String(stage?.session?.story_text ?? selectedSession?.story_text ?? "");
   const [diceMode, setDiceMode] = useState<"digital" | "manual">("digital");
   const [manualValue, setManualValue] = useState("");
+  const [manualValueB, setManualValueB] = useState("");
   const [submittingRoll, setSubmittingRoll] = useState(false);
   const [requestingRoll, setRequestingRoll] = useState(false);
   const [requestCheckKey, setRequestCheckKey] = useState("Perception");
@@ -379,6 +386,7 @@ export default function PlayerHubClient(props: {
       setGuidedResult(null);
       setFlight(null);
       setManualValue("");
+      setManualValueB("");
       setSubmittingRoll(false);
     }
   }, [rollOpen, rollPrompt]);
@@ -397,6 +405,42 @@ export default function PlayerHubClient(props: {
       return;
     }
     router.refresh();
+  }
+
+  function calculateManualRollTotal(rawA: number, rawB?: number | null) {
+    const hasAdvantage = (activePromptAdvantageSources?.length ?? 0) > 0;
+    const pickedDie = hasAdvantage && Number.isFinite(Number(rawB))
+      ? Math.max(rawA, Number(rawB))
+      : rawA;
+    let bonus = 0;
+    let bonusLabel = "";
+
+    if (promptTarget?.kind === "ability") {
+      const key = promptTarget.abilityKey;
+      const score = Number(stat?.abilities?.[key] ?? 10);
+      bonus = abilityModifier(score);
+      bonusLabel = key.toUpperCase();
+    } else if (promptTarget?.kind === "skill") {
+      const key = String(promptTarget.skillKey ?? "").trim().toLowerCase();
+      bonus = Number(stat?.skills?.[key] ?? 0);
+      bonusLabel = key;
+    } else {
+      bonus = 0;
+      bonusLabel = "roll";
+    }
+
+    const total = pickedDie + bonus;
+    const advText =
+      hasAdvantage && Number.isFinite(Number(rawB))
+        ? `adv[d20(${rawA}), d20(${Number(rawB)})=>${pickedDie}]`
+        : `d20(${pickedDie})`;
+    const sign = bonus >= 0 ? "+" : "-";
+    const absBonus = Math.abs(bonus);
+    const breakdown =
+      promptTarget?.kind === "die"
+        ? `${advText}`
+        : `${advText} ${sign} ${absBonus} (${bonusLabel})`;
+    return { total, breakdown };
   }
 
   async function handleRequestRoll() {
@@ -738,16 +782,25 @@ export default function PlayerHubClient(props: {
                       diceMode={diceMode}
                       setDiceMode={setDiceMode}
                       manualValue={manualValue}
+                      manualValueB={manualValueB}
                       setManualValue={setManualValue}
+                      setManualValueB={setManualValueB}
                       onSubmitManual={async () => {
                         if (rollLocked || submittingRoll) return;
-                        const v = Number(manualValue);
-                        if (!Number.isFinite(v)) {
-                          alert("Enter a valid roll value.");
+                        const rawA = Number(manualValue);
+                        if (!Number.isFinite(rawA)) {
+                          alert("Enter your first d20 roll.");
                           return;
                         }
-                        setGuidedResult({ label: "Manual Roll", total: v, breakdown: "Real dice" });
-                        await submitRoll(v, "manual");
+                        const hasAdvantage = (activePromptAdvantageSources?.length ?? 0) > 0;
+                        const rawB = manualValueB.trim() ? Number(manualValueB) : null;
+                        if (hasAdvantage && !Number.isFinite(Number(rawB))) {
+                          alert("Advantage is active. Enter your second d20 roll.");
+                          return;
+                        }
+                        const computed = calculateManualRollTotal(rawA, rawB);
+                        setGuidedResult({ label: "Table Dice", total: computed.total, breakdown: computed.breakdown });
+                        await submitRoll(computed.total, "manual");
                       }}
                       rollLocked={rollLocked}
                       submitting={submittingRoll}
@@ -1403,12 +1456,15 @@ function RollRequestPanel(props: {
   diceMode: "digital" | "manual";
   setDiceMode: (mode: "digital" | "manual") => void;
   manualValue: string;
+  manualValueB: string;
   setManualValue: (v: string) => void;
+  setManualValueB: (v: string) => void;
   onSubmitManual: () => void;
   rollLocked: boolean;
   submitting: boolean;
   advantageSources?: string[];
 }) {
+  const hasAdvantage = Array.isArray(props.advantageSources) && props.advantageSources.length > 0;
   return (
     <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
       <div className="flex items-center justify-between gap-3">
@@ -1447,23 +1503,42 @@ function RollRequestPanel(props: {
       ) : null}
 
       {props.diceMode === "manual" ? (
-        <div className="mt-3 flex items-center gap-2">
-          <input
-            type="number"
-            value={props.manualValue}
-            onChange={(e) => props.setManualValue(e.currentTarget.value)}
-            placeholder="Type your total"
-            className="w-32 rounded-lg border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-sm"
-            disabled={props.rollLocked || props.submitting}
-          />
-          <button
-            type="button"
-            onClick={props.onSubmitManual}
-            disabled={props.rollLocked || props.submitting}
-            className="rounded-lg border border-neutral-700 px-3 py-1.5 text-sm hover:bg-neutral-900 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            Submit
-          </button>
+        <div className="mt-3 space-y-2">
+          <div className="text-xs text-neutral-300">
+            Enter only your d20 roll{hasAdvantage ? "s" : ""}. The app adds modifiers automatically.
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="number"
+              min={1}
+              max={20}
+              value={props.manualValue}
+              onChange={(e) => props.setManualValue(e.currentTarget.value)}
+              placeholder="d20 roll"
+              className="w-28 rounded-lg border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-sm"
+              disabled={props.rollLocked || props.submitting}
+            />
+            {hasAdvantage ? (
+              <input
+                type="number"
+                min={1}
+                max={20}
+                value={props.manualValueB}
+                onChange={(e) => props.setManualValueB(e.currentTarget.value)}
+                placeholder="2nd d20"
+                className="w-28 rounded-lg border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-sm"
+                disabled={props.rollLocked || props.submitting}
+              />
+            ) : null}
+            <button
+              type="button"
+              onClick={props.onSubmitManual}
+              disabled={props.rollLocked || props.submitting}
+              className="rounded-lg border border-neutral-700 px-3 py-1.5 text-sm hover:bg-neutral-900 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Submit
+            </button>
+          </div>
         </div>
       ) : (
         <div className="mt-3 text-xs text-neutral-400">Digital Dice active: click the glowing target to roll once.</div>
