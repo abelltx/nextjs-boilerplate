@@ -835,7 +835,7 @@ export default function PlayerHubClient(props: {
               ) : (
                 <div className="space-y-3">
                   <div className="text-sm font-semibold">Actions</div>
-                  {isLiveMode && selectedSessionId ? (
+                  {selectedSessionId ? (
                     <div className="rounded-xl border border-neutral-800 bg-neutral-950/50 p-3 space-y-2">
                       <div className="text-xs uppercase tracking-wide text-neutral-400">Request Roll</div>
                       <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
