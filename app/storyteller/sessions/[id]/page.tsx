@@ -1302,6 +1302,42 @@ export default async function DmScreenPage({
         <div className="col-span-12 lg:col-span-6 border rounded-xl p-4">
           <div className="text-xs uppercase text-gray-500">Stage</div>
           <div className="mt-2 rounded border bg-gray-50 p-3 space-y-3 max-h-[70vh] overflow-y-auto">
+            <details className="rounded border bg-white p-2 space-y-2" open>
+              <summary className="cursor-pointer text-[11px] uppercase text-gray-500">Player View Preview</summary>
+              <div className="mt-2">
+                {presentedBlock ? (
+                  <>
+                    {presentedBlock.image_url ? (
+                      <div className="rounded border overflow-hidden bg-gray-100 relative">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={presentedBlock.image_url}
+                          alt={presentedBlock.title ?? "Presented"}
+                          className="w-full max-h-56 object-cover"
+                        />
+                        {previewMapMarkers.map((m, i) => (
+                          <div
+                            key={m.id}
+                            className="absolute -translate-x-1/2 -translate-y-1/2 w-5 h-5 rounded-full border border-white bg-red-500/90 text-white text-[10px] font-bold flex items-center justify-center shadow"
+                            style={{ left: `${m.x}%`, top: `${m.y}%` }}
+                            title={m.label}
+                          >
+                            {i + 1}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                    {presentedBlock.body ? (
+                      <div className="text-sm whitespace-pre-wrap text-gray-700">{presentedBlock.body}</div>
+                    ) : (
+                      <div className="text-sm text-gray-500">No body text on this presented block.</div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-sm text-gray-500">Nothing presented to players yet.</div>
+                )}
+              </div>
+            </details>
             <div className="rounded border bg-white p-2 space-y-1">
               <div className="text-[11px] uppercase text-gray-500">Storyteller Direction</div>
               {presentedBlock ? (
@@ -1498,42 +1534,6 @@ export default async function DmScreenPage({
                 )}
               </div>
             ) : null}
-            <details className="rounded border bg-white p-2 space-y-2" open>
-              <summary className="cursor-pointer text-[11px] uppercase text-gray-500">Player View Preview</summary>
-              <div className="mt-2">
-                {presentedBlock ? (
-                  <>
-                    {presentedBlock.image_url ? (
-                      <div className="rounded border overflow-hidden bg-gray-100 relative">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={presentedBlock.image_url}
-                          alt={presentedBlock.title ?? "Presented"}
-                          className="w-full max-h-56 object-cover"
-                        />
-                        {previewMapMarkers.map((m, i) => (
-                          <div
-                            key={m.id}
-                            className="absolute -translate-x-1/2 -translate-y-1/2 w-5 h-5 rounded-full border border-white bg-red-500/90 text-white text-[10px] font-bold flex items-center justify-center shadow"
-                            style={{ left: `${m.x}%`, top: `${m.y}%` }}
-                            title={m.label}
-                          >
-                            {i + 1}
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
-                    {presentedBlock.body ? (
-                      <div className="text-sm whitespace-pre-wrap text-gray-700">{presentedBlock.body}</div>
-                    ) : (
-                      <div className="text-sm text-gray-500">No body text on this presented block.</div>
-                    )}
-                  </>
-                ) : (
-                  <div className="text-sm text-gray-500">Nothing presented to players yet.</div>
-                )}
-              </div>
-            </details>
           </div>
         </div>
 
