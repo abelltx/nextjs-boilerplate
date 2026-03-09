@@ -13,10 +13,11 @@ export default function SceneMap(props: {
   markers?: MapMarker[];
   className?: string;
   showMagnifier?: boolean;
+  initialZoom?: number;
   onMarkerClick?: (marker: MapMarker, index: number) => void;
 }) {
   const [hover, setHover] = useState(false);
-  const [zoom, setZoom] = useState(2);
+  const [zoom, setZoom] = useState(Math.max(1.5, Math.min(12, Number(props.initialZoom ?? 2))));
   const [pos, setPos] = useState({ x: 50, y: 50 });
   const [hoveringMarker, setHoveringMarker] = useState(false);
   const [nearMarker, setNearMarker] = useState(false);

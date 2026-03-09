@@ -50,6 +50,7 @@ export default function MapMarkerEditorClient(props: {
   initialMeta: any;
   revealCandidates: Array<{ id: string; title: string }>;
   mode?: "map" | "hex";
+  itemOptions?: Array<{ id: string; name?: string | null; is_active?: boolean | null }>;
 }) {
   const [markers, setMarkers] = useState<Marker[]>(() => normalizeMarkers(props.initialMeta));
   const [selectedId, setSelectedId] = useState<string | null>(markers[0]?.id ?? null);
@@ -81,9 +82,13 @@ export default function MapMarkerEditorClient(props: {
 
   function updateSelected(patch: Partial<Marker>) {
     if (!selectedId) return;
+    updateMarkerById(selectedId, patch);
+  }
+
+  function updateMarkerById(id: string, patch: Partial<Marker>) {
     setMarkers((prev) =>
       prev.map((m) => {
-        if (m.id !== selectedId) return m;
+        if (m.id !== id) return m;
         const next = { ...m, ...patch };
         next.x = round3(clamp(Number(next.x ?? 50)));
         next.y = round3(clamp(Number(next.y ?? 50)));
@@ -113,6 +118,31 @@ export default function MapMarkerEditorClient(props: {
   }
 
   const metaJson = JSON.stringify({ ...extraMeta, markers }, null, 2);
+  const CHECK_OPTIONS = [
+    "Perception",
+    "Investigation",
+    "Insight",
+    "Medicine",
+    "Athletics",
+    "Acrobatics",
+    "Stealth",
+    "Survival",
+    "Arcana",
+    "Religion",
+    "History",
+    "Persuasion",
+    "Deception",
+    "Intimidation",
+    "STR",
+    "DEX",
+    "CON",
+    "INT",
+    "WIS",
+    "CHA",
+  ];
+  const rewardOptions = (props.itemOptions ?? [])
+    .filter((it) => it?.id)
+    .map((it) => ({ id: String(it.id), name: String(it.name ?? "Item") }));
 
   return (
     <div className="space-y-2 rounded-lg border p-2">
@@ -121,6 +151,43 @@ export default function MapMarkerEditorClient(props: {
         Click image to add marker. Drag marker to move.
         {isHex ? " Configure check/reward fields per hex below." : " Use linked reveal dropdown for map reveals."}
       </div>
+      {isHex ? (
+        <div className="rounded border bg-gray-50 p-2 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-[11px] uppercase text-gray-500">Hex Cards</div>
+            <button
+              type="button"
+              className="rounded border px-2 py-1 text-xs"
+              onClick={() => addMarker(50, 50)}
+            >
+              + Blank Hex Card
+            </button>
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {markers.map((m, i) => (
+              <button
+                key={`card-${m.id}`}
+                type="button"
+                className={[
+                  "min-w-[170px] rounded border p-2 text-left",
+                  selectedId === m.id ? "bg-white border-black" : "bg-white/80",
+                ].join(" ")}
+                onClick={() => setSelectedId(m.id)}
+              >
+                <div className="text-[11px] text-gray-500">Hex {i + 1}</div>
+                <div className="text-sm font-semibold truncate">{m.label || `Hex ${i + 1}`}</div>
+                <div className="text-[11px] text-gray-600 truncate">
+                  {m.check_key ? `${m.check_key}${m.check_dc ? ` DC ${m.check_dc}` : ""}` : "No check"}
+                </div>
+                <div className="text-[11px] text-gray-600 truncate">
+                  Rewards: {(m.reward_item_ids ?? []).length}
+                </div>
+              </button>
+            ))}
+            {!markers.length ? <div className="text-xs text-gray-500 px-1 py-2">No hex markers yet.</div> : null}
+          </div>
+        </div>
+      ) : null}
 
       <div
         ref={wrapRef}
@@ -229,12 +296,18 @@ export default function MapMarkerEditorClient(props: {
                 onChange={(e) => updateSelected({ focus_image_url: e.target.value })}
                 placeholder="Focused hex image URL (optional)"
               />
-              <input
+              <select
                 className="border rounded p-2 text-sm"
                 value={selected.check_key ?? ""}
                 onChange={(e) => updateSelected({ check_key: e.target.value })}
-                placeholder="Check key (e.g. Perception)"
-              />
+              >
+                <option value="">No required check</option>
+                {CHECK_OPTIONS.map((k) => (
+                  <option key={k} value={k}>
+                    {k}
+                  </option>
+                ))}
+              </select>
               <input
                 className="border rounded p-2 text-sm"
                 type="number"
@@ -261,14 +334,32 @@ export default function MapMarkerEditorClient(props: {
                 }
                 placeholder="Reward item UUIDs (comma-separated)"
               />
-              <input
-                className="border rounded p-2 text-sm md:col-span-2"
+              <select
+                className="border rounded p-2 text-sm"
+                defaultValue=""
+                onChange={(e) => {
+                  const v = String(e.target.value ?? "").trim();
+                  if (!v) return;
+                  const next = Array.from(new Set([...(selected.reward_item_ids ?? []), v]));
+                  updateSelected({ reward_item_ids: next });
+                  e.currentTarget.value = "";
+                }}
+              >
+                <option value="">Quick add reward from Item Library</option>
+                {rewardOptions.map((it) => (
+                  <option key={it.id} value={it.id}>
+                    {it.name}
+                  </option>
+                ))}
+              </select>
+              <textarea
+                className="border rounded p-2 text-sm md:col-span-2 h-20"
                 value={selected.player_text ?? ""}
                 onChange={(e) => updateSelected({ player_text: e.target.value })}
                 placeholder="Player text for this hex (optional)"
               />
-              <input
-                className="border rounded p-2 text-sm md:col-span-2"
+              <textarea
+                className="border rounded p-2 text-sm md:col-span-2 h-20"
                 value={selected.storyteller_notes ?? ""}
                 onChange={(e) => updateSelected({ storyteller_notes: e.target.value })}
                 placeholder="Storyteller notes for this hex (optional)"

@@ -1244,6 +1244,7 @@ function StagePanel({
               alt={block.title ?? "Presented"}
               markers={markers as any}
               showMagnifier
+              initialZoom={blockType === "hex_crawl" ? 12 : 2}
               onMarkerClick={(m) => {
                 if (blockType === "map" && m.targetBlockId) setSelectedMarkerBlockId(m.targetBlockId);
               }}

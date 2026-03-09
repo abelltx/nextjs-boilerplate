@@ -1331,6 +1331,7 @@ export default async function AdminEpisodeEditPage({
                               imageUrl={b.image_url as string}
                               initialMeta={b.meta ?? {}}
                               mode={String(b.block_type).toLowerCase() === "hex_crawl" ? "hex" : "map"}
+                              itemOptions={(itemOptions ?? []) as any[]}
                               revealCandidates={blocksResolved
                                 .filter((x: any) => x.id !== b.id && x.block_type !== "scene")
                                 .map((x: any) => ({
