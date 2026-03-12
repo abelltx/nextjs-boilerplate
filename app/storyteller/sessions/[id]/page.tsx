@@ -1503,10 +1503,10 @@ export default async function DmScreenPage({
                                         {promptActive ? (
                                           <>
                                             <span className="rounded border bg-white px-2 py-1 text-[11px]">
-                                              Highest: {Number.isFinite(Number(highestRollRow?.total ?? NaN)) ? String(highestRollRow?.total) : "-"}
-                                              {highestRollRow?.playerId
-                                                ? ` (${playerLabelById.get(highestRollRow.playerId) ?? highestRollRow.playerId.slice(0, 8)})`
-                                                : ""}
+                                              Winner: {highestRollRow?.playerId
+                                                ? (playerLabelById.get(highestRollRow.playerId) ?? highestRollRow.playerId.slice(0, 8))
+                                                : "waiting"}
+                                              {" | "}Roll: {Number.isFinite(Number(highestRollRow?.total ?? NaN)) ? String(highestRollRow?.total) : "-"}
                                               {hasDc ? ` vs DC ${Math.max(0, Math.floor(dcNum))}` : ""}
                                             </span>
                                             <form
