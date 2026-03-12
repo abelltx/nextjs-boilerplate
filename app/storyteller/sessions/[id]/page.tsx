@@ -1378,8 +1378,17 @@ export default async function DmScreenPage({
                               storytellerScript: "",
                             }]
                           : [];
+                      const currentPromptText = String((state as any)?.roll_prompt ?? "");
+                      const rollOpenNow = Boolean((state as any)?.roll_open);
+                      const markerLabel = String(m.label ?? "Hex");
+                      const markerHasActivePrompt =
+                        rollOpenNow && currentPromptText.toLowerCase().includes(`context: ${markerLabel}`.toLowerCase());
                       return (
-                        <details key={m.id} className="rounded border bg-gray-50" open={false}>
+                        <details
+                          key={m.id}
+                          className="rounded border bg-gray-50"
+                          open={markerHasActivePrompt || String(stageHexFocus?.marker_id ?? "") === String(m.id)}
+                        >
                           <summary className="cursor-pointer px-2 py-1.5 flex items-center justify-between gap-2">
                             <div className="min-w-0">
                               <div className="text-xs font-semibold truncate">{m.label}</div>
@@ -1449,6 +1458,10 @@ export default async function DmScreenPage({
                                   const dcNum = Number(p?.dc ?? NaN);
                                   const hasDc = Number.isFinite(dcNum) && dcNum > 0;
                                   const stScript = String(p?.storytellerScript ?? "").trim();
+                                  const promptActive =
+                                    rollOpenNow &&
+                                    currentPromptText.toLowerCase().includes(`${checkKey} check`.toLowerCase()) &&
+                                    currentPromptText.toLowerCase().includes(`context: ${markerLabel}`.toLowerCase());
                                   return (
                                     <div key={`${m.id}-${String(p?.id ?? checkKey)}`} className="rounded border bg-gray-50 p-2 space-y-1">
                                       <div className="text-xs font-semibold">
@@ -1459,33 +1472,61 @@ export default async function DmScreenPage({
                                           {stScript}
                                         </div>
                                       ) : null}
-                                      <form
-                                        action={async () => {
-                                          "use server";
-                                          if (!checkKey) {
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <form
+                                          action={async () => {
+                                            "use server";
+                                            if (!checkKey) {
+                                              redirect(`/storyteller/sessions/${session.id}`);
+                                            }
+                                            const prompt = [
+                                              "Roll Request",
+                                              `${checkKey} check${hasDc ? ` (DC ${Math.max(0, Math.floor(dcNum))})` : ""}.`,
+                                              `Click ${checkKey} in your sheet and report your total.`,
+                                              `Context: ${String(m.label ?? "Hex")}.`,
+                                            ]
+                                              .filter(Boolean)
+                                              .join(" ");
+                                            await updateState(session.id, {
+                                              roll_open: true,
+                                              roll_die: "d20",
+                                              roll_prompt: prompt,
+                                              roll_target: "all",
+                                              roll_round_id: randomUUID(),
+                                              roll_results: {},
+                                            });
                                             redirect(`/storyteller/sessions/${session.id}`);
-                                          }
-                                          const prompt = [
-                                            "Roll Request",
-                                            `${checkKey} check${hasDc ? ` (DC ${Math.max(0, Math.floor(dcNum))})` : ""}.`,
-                                            `Click ${checkKey} in your sheet and report your total.`,
-                                            `Context: ${String(m.label ?? "Hex")}.`,
-                                          ]
-                                            .filter(Boolean)
-                                            .join(" ");
-                                          await updateState(session.id, {
-                                            roll_open: true,
-                                            roll_die: "d20",
-                                            roll_prompt: prompt,
-                                            roll_target: "all",
-                                            roll_round_id: randomUUID(),
-                                            roll_results: {},
-                                          });
-                                          redirect(`/storyteller/sessions/${session.id}`);
-                                        }}
-                                      >
-                                        <button className="rounded border px-2 py-1 text-[11px]">Prompt {checkKey}</button>
-                                      </form>
+                                          }}
+                                        >
+                                          <button className="rounded border px-2 py-1 text-[11px]">Prompt {checkKey}</button>
+                                        </form>
+                                        {promptActive ? (
+                                          <>
+                                            <span className="rounded border bg-white px-2 py-1 text-[11px]">
+                                              Highest: {Number.isFinite(Number(highestRollRow?.total ?? NaN)) ? String(highestRollRow?.total) : "-"}
+                                              {highestRollRow?.playerId
+                                                ? ` (${playerLabelById.get(highestRollRow.playerId) ?? highestRollRow.playerId.slice(0, 8)})`
+                                                : ""}
+                                              {hasDc ? ` vs DC ${Math.max(0, Math.floor(dcNum))}` : ""}
+                                            </span>
+                                            <form
+                                              action={async () => {
+                                                "use server";
+                                                await updateState(session.id, {
+                                                  roll_open: false,
+                                                  roll_prompt: "",
+                                                  roll_target: "all",
+                                                  roll_round_id: null,
+                                                  roll_results: {},
+                                                });
+                                                redirect(`/storyteller/sessions/${session.id}`);
+                                              }}
+                                            >
+                                              <button className="rounded border px-2 py-1 text-[11px]">Clear Prompt</button>
+                                            </form>
+                                          </>
+                                        ) : null}
+                                      </div>
                                     </div>
                                   );
                                 })}
