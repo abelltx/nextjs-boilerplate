@@ -475,6 +475,15 @@ export default async function DmScreenPage({
       playerLabel: playerLabelById.get(r.playerId) ?? `Player ${r.playerId.slice(0, 8)}`,
     }))
     .sort((a, b) => String(a.createdAt ?? "").localeCompare(String(b.createdAt ?? "")));
+  const currentRollRows = Object.entries((((state as any)?.roll_results ?? {}) as Record<string, any>) || {})
+    .map(([playerId, row]) => ({
+      playerId: String(playerId ?? "").trim(),
+      total: Number((row as any)?.total ?? NaN),
+    }))
+    .filter((r) => r.playerId && Number.isFinite(r.total));
+  const highestRollRow = currentRollRows.length
+    ? currentRollRows.reduce((best, cur) => (cur.total > best.total ? cur : best))
+    : null;
   const questDirectorIds = questDirectorDefs
     .map((q: any, i: number) => String(q?.id ?? "").trim() || `quest_${i + 1}`)
     .filter(Boolean);
@@ -1374,6 +1383,16 @@ export default async function DmScreenPage({
                             rewardItemIds: Array.isArray(m.rewardItemIds) ? m.rewardItemIds : [],
                             playerText: String(m.playerText ?? ""),
                             storytellerNotes: String(m.storytellerNotes ?? ""),
+                            rollOutcomes: Array.isArray((m as any).rollOutcomes)
+                              ? (m as any).rollOutcomes.map((o: any) => ({
+                                  id: String(o?.id ?? ""),
+                                  minRoll: Number(o?.minRoll ?? NaN),
+                                  maxRoll: Number(o?.maxRoll ?? NaN),
+                                  label: String(o?.label ?? ""),
+                                  storytellerScript: String(o?.storytellerScript ?? ""),
+                                  notes: String(o?.notes ?? ""),
+                                }))
+                              : [],
                           });
                           redirect(`/storyteller/sessions/${session.id}`);
                         }}
@@ -1411,6 +1430,63 @@ export default async function DmScreenPage({
                         ? ` | DC ${Math.max(0, Math.floor(Number(stageHexFocus.check_dc)))}`
                         : ""}
                     </div>
+                    {(() => {
+                      const outcomes = Array.isArray(stageHexFocus.roll_outcomes) ? (stageHexFocus.roll_outcomes as any[]) : [];
+                      if (!outcomes.length) return null;
+                      const topTotal = Number(highestRollRow?.total ?? NaN);
+                      const matchedId = Number.isFinite(topTotal)
+                        ? String(
+                            outcomes.find((o: any) => {
+                              const min = Number(o?.min_roll ?? NaN);
+                              const max = Number(o?.max_roll ?? NaN);
+                              const minOk = Number.isFinite(min) ? topTotal >= min : true;
+                              const maxOk = Number.isFinite(max) ? topTotal <= max : true;
+                              return minOk && maxOk;
+                            })?.id ?? ""
+                          )
+                        : "";
+                      return (
+                        <div className="rounded border bg-white p-2 space-y-1">
+                          <div className="text-[11px] uppercase text-gray-500">Roll Outcomes</div>
+                          <div className="text-[11px] text-gray-600">
+                            Highest roll now: {Number.isFinite(topTotal) ? String(topTotal) : "none yet"}
+                            {highestRollRow?.playerId ? ` (${playerLabelById.get(highestRollRow.playerId) ?? highestRollRow.playerId.slice(0, 8)})` : ""}
+                          </div>
+                          <div className="space-y-1">
+                            {outcomes.map((o: any, i: number) => {
+                              const rowId = String(o?.id ?? `outcome-${i + 1}`);
+                              const isMatch = Boolean(matchedId) && matchedId === rowId;
+                              const min = Number(o?.min_roll ?? NaN);
+                              const max = Number(o?.max_roll ?? NaN);
+                              return (
+                                <div
+                                  key={rowId}
+                                  className={`rounded border px-2 py-1 ${isMatch ? "border-green-400 bg-green-50" : "bg-gray-50"}`}
+                                >
+                                  <div className="text-xs font-semibold">
+                                    {String(o?.label ?? `Outcome ${i + 1}`)}
+                                    <span className="ml-2 font-normal text-gray-600">
+                                      [{Number.isFinite(min) ? min : "-"} to {Number.isFinite(max) ? max : "-"}]
+                                    </span>
+                                    {isMatch ? <span className="ml-2 text-green-700">MATCH</span> : null}
+                                  </div>
+                                  {String(o?.storyteller_script ?? "").trim() ? (
+                                    <div className="text-xs text-gray-800 whitespace-pre-wrap">
+                                      {String(o.storyteller_script)}
+                                    </div>
+                                  ) : null}
+                                  {String(o?.notes ?? "").trim() ? (
+                                    <div className="text-[11px] text-amber-800 whitespace-pre-wrap">
+                                      Note: {String(o.notes)}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
                     <div className="text-[11px] text-gray-700">
                       Reward status: {String(stageHexFocus.reward_status ?? "pending")}
                     </div>

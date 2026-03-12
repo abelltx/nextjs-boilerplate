@@ -14,6 +14,14 @@ type Marker = {
   reward_item_ids?: string[];
   player_text?: string;
   storyteller_notes?: string;
+  roll_outcomes?: Array<{
+    id: string;
+    min_roll?: number | null;
+    max_roll?: number | null;
+    label?: string;
+    storyteller_script?: string;
+    notes?: string;
+  }>;
 };
 
 function clamp(n: number, min = 0, max = 100) {
@@ -42,6 +50,16 @@ function normalizeMarkers(input: any): Marker[] {
         : [],
     player_text: String(m?.player_text ?? "").trim(),
     storyteller_notes: String(m?.storyteller_notes ?? "").trim(),
+    roll_outcomes: Array.isArray(m?.roll_outcomes)
+      ? m.roll_outcomes.map((o: any, oi: number) => ({
+          id: String(o?.id ?? `outcome-${oi + 1}`),
+          min_roll: Number.isFinite(Number(o?.min_roll ?? NaN)) ? Math.max(0, Math.floor(Number(o?.min_roll))) : null,
+          max_roll: Number.isFinite(Number(o?.max_roll ?? NaN)) ? Math.max(0, Math.floor(Number(o?.max_roll))) : null,
+          label: String(o?.label ?? "").trim(),
+          storyteller_script: String(o?.storyteller_script ?? "").trim(),
+          notes: String(o?.notes ?? "").trim(),
+        }))
+      : [],
   }));
 }
 
@@ -104,6 +122,67 @@ export default function MapMarkerEditorClient(props: {
       const rest = markers.filter((m) => m.id !== cur);
       return rest[0]?.id ?? null;
     });
+  }
+
+  function addOutcomeToSelected() {
+    if (!selectedId) return;
+    setMarkers((prev) =>
+      prev.map((m) => {
+        if (m.id !== selectedId) return m;
+        const list = Array.isArray(m.roll_outcomes) ? m.roll_outcomes : [];
+        return {
+          ...m,
+          roll_outcomes: [
+            ...list,
+            {
+              id: `outcome-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+              min_roll: null,
+              max_roll: null,
+              label: `Outcome ${list.length + 1}`,
+              storyteller_script: "",
+              notes: "",
+            },
+          ],
+        };
+      })
+    );
+  }
+
+  function updateOutcome(outcomeId: string, patch: Record<string, any>) {
+    if (!selectedId) return;
+    setMarkers((prev) =>
+      prev.map((m) => {
+        if (m.id !== selectedId) return m;
+        const list = Array.isArray(m.roll_outcomes) ? m.roll_outcomes : [];
+        return {
+          ...m,
+          roll_outcomes: list.map((o) => {
+            if (o.id !== outcomeId) return o;
+            const next: any = { ...o, ...patch };
+            if ("min_roll" in patch) {
+              const n = Number(next.min_roll ?? NaN);
+              next.min_roll = Number.isFinite(n) ? Math.max(0, Math.floor(n)) : null;
+            }
+            if ("max_roll" in patch) {
+              const n = Number(next.max_roll ?? NaN);
+              next.max_roll = Number.isFinite(n) ? Math.max(0, Math.floor(n)) : null;
+            }
+            return next;
+          }),
+        };
+      })
+    );
+  }
+
+  function removeOutcome(outcomeId: string) {
+    if (!selectedId) return;
+    setMarkers((prev) =>
+      prev.map((m) => {
+        if (m.id !== selectedId) return m;
+        const list = Array.isArray(m.roll_outcomes) ? m.roll_outcomes : [];
+        return { ...m, roll_outcomes: list.filter((o) => o.id !== outcomeId) };
+      })
+    );
   }
 
   function moveMarkerByClient(clientX: number, clientY: number) {
@@ -372,6 +451,91 @@ export default function MapMarkerEditorClient(props: {
                 onChange={(e) => updateSelected({ storyteller_notes: e.target.value })}
                 placeholder="Storyteller notes for this hex (optional)"
               />
+              <div className="md:col-span-4 rounded border bg-gray-50 p-2 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-[11px] uppercase text-gray-500">Roll Outcomes (Storyteller)</div>
+                  <button
+                    type="button"
+                    className="rounded border px-2 py-1 text-xs"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      addOutcomeToSelected();
+                    }}
+                  >
+                    + Add Outcome
+                  </button>
+                </div>
+                {(selected.roll_outcomes ?? []).length ? (
+                  <div className="space-y-2">
+                    {(selected.roll_outcomes ?? []).map((o, oi) => (
+                      <div key={o.id} className="rounded border bg-white p-2 space-y-2">
+                        <div className="grid grid-cols-1 gap-2 md:grid-cols-5">
+                          <input
+                            className="border rounded p-2 text-sm md:col-span-2"
+                            value={o.label ?? ""}
+                            onChange={(e) => updateOutcome(o.id, { label: e.target.value })}
+                            placeholder={`Outcome ${oi + 1} label`}
+                          />
+                          <input
+                            className="border rounded p-2 text-sm"
+                            type="number"
+                            min={0}
+                            step="1"
+                            value={o.min_roll ?? ""}
+                            onChange={(e) =>
+                              updateOutcome(o.id, {
+                                min_roll: e.target.value.trim() ? Number(e.target.value) : null,
+                              })
+                            }
+                            placeholder="Min roll"
+                          />
+                          <input
+                            className="border rounded p-2 text-sm"
+                            type="number"
+                            min={0}
+                            step="1"
+                            value={o.max_roll ?? ""}
+                            onChange={(e) =>
+                              updateOutcome(o.id, {
+                                max_roll: e.target.value.trim() ? Number(e.target.value) : null,
+                              })
+                            }
+                            placeholder="Max roll"
+                          />
+                          <div className="flex items-center justify-end">
+                            <button
+                              type="button"
+                              className="rounded border px-2 py-1 text-xs text-red-700"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                removeOutcome(o.id);
+                              }}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                        <textarea
+                          className="border rounded p-2 text-sm w-full h-16"
+                          value={o.storyteller_script ?? ""}
+                          onChange={(e) => updateOutcome(o.id, { storyteller_script: e.target.value })}
+                          placeholder="Storyteller script for this roll range"
+                        />
+                        <textarea
+                          className="border rounded p-2 text-sm w-full h-14"
+                          value={o.notes ?? ""}
+                          onChange={(e) => updateOutcome(o.id, { notes: e.target.value })}
+                          placeholder="Optional mechanics/notes for this outcome"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-xs text-gray-500">No outcomes yet. Add one for each roll range you want prewritten.</div>
+                )}
+              </div>
             </>
           ) : null}
           <div className="md:col-span-4">

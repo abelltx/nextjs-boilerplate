@@ -702,6 +702,14 @@ export async function storytellerSetHexFocus(input: {
   rewardItemIds?: string[];
   playerText?: string | null;
   storytellerNotes?: string | null;
+  rollOutcomes?: Array<{
+    id?: string;
+    minRoll?: number | null;
+    maxRoll?: number | null;
+    label?: string;
+    storytellerScript?: string;
+    notes?: string | null;
+  }>;
 }) {
   const sessionId = String(input.sessionId ?? "").trim();
   const blockId = String(input.blockId ?? "").trim();
@@ -719,6 +727,20 @@ export async function storytellerSetHexFocus(input: {
     reward_item_ids: cleanIds(input.rewardItemIds),
     player_text: String(input.playerText ?? "").trim() || null,
     storyteller_notes: String(input.storytellerNotes ?? "").trim() || null,
+    roll_outcomes: (Array.isArray(input.rollOutcomes) ? input.rollOutcomes : [])
+      .map((o: any, i: number) => {
+        const minRaw = Number(o?.minRoll ?? NaN);
+        const maxRaw = Number(o?.maxRoll ?? NaN);
+        return {
+          id: String(o?.id ?? `outcome-${i + 1}`),
+          min_roll: Number.isFinite(minRaw) ? Math.max(0, Math.floor(minRaw)) : null,
+          max_roll: Number.isFinite(maxRaw) ? Math.max(0, Math.floor(maxRaw)) : null,
+          label: String(o?.label ?? `Outcome ${i + 1}`).trim(),
+          storyteller_script: String(o?.storytellerScript ?? "").trim(),
+          notes: String(o?.notes ?? "").trim() || null,
+        };
+      })
+      .filter((o: any) => String(o.storyteller_script ?? "").trim().length > 0 || String(o.label ?? "").trim().length > 0),
     reward_status: "pending",
     reward_target_player_id: null,
     updated_at: new Date().toISOString(),

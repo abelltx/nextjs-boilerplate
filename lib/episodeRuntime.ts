@@ -13,6 +13,14 @@ export type HexMarker = MapMarker & {
   rewardItemIds?: string[];
   playerText?: string | null;
   storytellerNotes?: string | null;
+  rollOutcomes?: Array<{
+    id: string;
+    minRoll: number | null;
+    maxRoll: number | null;
+    label: string;
+    storytellerScript: string;
+    notes?: string | null;
+  }>;
 };
 
 export type RuntimeBlock = {
@@ -61,6 +69,23 @@ export function extractHexMarkers(meta: any): HexMarker[] {
         new Set(rawRewards.map((v: any) => String(v ?? "").trim()).filter(Boolean))
       );
       const checkDcRaw = Number(m?.check_dc ?? NaN);
+      const rollOutcomesRaw = Array.isArray(m?.roll_outcomes) ? m.roll_outcomes : [];
+      const rollOutcomes = rollOutcomesRaw
+        .map((o: any, oi: number) => {
+          const minRaw = Number(o?.min_roll ?? NaN);
+          const maxRaw = Number(o?.max_roll ?? NaN);
+          const minRoll = Number.isFinite(minRaw) ? Math.max(0, Math.floor(minRaw)) : null;
+          const maxRoll = Number.isFinite(maxRaw) ? Math.max(0, Math.floor(maxRaw)) : null;
+          return {
+            id: String(o?.id ?? `outcome-${oi + 1}`),
+            minRoll,
+            maxRoll,
+            label: String(o?.label ?? `Outcome ${oi + 1}`),
+            storytellerScript: String(o?.storyteller_script ?? "").trim(),
+            notes: String(o?.notes ?? "").trim() || null,
+          };
+        })
+        .filter((o: any) => String(o.storytellerScript ?? "").trim().length > 0 || String(o.label ?? "").trim().length > 0);
       return {
         id: String(m?.id ?? `m-${i + 1}`),
         label: String(m?.label ?? `Hex ${i + 1}`),
@@ -73,6 +98,7 @@ export function extractHexMarkers(meta: any): HexMarker[] {
         rewardItemIds,
         playerText: String(m?.player_text ?? "").trim() || null,
         storytellerNotes: String(m?.storyteller_notes ?? "").trim() || null,
+        rollOutcomes,
       } as HexMarker;
     })
     .filter((m: HexMarker) => Number.isFinite(m.x) && Number.isFinite(m.y));
