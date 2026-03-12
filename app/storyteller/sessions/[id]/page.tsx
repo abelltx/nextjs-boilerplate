@@ -1436,37 +1436,42 @@ export default async function DmScreenPage({
                             const hasDc = Number.isFinite(dcNum) && dcNum > 0;
                             const stScript = String(p?.storytellerScript ?? "").trim();
                             return (
-                              <form
-                                key={`${m.id}-${String(p?.id ?? checkKey)}`}
-                                action={async () => {
-                                  "use server";
-                                  if (!checkKey) {
+                              <div key={`${m.id}-${String(p?.id ?? checkKey)}`} className="space-y-1">
+                                {stScript ? (
+                                  <div className="max-w-[22rem] rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] text-emerald-900 whitespace-pre-wrap">
+                                    ST Script: {stScript}
+                                  </div>
+                                ) : null}
+                                <form
+                                  action={async () => {
+                                    "use server";
+                                    if (!checkKey) {
+                                      redirect(`/storyteller/sessions/${session.id}`);
+                                    }
+                                    const prompt = [
+                                      "Roll Request",
+                                      `${checkKey} check${hasDc ? ` (DC ${Math.max(0, Math.floor(dcNum))})` : ""}.`,
+                                      `Click ${checkKey} in your sheet and report your total.`,
+                                      `Context: ${String(m.label ?? "Hex")}.`,
+                                    ]
+                                      .filter(Boolean)
+                                      .join(" ");
+                                    await updateState(session.id, {
+                                      roll_open: true,
+                                      roll_die: "d20",
+                                      roll_prompt: prompt,
+                                      roll_target: "all",
+                                      roll_round_id: randomUUID(),
+                                      roll_results: {},
+                                    });
                                     redirect(`/storyteller/sessions/${session.id}`);
-                                  }
-                                  const prompt = [
-                                    "Roll Request",
-                                    `${checkKey} check${hasDc ? ` (DC ${Math.max(0, Math.floor(dcNum))})` : ""}.`,
-                                    `Click ${checkKey} in your sheet and report your total.`,
-                                    `Context: ${String(m.label ?? "Hex")}.`,
-                                    stScript ? `ST: ${stScript}` : "",
-                                  ]
-                                    .filter(Boolean)
-                                    .join(" ");
-                                  await updateState(session.id, {
-                                    roll_open: true,
-                                    roll_die: "d20",
-                                    roll_prompt: prompt,
-                                    roll_target: "all",
-                                    roll_round_id: randomUUID(),
-                                    roll_results: {},
-                                  });
-                                  redirect(`/storyteller/sessions/${session.id}`);
-                                }}
-                              >
-                                <button className="rounded border px-2 py-1 text-xs">
-                                  Prompt {checkKey}
-                                </button>
-                              </form>
+                                  }}
+                                >
+                                  <button className="rounded border px-2 py-1 text-xs">
+                                    Prompt {checkKey}
+                                  </button>
+                                </form>
+                              </div>
                             );
                           })}
                         </div>
