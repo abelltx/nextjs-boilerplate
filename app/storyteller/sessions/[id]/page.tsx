@@ -1380,101 +1380,123 @@ export default async function DmScreenPage({
                                   storytellerScript: "",
                                 }]
                               : [];
+                          const promptScripts = prompts.filter((p: any) => String(p?.storytellerScript ?? "").trim());
                           return (
                             <>
-                        <div className="min-w-0">
-                          <div className="text-xs font-semibold truncate">{m.label}</div>
-                          <div className="text-[11px] text-gray-600 truncate">
-                            {prompts.length
-                              ? `${prompts.length} check prompt${prompts.length === 1 ? "" : "s"}`
-                              : "No check configured"}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <form
-                            action={async () => {
-                              "use server";
-                              await storytellerSetHexFocus({
-                                sessionId: session.id,
-                                blockId: String(stageHexBlock.id),
-                                markerId: String(m.id),
-                                label: String(m.label ?? ""),
-                                focusImageUrl: String(m.focusImageUrl ?? ""),
-                                checkKey: String(m.checkKey ?? ""),
-                                checkDc: Number(m.checkDc ?? NaN),
-                                rewardItemIds: Array.isArray(m.rewardItemIds) ? m.rewardItemIds : [],
-                                playerText: String(m.playerText ?? ""),
-                                storytellerNotes: String(m.storytellerNotes ?? ""),
-                                checkPrompts: Array.isArray((m as any).checkPrompts)
-                                  ? (m as any).checkPrompts.map((p: any) => ({
-                                      id: String(p?.id ?? ""),
-                                      checkKey: String(p?.checkKey ?? ""),
-                                      dc: Number(p?.dc ?? NaN),
-                                      storytellerScript: String(p?.storytellerScript ?? ""),
-                                      notes: String(p?.notes ?? ""),
-                                    }))
-                                  : [],
-                                rollOutcomes: Array.isArray((m as any).rollOutcomes)
-                                  ? (m as any).rollOutcomes.map((o: any) => ({
-                                      id: String(o?.id ?? ""),
-                                      minRoll: Number(o?.minRoll ?? NaN),
-                                      maxRoll: Number(o?.maxRoll ?? NaN),
-                                      label: String(o?.label ?? ""),
-                                      storytellerScript: String(o?.storytellerScript ?? ""),
-                                      notes: String(o?.notes ?? ""),
-                                    }))
-                                  : [],
-                              });
-                              redirect(`/storyteller/sessions/${session.id}`);
-                            }}
-                          >
-                            <button className="rounded border px-2 py-1 text-xs">Focus</button>
-                          </form>
-                          {prompts.map((p: any) => {
-                            const checkKey = String(p?.checkKey ?? "").trim();
-                            const dcNum = Number(p?.dc ?? NaN);
-                            const hasDc = Number.isFinite(dcNum) && dcNum > 0;
-                            const stScript = String(p?.storytellerScript ?? "").trim();
-                            return (
-                              <div key={`${m.id}-${String(p?.id ?? checkKey)}`} className="space-y-1">
-                                {stScript ? (
-                                  <div className="max-w-[22rem] rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] text-emerald-900 whitespace-pre-wrap">
-                                    ST Script: {stScript}
-                                  </div>
-                                ) : null}
+                              <div className="flex-1 min-w-0 space-y-1">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <div className="text-xs font-semibold truncate">{m.label}</div>
+                                  {prompts.length ? (
+                                    <div className="flex gap-1 overflow-x-auto">
+                                      {prompts.map((p: any) => {
+                                        const ck = String(p?.checkKey ?? "").trim();
+                                        const dcNum = Number(p?.dc ?? NaN);
+                                        const hasDc = Number.isFinite(dcNum) && dcNum > 0;
+                                        return (
+                                          <span key={`chip-${m.id}-${String(p?.id ?? ck)}`} className="shrink-0 rounded border bg-white px-1.5 py-0.5 text-[10px]">
+                                            {ck || "Check"}{hasDc ? ` DC ${Math.max(0, Math.floor(dcNum))}` : ""}
+                                          </span>
+                                        );
+                                      })}
+                                    </div>
+                                  ) : (
+                                    <div className="text-[11px] text-gray-500">No check configured</div>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  {prompts.map((p: any) => {
+                                    const checkKey = String(p?.checkKey ?? "").trim();
+                                    const dcNum = Number(p?.dc ?? NaN);
+                                    const hasDc = Number.isFinite(dcNum) && dcNum > 0;
+                                    return (
+                                      <form
+                                        key={`${m.id}-${String(p?.id ?? checkKey)}`}
+                                        action={async () => {
+                                          "use server";
+                                          if (!checkKey) {
+                                            redirect(`/storyteller/sessions/${session.id}`);
+                                          }
+                                          const prompt = [
+                                            "Roll Request",
+                                            `${checkKey} check${hasDc ? ` (DC ${Math.max(0, Math.floor(dcNum))})` : ""}.`,
+                                            `Click ${checkKey} in your sheet and report your total.`,
+                                            `Context: ${String(m.label ?? "Hex")}.`,
+                                          ]
+                                            .filter(Boolean)
+                                            .join(" ");
+                                          await updateState(session.id, {
+                                            roll_open: true,
+                                            roll_die: "d20",
+                                            roll_prompt: prompt,
+                                            roll_target: "all",
+                                            roll_round_id: randomUUID(),
+                                            roll_results: {},
+                                          });
+                                          redirect(`/storyteller/sessions/${session.id}`);
+                                        }}
+                                      >
+                                        <button className="rounded border px-2 py-1 text-[11px]">
+                                          Prompt {checkKey}
+                                        </button>
+                                      </form>
+                                    );
+                                  })}
+                                  {promptScripts.length ? (
+                                    <details className="rounded border bg-white px-1.5 py-1 text-[11px]">
+                                      <summary className="cursor-pointer">Scripts ({promptScripts.length})</summary>
+                                      <div className="mt-1 space-y-1.5 max-w-[28rem]">
+                                        {promptScripts.map((p: any, idx: number) => (
+                                          <div key={`script-${m.id}-${idx}`} className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] text-emerald-900 whitespace-pre-wrap">
+                                            <div className="font-semibold">{String(p?.checkKey ?? "Check")}</div>
+                                            <div>{String(p?.storytellerScript ?? "")}</div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </details>
+                                  ) : null}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1.5">
                                 <form
                                   action={async () => {
                                     "use server";
-                                    if (!checkKey) {
-                                      redirect(`/storyteller/sessions/${session.id}`);
-                                    }
-                                    const prompt = [
-                                      "Roll Request",
-                                      `${checkKey} check${hasDc ? ` (DC ${Math.max(0, Math.floor(dcNum))})` : ""}.`,
-                                      `Click ${checkKey} in your sheet and report your total.`,
-                                      `Context: ${String(m.label ?? "Hex")}.`,
-                                    ]
-                                      .filter(Boolean)
-                                      .join(" ");
-                                    await updateState(session.id, {
-                                      roll_open: true,
-                                      roll_die: "d20",
-                                      roll_prompt: prompt,
-                                      roll_target: "all",
-                                      roll_round_id: randomUUID(),
-                                      roll_results: {},
+                                    await storytellerSetHexFocus({
+                                      sessionId: session.id,
+                                      blockId: String(stageHexBlock.id),
+                                      markerId: String(m.id),
+                                      label: String(m.label ?? ""),
+                                      focusImageUrl: String(m.focusImageUrl ?? ""),
+                                      checkKey: String(m.checkKey ?? ""),
+                                      checkDc: Number(m.checkDc ?? NaN),
+                                      rewardItemIds: Array.isArray(m.rewardItemIds) ? m.rewardItemIds : [],
+                                      playerText: String(m.playerText ?? ""),
+                                      storytellerNotes: String(m.storytellerNotes ?? ""),
+                                      checkPrompts: Array.isArray((m as any).checkPrompts)
+                                        ? (m as any).checkPrompts.map((p: any) => ({
+                                            id: String(p?.id ?? ""),
+                                            checkKey: String(p?.checkKey ?? ""),
+                                            dc: Number(p?.dc ?? NaN),
+                                            storytellerScript: String(p?.storytellerScript ?? ""),
+                                            notes: String(p?.notes ?? ""),
+                                          }))
+                                        : [],
+                                      rollOutcomes: Array.isArray((m as any).rollOutcomes)
+                                        ? (m as any).rollOutcomes.map((o: any) => ({
+                                            id: String(o?.id ?? ""),
+                                            minRoll: Number(o?.minRoll ?? NaN),
+                                            maxRoll: Number(o?.maxRoll ?? NaN),
+                                            label: String(o?.label ?? ""),
+                                            storytellerScript: String(o?.storytellerScript ?? ""),
+                                            notes: String(o?.notes ?? ""),
+                                          }))
+                                        : [],
                                     });
                                     redirect(`/storyteller/sessions/${session.id}`);
                                   }}
                                 >
-                                  <button className="rounded border px-2 py-1 text-xs">
-                                    Prompt {checkKey}
-                                  </button>
+                                  <button className="rounded border px-2 py-1 text-xs">Focus</button>
                                 </form>
                               </div>
-                            );
-                          })}
-                        </div>
                             </>
                           );
                         })()}
