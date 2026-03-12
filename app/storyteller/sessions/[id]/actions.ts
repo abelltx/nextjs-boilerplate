@@ -702,6 +702,13 @@ export async function storytellerSetHexFocus(input: {
   rewardItemIds?: string[];
   playerText?: string | null;
   storytellerNotes?: string | null;
+  checkPrompts?: Array<{
+    id?: string;
+    checkKey?: string;
+    dc?: number | null;
+    storytellerScript?: string;
+    notes?: string | null;
+  }>;
   rollOutcomes?: Array<{
     id?: string;
     minRoll?: number | null;
@@ -727,6 +734,18 @@ export async function storytellerSetHexFocus(input: {
     reward_item_ids: cleanIds(input.rewardItemIds),
     player_text: String(input.playerText ?? "").trim() || null,
     storyteller_notes: String(input.storytellerNotes ?? "").trim() || null,
+    check_prompts: (Array.isArray(input.checkPrompts) ? input.checkPrompts : [])
+      .map((p: any, i: number) => {
+        const dcRaw = Number(p?.dc ?? NaN);
+        return {
+          id: String(p?.id ?? `check-${i + 1}`),
+          check_key: String(p?.checkKey ?? "").trim(),
+          dc: Number.isFinite(dcRaw) ? Math.max(0, Math.floor(dcRaw)) : null,
+          storyteller_script: String(p?.storytellerScript ?? "").trim(),
+          notes: String(p?.notes ?? "").trim() || null,
+        };
+      })
+      .filter((p: any) => String(p.check_key ?? "").trim().length > 0),
     roll_outcomes: (Array.isArray(input.rollOutcomes) ? input.rollOutcomes : [])
       .map((o: any, i: number) => {
         const minRaw = Number(o?.minRoll ?? NaN);

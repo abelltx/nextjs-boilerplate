@@ -1313,7 +1313,7 @@ export default async function DmScreenPage({
                         <img
                           src={presentedBlock.image_url}
                           alt={presentedBlock.title ?? "Presented"}
-                          className="w-full max-h-56 object-cover"
+                          className="w-full h-auto block"
                         />
                         {previewMapMarkers.map((m, i) => (
                           <div
@@ -1366,39 +1366,114 @@ export default async function DmScreenPage({
               <div className="rounded border bg-white p-2 space-y-2">
                 <div className="text-[11px] uppercase text-gray-500">Hex Director (Live)</div>
                 {stageHexMarkers.length ? (
-                  <div className="flex flex-wrap gap-1.5">
+                  <div className="space-y-1.5">
                     {stageHexMarkers.map((m) => (
-                      <form
-                        key={m.id}
-                        action={async () => {
-                          "use server";
-                          await storytellerSetHexFocus({
-                            sessionId: session.id,
-                            blockId: String(stageHexBlock.id),
-                            markerId: String(m.id),
-                            label: String(m.label ?? ""),
-                            focusImageUrl: String(m.focusImageUrl ?? ""),
-                            checkKey: String(m.checkKey ?? ""),
-                            checkDc: Number(m.checkDc ?? NaN),
-                            rewardItemIds: Array.isArray(m.rewardItemIds) ? m.rewardItemIds : [],
-                            playerText: String(m.playerText ?? ""),
-                            storytellerNotes: String(m.storytellerNotes ?? ""),
-                            rollOutcomes: Array.isArray((m as any).rollOutcomes)
-                              ? (m as any).rollOutcomes.map((o: any) => ({
-                                  id: String(o?.id ?? ""),
-                                  minRoll: Number(o?.minRoll ?? NaN),
-                                  maxRoll: Number(o?.maxRoll ?? NaN),
-                                  label: String(o?.label ?? ""),
-                                  storytellerScript: String(o?.storytellerScript ?? ""),
-                                  notes: String(o?.notes ?? ""),
-                                }))
-                              : [],
-                          });
-                          redirect(`/storyteller/sessions/${session.id}`);
-                        }}
-                      >
-                        <button className="rounded border px-2 py-1 text-xs">Focus: {m.label}</button>
-                      </form>
+                      <div key={m.id} className="rounded border bg-gray-50 px-2 py-1.5 flex items-center justify-between gap-2">
+                        {(() => {
+                          const prompts = Array.isArray((m as any).checkPrompts) && (m as any).checkPrompts.length
+                            ? ((m as any).checkPrompts as any[])
+                            : String(m.checkKey ?? "").trim()
+                              ? [{
+                                  id: "legacy",
+                                  checkKey: String(m.checkKey ?? "").trim(),
+                                  dc: Number(m.checkDc ?? NaN),
+                                  storytellerScript: "",
+                                }]
+                              : [];
+                          return (
+                            <>
+                        <div className="min-w-0">
+                          <div className="text-xs font-semibold truncate">{m.label}</div>
+                          <div className="text-[11px] text-gray-600 truncate">
+                            {prompts.length
+                              ? `${prompts.length} check prompt${prompts.length === 1 ? "" : "s"}`
+                              : "No check configured"}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <form
+                            action={async () => {
+                              "use server";
+                              await storytellerSetHexFocus({
+                                sessionId: session.id,
+                                blockId: String(stageHexBlock.id),
+                                markerId: String(m.id),
+                                label: String(m.label ?? ""),
+                                focusImageUrl: String(m.focusImageUrl ?? ""),
+                                checkKey: String(m.checkKey ?? ""),
+                                checkDc: Number(m.checkDc ?? NaN),
+                                rewardItemIds: Array.isArray(m.rewardItemIds) ? m.rewardItemIds : [],
+                                playerText: String(m.playerText ?? ""),
+                                storytellerNotes: String(m.storytellerNotes ?? ""),
+                                checkPrompts: Array.isArray((m as any).checkPrompts)
+                                  ? (m as any).checkPrompts.map((p: any) => ({
+                                      id: String(p?.id ?? ""),
+                                      checkKey: String(p?.checkKey ?? ""),
+                                      dc: Number(p?.dc ?? NaN),
+                                      storytellerScript: String(p?.storytellerScript ?? ""),
+                                      notes: String(p?.notes ?? ""),
+                                    }))
+                                  : [],
+                                rollOutcomes: Array.isArray((m as any).rollOutcomes)
+                                  ? (m as any).rollOutcomes.map((o: any) => ({
+                                      id: String(o?.id ?? ""),
+                                      minRoll: Number(o?.minRoll ?? NaN),
+                                      maxRoll: Number(o?.maxRoll ?? NaN),
+                                      label: String(o?.label ?? ""),
+                                      storytellerScript: String(o?.storytellerScript ?? ""),
+                                      notes: String(o?.notes ?? ""),
+                                    }))
+                                  : [],
+                              });
+                              redirect(`/storyteller/sessions/${session.id}`);
+                            }}
+                          >
+                            <button className="rounded border px-2 py-1 text-xs">Focus</button>
+                          </form>
+                          {prompts.map((p: any) => {
+                            const checkKey = String(p?.checkKey ?? "").trim();
+                            const dcNum = Number(p?.dc ?? NaN);
+                            const hasDc = Number.isFinite(dcNum) && dcNum > 0;
+                            const stScript = String(p?.storytellerScript ?? "").trim();
+                            return (
+                              <form
+                                key={`${m.id}-${String(p?.id ?? checkKey)}`}
+                                action={async () => {
+                                  "use server";
+                                  if (!checkKey) {
+                                    redirect(`/storyteller/sessions/${session.id}`);
+                                  }
+                                  const prompt = [
+                                    "Roll Request",
+                                    `${checkKey} check${hasDc ? ` (DC ${Math.max(0, Math.floor(dcNum))})` : ""}.`,
+                                    `Click ${checkKey} in your sheet and report your total.`,
+                                    `Context: ${String(m.label ?? "Hex")}.`,
+                                    stScript ? `ST: ${stScript}` : "",
+                                  ]
+                                    .filter(Boolean)
+                                    .join(" ");
+                                  await updateState(session.id, {
+                                    roll_open: true,
+                                    roll_die: "d20",
+                                    roll_prompt: prompt,
+                                    roll_target: "all",
+                                    roll_round_id: randomUUID(),
+                                    roll_results: {},
+                                  });
+                                  redirect(`/storyteller/sessions/${session.id}`);
+                                }}
+                              >
+                                <button className="rounded border px-2 py-1 text-xs">
+                                  Prompt {checkKey}
+                                </button>
+                              </form>
+                            );
+                          })}
+                        </div>
+                            </>
+                          );
+                        })()}
+                      </div>
                     ))}
                     <form
                       action={async () => {

@@ -13,6 +13,13 @@ export type HexMarker = MapMarker & {
   rewardItemIds?: string[];
   playerText?: string | null;
   storytellerNotes?: string | null;
+  checkPrompts?: Array<{
+    id: string;
+    checkKey: string;
+    dc: number | null;
+    storytellerScript?: string | null;
+    notes?: string | null;
+  }>;
   rollOutcomes?: Array<{
     id: string;
     minRoll: number | null;
@@ -70,6 +77,19 @@ export function extractHexMarkers(meta: any): HexMarker[] {
       );
       const checkDcRaw = Number(m?.check_dc ?? NaN);
       const rollOutcomesRaw = Array.isArray(m?.roll_outcomes) ? m.roll_outcomes : [];
+      const checkPromptsRaw = Array.isArray(m?.check_prompts) ? m.check_prompts : [];
+      const checkPrompts = checkPromptsRaw
+        .map((p: any, pi: number) => {
+          const dcRaw = Number(p?.dc ?? NaN);
+          return {
+            id: String(p?.id ?? `check-${pi + 1}`),
+            checkKey: String(p?.check_key ?? "").trim(),
+            dc: Number.isFinite(dcRaw) ? Math.max(0, Math.floor(dcRaw)) : null,
+            storytellerScript: String(p?.storyteller_script ?? "").trim() || null,
+            notes: String(p?.notes ?? "").trim() || null,
+          };
+        })
+        .filter((p: any) => String(p.checkKey ?? "").trim().length > 0);
       const rollOutcomes = rollOutcomesRaw
         .map((o: any, oi: number) => {
           const minRaw = Number(o?.min_roll ?? NaN);
@@ -98,6 +118,7 @@ export function extractHexMarkers(meta: any): HexMarker[] {
         rewardItemIds,
         playerText: String(m?.player_text ?? "").trim() || null,
         storytellerNotes: String(m?.storyteller_notes ?? "").trim() || null,
+        checkPrompts,
         rollOutcomes,
       } as HexMarker;
     })

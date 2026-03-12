@@ -14,6 +14,13 @@ type Marker = {
   reward_item_ids?: string[];
   player_text?: string;
   storyteller_notes?: string;
+  check_prompts?: Array<{
+    id: string;
+    check_key: string;
+    dc?: number | null;
+    storyteller_script?: string;
+    notes?: string;
+  }>;
   roll_outcomes?: Array<{
     id: string;
     min_roll?: number | null;
@@ -50,6 +57,15 @@ function normalizeMarkers(input: any): Marker[] {
         : [],
     player_text: String(m?.player_text ?? "").trim(),
     storyteller_notes: String(m?.storyteller_notes ?? "").trim(),
+    check_prompts: Array.isArray(m?.check_prompts)
+      ? m.check_prompts.map((p: any, pi: number) => ({
+          id: String(p?.id ?? `check-${pi + 1}`),
+          check_key: String(p?.check_key ?? "").trim(),
+          dc: Number.isFinite(Number(p?.dc ?? NaN)) ? Math.max(0, Math.floor(Number(p?.dc))) : null,
+          storyteller_script: String(p?.storyteller_script ?? "").trim(),
+          notes: String(p?.notes ?? "").trim(),
+        }))
+      : [],
     roll_outcomes: Array.isArray(m?.roll_outcomes)
       ? m.roll_outcomes.map((o: any, oi: number) => ({
           id: String(o?.id ?? `outcome-${oi + 1}`),
@@ -185,6 +201,62 @@ export default function MapMarkerEditorClient(props: {
     );
   }
 
+  function addCheckPromptToSelected() {
+    if (!selectedId) return;
+    setMarkers((prev) =>
+      prev.map((m) => {
+        if (m.id !== selectedId) return m;
+        const list = Array.isArray(m.check_prompts) ? m.check_prompts : [];
+        return {
+          ...m,
+          check_prompts: [
+            ...list,
+            {
+              id: `check-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+              check_key: "",
+              dc: null,
+              storyteller_script: "",
+              notes: "",
+            },
+          ],
+        };
+      })
+    );
+  }
+
+  function updateCheckPrompt(checkId: string, patch: Record<string, any>) {
+    if (!selectedId) return;
+    setMarkers((prev) =>
+      prev.map((m) => {
+        if (m.id !== selectedId) return m;
+        const list = Array.isArray(m.check_prompts) ? m.check_prompts : [];
+        return {
+          ...m,
+          check_prompts: list.map((p) => {
+            if (p.id !== checkId) return p;
+            const next: any = { ...p, ...patch };
+            if ("dc" in patch) {
+              const n = Number(next.dc ?? NaN);
+              next.dc = Number.isFinite(n) ? Math.max(0, Math.floor(n)) : null;
+            }
+            return next;
+          }),
+        };
+      })
+    );
+  }
+
+  function removeCheckPrompt(checkId: string) {
+    if (!selectedId) return;
+    setMarkers((prev) =>
+      prev.map((m) => {
+        if (m.id !== selectedId) return m;
+        const list = Array.isArray(m.check_prompts) ? m.check_prompts : [];
+        return { ...m, check_prompts: list.filter((p) => p.id !== checkId) };
+      })
+    );
+  }
+
   function moveMarkerByClient(clientX: number, clientY: number) {
     if (!draggingId || !wrapRef.current) return;
     const rect = wrapRef.current.getBoundingClientRect();
@@ -264,7 +336,11 @@ export default function MapMarkerEditorClient(props: {
                 <div className="text-[11px] text-gray-500">Hex {i + 1}</div>
                 <div className="text-sm font-semibold truncate">{m.label || `Hex ${i + 1}`}</div>
                 <div className="text-[11px] text-gray-600 truncate">
-                  {m.check_key ? `${m.check_key}${m.check_dc ? ` DC ${m.check_dc}` : ""}` : "No check"}
+                  {(m.check_prompts ?? []).length
+                    ? `${(m.check_prompts ?? []).length} prompt${(m.check_prompts ?? []).length === 1 ? "" : "s"}`
+                    : m.check_key
+                      ? `${m.check_key}${m.check_dc ? ` DC ${m.check_dc}` : ""}`
+                      : "No check"}
                 </div>
                 <div className="text-[11px] text-gray-600 truncate">
                   Rewards: {(m.reward_item_ids ?? []).length}
@@ -451,6 +527,89 @@ export default function MapMarkerEditorClient(props: {
                 onChange={(e) => updateSelected({ storyteller_notes: e.target.value })}
                 placeholder="Storyteller notes for this hex (optional)"
               />
+              <div className="md:col-span-4 rounded border bg-gray-50 p-2 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-[11px] uppercase text-gray-500">Check Prompts (per hex)</div>
+                  <button
+                    type="button"
+                    className="rounded border px-2 py-1 text-xs"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      addCheckPromptToSelected();
+                    }}
+                  >
+                    + Add Check Prompt
+                  </button>
+                </div>
+                {(selected.check_prompts ?? []).length ? (
+                  <div className="space-y-2">
+                    {(selected.check_prompts ?? []).map((p, pi) => (
+                      <div key={p.id} className="rounded border bg-white p-2 space-y-2">
+                        <div className="grid grid-cols-1 gap-2 md:grid-cols-5">
+                          <select
+                            className="border rounded p-2 text-sm md:col-span-2"
+                            value={p.check_key ?? ""}
+                            onChange={(e) => updateCheckPrompt(p.id, { check_key: e.target.value })}
+                          >
+                            <option value="">Select check</option>
+                            {CHECK_OPTIONS.map((k) => (
+                              <option key={k} value={k}>
+                                {k}
+                              </option>
+                            ))}
+                          </select>
+                          <input
+                            className="border rounded p-2 text-sm"
+                            type="number"
+                            min={0}
+                            step="1"
+                            value={p.dc ?? ""}
+                            onChange={(e) =>
+                              updateCheckPrompt(p.id, {
+                                dc: e.target.value.trim() ? Number(e.target.value) : null,
+                              })
+                            }
+                            placeholder="DC"
+                          />
+                          <div className="text-xs text-gray-500 flex items-center">
+                            Prompt {pi + 1}
+                          </div>
+                          <div className="flex items-center justify-end">
+                            <button
+                              type="button"
+                              className="rounded border px-2 py-1 text-xs text-red-700"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                removeCheckPrompt(p.id);
+                              }}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                        <textarea
+                          className="border rounded p-2 text-sm w-full h-16"
+                          value={p.storyteller_script ?? ""}
+                          onChange={(e) => updateCheckPrompt(p.id, { storyteller_script: e.target.value })}
+                          placeholder="Storyteller readout for this check prompt"
+                        />
+                        <textarea
+                          className="border rounded p-2 text-sm w-full h-14"
+                          value={p.notes ?? ""}
+                          onChange={(e) => updateCheckPrompt(p.id, { notes: e.target.value })}
+                          placeholder="Optional mechanics note"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-xs text-gray-500">
+                    No check prompts yet. Add Perception/Investigation/History/Religion style prompts here.
+                  </div>
+                )}
+              </div>
               <div className="md:col-span-4 rounded border bg-gray-50 p-2 space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <div className="text-[11px] uppercase text-gray-500">Roll Outcomes (Storyteller)</div>
