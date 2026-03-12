@@ -746,13 +746,23 @@ export async function storytellerSetHexFocus(input: {
     updated_at: new Date().toISOString(),
   };
 
-  await updateState(sessionId, { hex_focus: focus });
+  try {
+    await updateState(sessionId, { hex_focus: focus });
+  } catch (e) {
+    console.error("storytellerSetHexFocus failed:", e);
+    return;
+  }
 }
 
 export async function storytellerClearHexFocus(input: { sessionId: string }) {
   const sessionId = String(input.sessionId ?? "").trim();
   if (!isUuid(sessionId)) return;
-  await updateState(sessionId, { hex_focus: null });
+  try {
+    await updateState(sessionId, { hex_focus: null });
+  } catch (e) {
+    console.error("storytellerClearHexFocus failed:", e);
+    return;
+  }
 }
 
 async function grantItemsToCharacter(admin: any, characterId: string, itemIds: string[]) {
@@ -815,7 +825,7 @@ export async function storytellerResolveHexReward(input: {
   const admin = createAdminClient() ?? supabase;
   const { data: st, error: stErr } = await supabase
     .from("session_state")
-    .select("hex_focus,roll_results")
+    .select("*")
     .eq("session_id", sessionId)
     .maybeSingle();
   if (stErr || !st) return;
