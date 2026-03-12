@@ -158,7 +158,11 @@ export default function MapMarkerEditorClient(props: {
             <button
               type="button"
               className="rounded border px-2 py-1 text-xs"
-              onClick={() => addMarker(50, 50)}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                addMarker(50, 50);
+              }}
             >
               + Blank Hex Card
             </button>
@@ -172,7 +176,11 @@ export default function MapMarkerEditorClient(props: {
                   "min-w-[170px] rounded border p-2 text-left",
                   selectedId === m.id ? "bg-white border-black" : "bg-white/80",
                 ].join(" ")}
-                onClick={() => setSelectedId(m.id)}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setSelectedId(m.id);
+                }}
               >
                 <div className="text-[11px] text-gray-500">Hex {i + 1}</div>
                 <div className="text-sm font-semibold truncate">{m.label || `Hex ${i + 1}`}</div>
@@ -367,7 +375,15 @@ export default function MapMarkerEditorClient(props: {
             </>
           ) : null}
           <div className="md:col-span-4">
-            <button type="button" className="rounded border px-2 py-1 text-xs text-red-700" onClick={removeSelected}>
+            <button
+              type="button"
+              className="rounded border px-2 py-1 text-xs text-red-700"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                removeSelected();
+              }}
+            >
               Remove selected marker
             </button>
           </div>
