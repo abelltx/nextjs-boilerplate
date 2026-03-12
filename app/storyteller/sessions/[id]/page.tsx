@@ -478,7 +478,11 @@ export default async function DmScreenPage({
   const currentRollRows = Object.entries((((state as any)?.roll_results ?? {}) as Record<string, any>) || {})
     .map(([playerId, row]) => ({
       playerId: String(playerId ?? "").trim(),
-      total: Number((row as any)?.total ?? NaN),
+      total: Number(
+        (row as any)?.total ??
+        (row as any)?.value ??
+        NaN
+      ),
     }))
     .filter((r) => r.playerId && Number.isFinite(r.total));
   const highestRollRow = currentRollRows.length
