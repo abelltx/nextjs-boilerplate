@@ -1367,50 +1367,99 @@ export default async function DmScreenPage({
                 <div className="text-[11px] uppercase text-gray-500">Hex Director (Live)</div>
                 {stageHexMarkers.length ? (
                   <div className="space-y-1.5">
-                    {stageHexMarkers.map((m) => (
-                      <div key={m.id} className="rounded border bg-gray-50 px-2 py-1.5 flex items-center justify-between gap-2">
-                        {(() => {
-                          const prompts = Array.isArray((m as any).checkPrompts) && (m as any).checkPrompts.length
-                            ? ((m as any).checkPrompts as any[])
-                            : String(m.checkKey ?? "").trim()
-                              ? [{
-                                  id: "legacy",
-                                  checkKey: String(m.checkKey ?? "").trim(),
-                                  dc: Number(m.checkDc ?? NaN),
-                                  storytellerScript: "",
-                                }]
-                              : [];
-                          const promptScripts = prompts.filter((p: any) => String(p?.storytellerScript ?? "").trim());
-                          return (
-                            <>
-                              <div className="flex-1 min-w-0 space-y-1">
-                                <div className="flex items-center gap-1.5 min-w-0">
-                                  <div className="text-xs font-semibold truncate">{m.label}</div>
-                                  {prompts.length ? (
-                                    <div className="flex gap-1 overflow-x-auto">
-                                      {prompts.map((p: any) => {
-                                        const ck = String(p?.checkKey ?? "").trim();
-                                        const dcNum = Number(p?.dc ?? NaN);
-                                        const hasDc = Number.isFinite(dcNum) && dcNum > 0;
-                                        return (
-                                          <span key={`chip-${m.id}-${String(p?.id ?? ck)}`} className="shrink-0 rounded border bg-white px-1.5 py-0.5 text-[10px]">
-                                            {ck || "Check"}{hasDc ? ` DC ${Math.max(0, Math.floor(dcNum))}` : ""}
-                                          </span>
-                                        );
-                                      })}
-                                    </div>
-                                  ) : (
-                                    <div className="text-[11px] text-gray-500">No check configured</div>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  {prompts.map((p: any) => {
-                                    const checkKey = String(p?.checkKey ?? "").trim();
-                                    const dcNum = Number(p?.dc ?? NaN);
-                                    const hasDc = Number.isFinite(dcNum) && dcNum > 0;
-                                    return (
+                    {stageHexMarkers.map((m) => {
+                      const prompts = Array.isArray((m as any).checkPrompts) && (m as any).checkPrompts.length
+                        ? ((m as any).checkPrompts as any[])
+                        : String(m.checkKey ?? "").trim()
+                          ? [{
+                              id: "legacy",
+                              checkKey: String(m.checkKey ?? "").trim(),
+                              dc: Number(m.checkDc ?? NaN),
+                              storytellerScript: "",
+                            }]
+                          : [];
+                      return (
+                        <details key={m.id} className="rounded border bg-gray-50" open={false}>
+                          <summary className="cursor-pointer px-2 py-1.5 flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="text-xs font-semibold truncate">{m.label}</div>
+                              <div className="text-[11px] text-gray-600">
+                                {prompts.length
+                                  ? `${prompts.length} prompt${prompts.length === 1 ? "" : "s"}`
+                                  : "No check prompts"}
+                              </div>
+                            </div>
+                            <div className="flex gap-1 overflow-x-auto">
+                              {prompts.map((p: any) => {
+                                const ck = String(p?.checkKey ?? "").trim();
+                                const dcNum = Number(p?.dc ?? NaN);
+                                const hasDc = Number.isFinite(dcNum) && dcNum > 0;
+                                return (
+                                  <span key={`chip-${m.id}-${String(p?.id ?? ck)}`} className="shrink-0 rounded border bg-white px-1.5 py-0.5 text-[10px]">
+                                    {ck || "Check"}{hasDc ? ` DC ${Math.max(0, Math.floor(dcNum))}` : ""}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </summary>
+                          <div className="border-t bg-white p-2 space-y-2">
+                            <form
+                              action={async () => {
+                                "use server";
+                                await storytellerSetHexFocus({
+                                  sessionId: session.id,
+                                  blockId: String(stageHexBlock.id),
+                                  markerId: String(m.id),
+                                  label: String(m.label ?? ""),
+                                  focusImageUrl: String(m.focusImageUrl ?? ""),
+                                  checkKey: String(m.checkKey ?? ""),
+                                  checkDc: Number(m.checkDc ?? NaN),
+                                  rewardItemIds: Array.isArray(m.rewardItemIds) ? m.rewardItemIds : [],
+                                  playerText: String(m.playerText ?? ""),
+                                  storytellerNotes: String(m.storytellerNotes ?? ""),
+                                  checkPrompts: Array.isArray((m as any).checkPrompts)
+                                    ? (m as any).checkPrompts.map((p: any) => ({
+                                        id: String(p?.id ?? ""),
+                                        checkKey: String(p?.checkKey ?? ""),
+                                        dc: Number(p?.dc ?? NaN),
+                                        storytellerScript: String(p?.storytellerScript ?? ""),
+                                        notes: String(p?.notes ?? ""),
+                                      }))
+                                    : [],
+                                  rollOutcomes: Array.isArray((m as any).rollOutcomes)
+                                    ? (m as any).rollOutcomes.map((o: any) => ({
+                                        id: String(o?.id ?? ""),
+                                        minRoll: Number(o?.minRoll ?? NaN),
+                                        maxRoll: Number(o?.maxRoll ?? NaN),
+                                        label: String(o?.label ?? ""),
+                                        storytellerScript: String(o?.storytellerScript ?? ""),
+                                        notes: String(o?.notes ?? ""),
+                                      }))
+                                    : [],
+                                });
+                                redirect(`/storyteller/sessions/${session.id}`);
+                              }}
+                            >
+                              <button className="rounded border px-2 py-1 text-xs">Focus This Hex</button>
+                            </form>
+                            {prompts.length ? (
+                              <div className="space-y-2">
+                                {prompts.map((p: any) => {
+                                  const checkKey = String(p?.checkKey ?? "").trim();
+                                  const dcNum = Number(p?.dc ?? NaN);
+                                  const hasDc = Number.isFinite(dcNum) && dcNum > 0;
+                                  const stScript = String(p?.storytellerScript ?? "").trim();
+                                  return (
+                                    <div key={`${m.id}-${String(p?.id ?? checkKey)}`} className="rounded border bg-gray-50 p-2 space-y-1">
+                                      <div className="text-xs font-semibold">
+                                        {checkKey || "Check"}{hasDc ? ` (DC ${Math.max(0, Math.floor(dcNum))})` : ""}
+                                      </div>
+                                      {stScript ? (
+                                        <div className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] text-emerald-900 whitespace-pre-wrap">
+                                          {stScript}
+                                        </div>
+                                      ) : null}
                                       <form
-                                        key={`${m.id}-${String(p?.id ?? checkKey)}`}
                                         action={async () => {
                                           "use server";
                                           if (!checkKey) {
@@ -1435,73 +1484,19 @@ export default async function DmScreenPage({
                                           redirect(`/storyteller/sessions/${session.id}`);
                                         }}
                                       >
-                                        <button className="rounded border px-2 py-1 text-[11px]">
-                                          Prompt {checkKey}
-                                        </button>
+                                        <button className="rounded border px-2 py-1 text-[11px]">Prompt {checkKey}</button>
                                       </form>
-                                    );
-                                  })}
-                                  {promptScripts.length ? (
-                                    <details className="rounded border bg-white px-1.5 py-1 text-[11px]">
-                                      <summary className="cursor-pointer">Scripts ({promptScripts.length})</summary>
-                                      <div className="mt-1 space-y-1.5 max-w-[28rem]">
-                                        {promptScripts.map((p: any, idx: number) => (
-                                          <div key={`script-${m.id}-${idx}`} className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] text-emerald-900 whitespace-pre-wrap">
-                                            <div className="font-semibold">{String(p?.checkKey ?? "Check")}</div>
-                                            <div>{String(p?.storytellerScript ?? "")}</div>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </details>
-                                  ) : null}
-                                </div>
+                                    </div>
+                                  );
+                                })}
                               </div>
-                              <div className="flex items-center gap-1.5">
-                                <form
-                                  action={async () => {
-                                    "use server";
-                                    await storytellerSetHexFocus({
-                                      sessionId: session.id,
-                                      blockId: String(stageHexBlock.id),
-                                      markerId: String(m.id),
-                                      label: String(m.label ?? ""),
-                                      focusImageUrl: String(m.focusImageUrl ?? ""),
-                                      checkKey: String(m.checkKey ?? ""),
-                                      checkDc: Number(m.checkDc ?? NaN),
-                                      rewardItemIds: Array.isArray(m.rewardItemIds) ? m.rewardItemIds : [],
-                                      playerText: String(m.playerText ?? ""),
-                                      storytellerNotes: String(m.storytellerNotes ?? ""),
-                                      checkPrompts: Array.isArray((m as any).checkPrompts)
-                                        ? (m as any).checkPrompts.map((p: any) => ({
-                                            id: String(p?.id ?? ""),
-                                            checkKey: String(p?.checkKey ?? ""),
-                                            dc: Number(p?.dc ?? NaN),
-                                            storytellerScript: String(p?.storytellerScript ?? ""),
-                                            notes: String(p?.notes ?? ""),
-                                          }))
-                                        : [],
-                                      rollOutcomes: Array.isArray((m as any).rollOutcomes)
-                                        ? (m as any).rollOutcomes.map((o: any) => ({
-                                            id: String(o?.id ?? ""),
-                                            minRoll: Number(o?.minRoll ?? NaN),
-                                            maxRoll: Number(o?.maxRoll ?? NaN),
-                                            label: String(o?.label ?? ""),
-                                            storytellerScript: String(o?.storytellerScript ?? ""),
-                                            notes: String(o?.notes ?? ""),
-                                          }))
-                                        : [],
-                                    });
-                                    redirect(`/storyteller/sessions/${session.id}`);
-                                  }}
-                                >
-                                  <button className="rounded border px-2 py-1 text-xs">Focus</button>
-                                </form>
-                              </div>
-                            </>
-                          );
-                        })()}
-                      </div>
-                    ))}
+                            ) : (
+                              <div className="text-xs text-gray-500">No check prompts configured for this marker.</div>
+                            )}
+                          </div>
+                        </details>
+                      );
+                    })}
                     <form
                       action={async () => {
                         "use server";
