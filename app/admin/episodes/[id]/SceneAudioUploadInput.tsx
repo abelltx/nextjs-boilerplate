@@ -24,25 +24,28 @@ export default function SceneAudioUploadInput(props: { name?: string; multiple?:
         multiple={multiple}
         className="w-full border rounded p-2 text-sm"
         onChange={(e) => {
-          const files = Array.from(e.currentTarget.files ?? []);
-          if (!files.length) {
-            setMsg("No files selected.");
-            return;
+          try {
+            const files = Array.from(e.currentTarget.files ?? []);
+            if (!files.length) {
+              setMsg("No files selected.");
+              return;
+            }
+            const tooLarge = files.filter((f) => f.size > MAX_FILE_BYTES);
+            if (!tooLarge.length) {
+              setMsg(`Ready: ${files.length} file(s).`);
+              return;
+            }
+            // Avoid mutating input.files directly (can throw in some browser/runtime combos).
+            e.currentTarget.value = "";
+            setMsg(
+              `One or more files were too large (${tooLarge
+                .map((f) => `${f.name} ${human(f.size)}`)
+                .join(", ")}). Max ${human(MAX_FILE_BYTES)} per file. Please reselect smaller files.`
+            );
+          } catch {
+            e.currentTarget.value = "";
+            setMsg(`Could not validate selected files. Please try smaller audio files (max ${human(MAX_FILE_BYTES)}).`);
           }
-          const tooLarge = files.filter((f) => f.size > MAX_FILE_BYTES);
-          if (!tooLarge.length) {
-            setMsg(`Ready: ${files.length} file(s).`);
-            return;
-          }
-          const ok = files.filter((f) => f.size <= MAX_FILE_BYTES);
-          const dt = new DataTransfer();
-          for (const f of ok) dt.items.add(f);
-          e.currentTarget.files = dt.files;
-          setMsg(
-            `Skipped ${tooLarge.length} large file(s): ${tooLarge
-              .map((f) => `${f.name} (${human(f.size)})`)
-              .join(", ")}. Max ${human(MAX_FILE_BYTES)} per file.`
-          );
         }}
       />
       <div className="text-[11px] text-gray-500">{msg}</div>
