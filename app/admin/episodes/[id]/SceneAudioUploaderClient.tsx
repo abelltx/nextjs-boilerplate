@@ -4,9 +4,16 @@ import { useMemo, useState } from "react";
 import { createClient } from "@/utils/supabase/client";
 
 type Track = { title: string; url: string };
+const MAX_AUDIO_BYTES = 6 * 1024 * 1024;
 
 function safeName(name: string) {
   return String(name || "track.mp3").replace(/[^a-zA-Z0-9._-]/g, "_");
+}
+
+function human(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
 export default function SceneAudioUploaderClient(props: {
@@ -35,6 +42,10 @@ export default function SceneAudioUploaderClient(props: {
     for (const file of list) {
       try {
         if (!file.size || file.size <= 0) continue;
+        if (file.size > MAX_AUDIO_BYTES) {
+          setMsg(`Skipped ${file.name}: ${human(file.size)} exceeds max ${human(MAX_AUDIO_BYTES)}.`);
+          continue;
+        }
         const path = `episode-audio/${props.episodeId}/${Date.now()}-${safeName(file.name)}`;
         const { error } = await supabase.storage.from("episode-assets").upload(path, file, {
           upsert: true,
@@ -63,6 +74,7 @@ export default function SceneAudioUploaderClient(props: {
     <div className="rounded border p-2 space-y-2">
       <div className="text-xs uppercase text-gray-500">Scene Music (ST only)</div>
       <input
+        id={`scene-audio-upload-${props.episodeId}`}
         type="file"
         accept="audio/*,.mp3,.wav,.m4a,.ogg"
         multiple
@@ -101,4 +113,3 @@ export default function SceneAudioUploaderClient(props: {
     </div>
   );
 }
-
