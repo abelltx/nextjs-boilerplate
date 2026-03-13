@@ -16,6 +16,7 @@ type Marker = {
   storyteller_notes?: string;
   check_prompts?: Array<{
     id: string;
+    label?: string;
     check_key: string;
     dc?: number | null;
     storyteller_script?: string;
@@ -60,6 +61,7 @@ function normalizeMarkers(input: any): Marker[] {
     check_prompts: Array.isArray(m?.check_prompts)
       ? m.check_prompts.map((p: any, pi: number) => ({
           id: String(p?.id ?? `check-${pi + 1}`),
+          label: String(p?.label ?? "").trim(),
           check_key: String(p?.check_key ?? "").trim(),
           dc: Number.isFinite(Number(p?.dc ?? NaN)) ? Math.max(0, Math.floor(Number(p?.dc))) : null,
           storyteller_script: String(p?.storyteller_script ?? "").trim(),
@@ -213,6 +215,7 @@ export default function MapMarkerEditorClient(props: {
             ...list,
             {
               id: `check-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+              label: "",
               check_key: "",
               dc: null,
               storyteller_script: "",
@@ -547,8 +550,14 @@ export default function MapMarkerEditorClient(props: {
                     {(selected.check_prompts ?? []).map((p, pi) => (
                       <div key={p.id} className="rounded border bg-white p-2 space-y-2">
                         <div className="grid grid-cols-1 gap-2 md:grid-cols-5">
-                          <select
+                          <input
                             className="border rounded p-2 text-sm md:col-span-2"
+                            value={p.label ?? ""}
+                            onChange={(e) => updateCheckPrompt(p.id, { label: e.target.value })}
+                            placeholder={`Prompt title (optional) e.g. Poster Clue #${pi + 1}`}
+                          />
+                          <select
+                            className="border rounded p-2 text-sm"
                             value={p.check_key ?? ""}
                             onChange={(e) => updateCheckPrompt(p.id, { check_key: e.target.value })}
                           >
@@ -572,9 +581,6 @@ export default function MapMarkerEditorClient(props: {
                             }
                             placeholder="DC"
                           />
-                          <div className="text-xs text-gray-500 flex items-center">
-                            Prompt {pi + 1}
-                          </div>
                           <div className="flex items-center justify-end">
                             <button
                               type="button"

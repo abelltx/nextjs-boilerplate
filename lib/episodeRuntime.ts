@@ -15,6 +15,7 @@ export type HexMarker = MapMarker & {
   storytellerNotes?: string | null;
   checkPrompts?: Array<{
     id: string;
+    label?: string | null;
     checkKey: string;
     dc: number | null;
     storytellerScript?: string | null;
@@ -83,6 +84,7 @@ export function extractHexMarkers(meta: any): HexMarker[] {
           const dcRaw = Number(p?.dc ?? NaN);
           return {
             id: String(p?.id ?? `check-${pi + 1}`),
+            label: String(p?.label ?? "").trim() || null,
             checkKey: String(p?.check_key ?? "").trim(),
             dc: Number.isFinite(dcRaw) ? Math.max(0, Math.floor(dcRaw)) : null,
             storytellerScript: String(p?.storyteller_script ?? "").trim() || null,

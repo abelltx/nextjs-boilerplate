@@ -704,6 +704,7 @@ export async function storytellerSetHexFocus(input: {
   storytellerNotes?: string | null;
   checkPrompts?: Array<{
     id?: string;
+    label?: string;
     checkKey?: string;
     dc?: number | null;
     storytellerScript?: string;
@@ -739,6 +740,7 @@ export async function storytellerSetHexFocus(input: {
         const dcRaw = Number(p?.dc ?? NaN);
         return {
           id: String(p?.id ?? `check-${i + 1}`),
+          label: String(p?.label ?? "").trim() || null,
           check_key: String(p?.checkKey ?? "").trim(),
           dc: Number.isFinite(dcRaw) ? Math.max(0, Math.floor(dcRaw)) : null,
           storyteller_script: String(p?.storytellerScript ?? "").trim(),

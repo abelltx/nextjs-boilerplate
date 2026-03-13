@@ -1387,11 +1387,12 @@ export default async function DmScreenPage({
                       const markerLabel = String(m.label ?? "Hex");
                       const markerHasActivePrompt =
                         rollOpenNow && currentPromptText.toLowerCase().includes(`context: ${markerLabel}`.toLowerCase());
+                      const isFocusedMarker = String(stageHexFocus?.marker_id ?? "") === String(m.id);
                       return (
                         <details
                           key={m.id}
-                          className="rounded border bg-gray-50"
-                          open={markerHasActivePrompt || String(stageHexFocus?.marker_id ?? "") === String(m.id)}
+                          className={`rounded border ${isFocusedMarker || markerHasActivePrompt ? "border-green-400 bg-green-50" : "bg-gray-50"}`}
+                          open={markerHasActivePrompt || isFocusedMarker}
                         >
                           <summary className="cursor-pointer px-2 py-1.5 flex items-center justify-between gap-2">
                             <div className="min-w-0">
@@ -1402,18 +1403,7 @@ export default async function DmScreenPage({
                                   : "No check prompts"}
                               </div>
                             </div>
-                            <div className="flex gap-1 overflow-x-auto">
-                              {prompts.map((p: any) => {
-                                const ck = String(p?.checkKey ?? "").trim();
-                                const dcNum = Number(p?.dc ?? NaN);
-                                const hasDc = Number.isFinite(dcNum) && dcNum > 0;
-                                return (
-                                  <span key={`chip-${m.id}-${String(p?.id ?? ck)}`} className="shrink-0 rounded border bg-white px-1.5 py-0.5 text-[10px]">
-                                    {ck || "Check"}{hasDc ? ` DC ${Math.max(0, Math.floor(dcNum))}` : ""}
-                                  </span>
-                                );
-                              })}
-                            </div>
+                            {isFocusedMarker ? <span className="rounded border bg-white px-1.5 py-0.5 text-[10px]">Focused</span> : null}
                           </summary>
                           <div className="border-t bg-white p-2 space-y-2">
                             <form
@@ -1433,11 +1423,12 @@ export default async function DmScreenPage({
                                   checkPrompts: Array.isArray((m as any).checkPrompts)
                                     ? (m as any).checkPrompts.map((p: any) => ({
                                         id: String(p?.id ?? ""),
+                                        label: String(p?.label ?? ""),
                                         checkKey: String(p?.checkKey ?? ""),
                                         dc: Number(p?.dc ?? NaN),
                                         storytellerScript: String(p?.storytellerScript ?? ""),
                                         notes: String(p?.notes ?? ""),
-                                      }))
+                                    }))
                                     : [],
                                   rollOutcomes: Array.isArray((m as any).rollOutcomes)
                                     ? (m as any).rollOutcomes.map((o: any) => ({
@@ -1459,6 +1450,7 @@ export default async function DmScreenPage({
                               <div className="space-y-2">
                                 {prompts.map((p: any) => {
                                   const checkKey = String(p?.checkKey ?? "").trim();
+                                  const promptLabel = String(p?.label ?? "").trim();
                                   const dcNum = Number(p?.dc ?? NaN);
                                   const hasDc = Number.isFinite(dcNum) && dcNum > 0;
                                   const stScript = String(p?.storytellerScript ?? "").trim();
@@ -1469,6 +1461,7 @@ export default async function DmScreenPage({
                                   return (
                                     <div key={`${m.id}-${String(p?.id ?? checkKey)}`} className="rounded border bg-gray-50 p-2 space-y-1">
                                       <div className="text-xs font-semibold">
+                                        {promptLabel ? `${promptLabel} - ` : ""}
                                         {checkKey || "Check"}{hasDc ? ` (DC ${Math.max(0, Math.floor(dcNum))})` : ""}
                                       </div>
                                       {stScript ? (
