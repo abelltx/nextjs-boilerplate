@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-const MAX_FILE_BYTES = 4 * 1024 * 1024; // 4MB safety for Server Action payloads.
+const MAX_FILE_BYTES = 6 * 1024 * 1024; // 6MB safety for Server Action payloads.
 
 function human(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -11,7 +11,7 @@ function human(bytes: number) {
 }
 
 export default function SceneAudioUploadInput(props: { name?: string; multiple?: boolean }) {
-  const [msg, setMsg] = useState("Upload MP3/audio files. Large files are blocked to avoid upload crashes.");
+  const [msg, setMsg] = useState("Upload MP3/audio files. After Save, the file picker clears (normal browser behavior).");
   const name = props.name ?? "scene_audio_files";
   const multiple = props.multiple ?? true;
 
@@ -49,4 +49,3 @@ export default function SceneAudioUploadInput(props: { name?: string; multiple?:
     </div>
   );
 }
-
