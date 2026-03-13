@@ -39,11 +39,12 @@ export default function SceneAudioUploaderClient(props: {
     setBusy(true);
     setMsg(`Uploading ${list.length} file(s)...`);
     const added: Track[] = [];
+    const issues: string[] = [];
     for (const file of list) {
       try {
         if (!file.size || file.size <= 0) continue;
         if (file.size > MAX_AUDIO_BYTES) {
-          setMsg(`Skipped ${file.name}: ${human(file.size)} exceeds max ${human(MAX_AUDIO_BYTES)}.`);
+          issues.push(`Skipped ${file.name}: ${human(file.size)} exceeds max ${human(MAX_AUDIO_BYTES)}`);
           continue;
         }
         const path = `episode-audio/${props.episodeId}/${Date.now()}-${safeName(file.name)}`;
@@ -52,20 +53,31 @@ export default function SceneAudioUploaderClient(props: {
           contentType: file.type || "audio/mpeg",
         });
         if (error) {
-          setMsg(`Upload failed: ${error.message}`);
+          issues.push(`Failed ${file.name}: ${error.message}`);
           continue;
         }
         const { data: pub } = supabase.storage.from("episode-assets").getPublicUrl(path);
         const url = String(pub?.publicUrl ?? "").trim();
-        if (!url) continue;
+        if (!url) {
+          issues.push(`Failed ${file.name}: could not get public URL`);
+          continue;
+        }
         added.push({ title: file.name || `Track ${tracks.length + added.length + 1}`, url });
       } catch (e: any) {
-        setMsg(`Upload error: ${String(e?.message ?? e)}`);
+        issues.push(`Error ${file.name}: ${String(e?.message ?? e)}`);
       }
     }
     setTracks((prev) => [...prev, ...added]);
     setBusy(false);
-    setMsg(added.length ? `Uploaded ${added.length} track(s). Click Save Scene.` : "No tracks uploaded.");
+    if (added.length && !issues.length) {
+      setMsg(`Uploaded ${added.length} track(s). Click Save Scene.`);
+      return;
+    }
+    if (added.length && issues.length) {
+      setMsg(`Uploaded ${added.length} track(s). ${issues.join(" | ")}`);
+      return;
+    }
+    setMsg(issues.length ? issues.join(" | ") : "No tracks uploaded.");
   }
 
   const hiddenValue = tracks.map((t) => t.url).join("\n");
