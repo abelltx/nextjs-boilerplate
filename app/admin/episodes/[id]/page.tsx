@@ -10,6 +10,7 @@ import {
 } from "@/app/actions/episodeBlocksAdmin";
 import MapMarkerEditorClient from "./MapMarkerEditorClient";
 import NpcTabsEditorClient from "./NpcTabsEditorClient";
+import SceneAudioUploadInput from "./SceneAudioUploadInput";
 
 async function requireAdminServer() {
   const supabase = await createClient();
@@ -750,13 +751,7 @@ export default async function AdminEpisodeEditPage({
 
                       <div className="rounded border p-2 space-y-2">
                         <div className="text-xs uppercase text-gray-500">Scene Music (ST only)</div>
-                        <input
-                          type="file"
-                          name="scene_audio_files"
-                          accept="audio/*,.mp3,.wav,.m4a,.ogg"
-                          multiple
-                          className="w-full border rounded p-2 text-sm"
-                        />
+                        <SceneAudioUploadInput name="scene_audio_files" multiple />
                         <div className="flex flex-wrap gap-3 text-xs">
                           <label className="inline-flex items-center gap-2">
                             <input type="checkbox" name="scene_audio_replace" />
