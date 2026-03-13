@@ -126,61 +126,76 @@ async function withSceneAudioUploads(input: {
   fd: FormData;
   baseMeta: any;
 }) {
-  const bt = String(input.blockType ?? "").trim().toLowerCase();
-  if (bt !== "scene") return { ...((input.baseMeta ?? {}) as Record<string, any>) };
+  try {
+    const bt = String(input.blockType ?? "").trim().toLowerCase();
+    if (bt !== "scene") return { ...((input.baseMeta ?? {}) as Record<string, any>) };
 
-  const next = { ...((input.baseMeta ?? {}) as Record<string, any>) };
-  const storageClient = createAdminClient() ?? input.supabase;
-  const replace = String(input.fd.get("scene_audio_replace") ?? "").trim().toLowerCase() === "on";
-  const clear = String(input.fd.get("scene_audio_clear") ?? "").trim().toLowerCase() === "on";
+    const next = { ...((input.baseMeta ?? {}) as Record<string, any>) };
+    const storageClient = createAdminClient() ?? input.supabase;
+    const replace = String(input.fd.get("scene_audio_replace") ?? "").trim().toLowerCase() === "on";
+    const clear = String(input.fd.get("scene_audio_clear") ?? "").trim().toLowerCase() === "on";
 
-  const existing = Array.isArray(next.scene_audio)
-    ? (next.scene_audio as any[])
-        .map((t: any, i: number) => ({
-          id: String(t?.id ?? `track-${i + 1}`),
-          title: String(t?.title ?? "").trim() || `Track ${i + 1}`,
-          url: String(t?.url ?? "").trim(),
-        }))
-        .filter((t: any) => t.url)
-    : [];
+    const existing = Array.isArray(next.scene_audio)
+      ? (next.scene_audio as any[])
+          .map((t: any, i: number) => ({
+            id: String(t?.id ?? `track-${i + 1}`),
+            title: String(t?.title ?? "").trim() || `Track ${i + 1}`,
+            url: String(t?.url ?? "").trim(),
+          }))
+          .filter((t: any) => t.url)
+      : [];
 
-  let tracks = replace ? [] : [...existing];
-  if (clear) tracks = [];
+    let tracks = replace ? [] : [...existing];
+    if (clear) tracks = [];
 
-  const files = input.fd
-    .getAll("scene_audio_files")
-    .filter((v) => typeof v === "object" && v && "arrayBuffer" in (v as any)) as File[];
+    const files = input.fd
+      .getAll("scene_audio_files")
+      .filter((v) => typeof v === "object" && v && "arrayBuffer" in (v as any)) as File[];
 
-  for (const file of files) {
-    if (!file.size || file.size <= 0) continue;
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const path = `episode-audio/${input.episodeId}/${Date.now()}-${safeName}`;
-    const { error: upErr } = await storageClient.storage
-      .from(EPISODE_ASSETS_BUCKET)
-      .upload(path, file, {
-        upsert: true,
-        contentType: file.type || "audio/mpeg",
-      });
-    if (upErr) throw new Error(`Audio upload failed: ${upErr.message}`);
-    const { data: pub } = storageClient.storage.from(EPISODE_ASSETS_BUCKET).getPublicUrl(path);
-    const publicUrl = String(pub?.publicUrl ?? "").trim();
-    if (!publicUrl) continue;
-    tracks.push({
-      id: `track-${tracks.length + 1}`,
-      title: String(file.name || `Track ${tracks.length + 1}`),
-      url: publicUrl,
-    });
-  }
+    for (const file of files) {
+      try {
+        if (!file.size || file.size <= 0) continue;
+        // Hard guard to avoid server action payload issues and excessive storage writes.
+        if (file.size > 8 * 1024 * 1024) continue;
+        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+        const path = `episode-audio/${input.episodeId}/${Date.now()}-${safeName}`;
+        const { error: upErr } = await storageClient.storage
+          .from(EPISODE_ASSETS_BUCKET)
+          .upload(path, file, {
+            upsert: true,
+            contentType: file.type || "audio/mpeg",
+          });
+        if (upErr) {
+          console.error("scene audio upload failed:", upErr.message);
+          continue;
+        }
+        const { data: pub } = storageClient.storage.from(EPISODE_ASSETS_BUCKET).getPublicUrl(path);
+        const publicUrl = String(pub?.publicUrl ?? "").trim();
+        if (!publicUrl) continue;
+        tracks.push({
+          id: `track-${tracks.length + 1}`,
+          title: String(file.name || `Track ${tracks.length + 1}`),
+          url: publicUrl,
+        });
+      } catch (fileErr) {
+        console.error("scene audio file handling failed:", fileErr);
+        continue;
+      }
+    }
 
-  if (!tracks.length) {
-    delete next.scene_audio;
-    delete next.scene_audio_urls;
+    if (!tracks.length) {
+      delete next.scene_audio;
+      delete next.scene_audio_urls;
+      return next;
+    }
+
+    next.scene_audio = tracks;
+    next.scene_audio_urls = tracks.map((t) => t.url);
     return next;
+  } catch (err) {
+    console.error("withSceneAudioUploads failed:", err);
+    return { ...((input.baseMeta ?? {}) as Record<string, any>) };
   }
-
-  next.scene_audio = tracks;
-  next.scene_audio_urls = tracks.map((t) => t.url);
-  return next;
 }
 
 async function upsertNpcBindingForBlock(input: {
