@@ -26,7 +26,6 @@ import SequenceRail from "@/components/episode-runtime/SequenceRail";
 import RevealCard from "@/components/episode-runtime/RevealCard";
 import CheckPromptCard from "@/components/episode-runtime/CheckPromptCard";
 import NpcTabsCard from "@/components/episode-runtime/NpcTabsCard";
-import SceneAudioPlayer from "@/components/episode-runtime/SceneAudioPlayer";
 import { buildRuntimeSequence, extractHexMarkers, extractMapMarkers } from "@/lib/episodeRuntime";
 import SubmitGlowButton from "@/components/ui/SubmitGlowButton";
 import PlayersPassivePanel from "./PlayersPassivePanel";
@@ -1331,10 +1330,27 @@ export default async function DmScreenPage({
           <div className="text-xs uppercase text-gray-500">Stage</div>
           <div className="mt-2 rounded border bg-gray-50 p-3 space-y-3 max-h-[70vh] overflow-y-auto">
             {activeScene?.scene?.id && sceneAudioTracks.length ? (
-              <SceneAudioPlayer
-                sceneId={String(activeScene.scene.id)}
-                tracks={sceneAudioTracks}
-              />
+              <div className="rounded border bg-white p-2 space-y-2">
+                <div className="text-[11px] uppercase text-gray-500">Scene Music</div>
+                <audio
+                  controls
+                  preload="none"
+                  src={String(sceneAudioTracks[0]?.url ?? "")}
+                  className="w-full"
+                />
+                {sceneAudioTracks.length > 1 ? (
+                  <details className="rounded border bg-gray-50 p-2">
+                    <summary className="cursor-pointer text-xs">Playlist ({sceneAudioTracks.length})</summary>
+                    <div className="mt-2 space-y-1">
+                      {sceneAudioTracks.map((t, i) => (
+                        <div key={`scene-audio-${i}`} className="text-xs truncate">
+                          {i + 1}. {String(t.title ?? `Track ${i + 1}`)}
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                ) : null}
+              </div>
             ) : null}
             <details className="rounded border bg-white p-2 space-y-2" open>
               <summary className="cursor-pointer text-[11px] uppercase text-gray-500">Player View Preview</summary>
