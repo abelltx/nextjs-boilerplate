@@ -26,6 +26,7 @@ import SequenceRail from "@/components/episode-runtime/SequenceRail";
 import RevealCard from "@/components/episode-runtime/RevealCard";
 import CheckPromptCard from "@/components/episode-runtime/CheckPromptCard";
 import NpcTabsCard from "@/components/episode-runtime/NpcTabsCard";
+import SceneAudioPlayer from "@/components/episode-runtime/SceneAudioPlayer";
 import { buildRuntimeSequence, extractHexMarkers, extractMapMarkers } from "@/lib/episodeRuntime";
 import SubmitGlowButton from "@/components/ui/SubmitGlowButton";
 import PlayersPassivePanel from "./PlayersPassivePanel";
@@ -291,6 +292,29 @@ export default async function DmScreenPage({
   const hexFocus = ((state as any)?.hex_focus ?? null) as Record<string, any> | null;
   const stageHexFocus =
     hexFocus && String(hexFocus?.block_id ?? "").trim() === String(stageHexBlock?.id ?? "").trim() ? hexFocus : null;
+  const sceneAudioTracks = (() => {
+    const meta = ((activeScene?.scene as any)?.meta ?? {}) as Record<string, any>;
+    const fromSceneAudio = Array.isArray(meta.scene_audio)
+      ? (meta.scene_audio as any[])
+          .map((t: any, i: number) => ({
+            id: String(t?.id ?? `track-${i + 1}`),
+            title: String(t?.title ?? "").trim() || `Track ${i + 1}`,
+            url: String(t?.url ?? "").trim(),
+          }))
+          .filter((t) => t.url)
+      : [];
+    if (fromSceneAudio.length) return fromSceneAudio;
+    const fromUrls = Array.isArray(meta.scene_audio_urls)
+      ? (meta.scene_audio_urls as any[])
+          .map((u: any, i: number) => ({
+            id: `track-${i + 1}`,
+            title: `Track ${i + 1}`,
+            url: String(u ?? "").trim(),
+          }))
+          .filter((t) => t.url)
+      : [];
+    return fromUrls;
+  })();
   const previewType = String(presentedBlock?.block_type ?? "").toLowerCase();
   const previewIsMap = previewType === "map";
   const previewIsHex = previewType === "hex_crawl";
@@ -1306,6 +1330,12 @@ export default async function DmScreenPage({
         <div className="col-span-12 lg:col-span-6 border rounded-xl p-4">
           <div className="text-xs uppercase text-gray-500">Stage</div>
           <div className="mt-2 rounded border bg-gray-50 p-3 space-y-3 max-h-[70vh] overflow-y-auto">
+            {activeScene?.scene?.id && sceneAudioTracks.length ? (
+              <SceneAudioPlayer
+                sceneId={String(activeScene.scene.id)}
+                tracks={sceneAudioTracks}
+              />
+            ) : null}
             <details className="rounded border bg-white p-2 space-y-2" open>
               <summary className="cursor-pointer text-[11px] uppercase text-gray-500">Player View Preview</summary>
               <div className="mt-2">

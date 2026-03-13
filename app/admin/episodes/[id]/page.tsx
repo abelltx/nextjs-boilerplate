@@ -1318,6 +1318,42 @@ export default async function AdminEpisodeEditPage({
                             }
                             placeholder="Storyteller Notes (private guidance)"
                           />
+                          {String(b.block_type).toLowerCase() === "scene" ? (
+                            <div className="rounded border p-2 space-y-2">
+                              <div className="text-xs uppercase text-gray-500">Scene Music (ST only)</div>
+                              <input
+                                type="file"
+                                name="scene_audio_files"
+                                accept="audio/*,.mp3,.wav,.m4a,.ogg"
+                                multiple
+                                className="w-full border rounded p-2 text-sm"
+                              />
+                              <div className="flex flex-wrap gap-3 text-xs">
+                                <label className="inline-flex items-center gap-2">
+                                  <input type="checkbox" name="scene_audio_replace" />
+                                  Replace existing playlist
+                                </label>
+                                <label className="inline-flex items-center gap-2">
+                                  <input type="checkbox" name="scene_audio_clear" />
+                                  Clear playlist
+                                </label>
+                              </div>
+                              {Array.isArray((b.meta as any)?.scene_audio) && (b.meta as any).scene_audio.length ? (
+                                <div className="rounded border bg-gray-50 p-2">
+                                  <div className="text-[11px] uppercase text-gray-500 mb-1">Current Tracks</div>
+                                  <div className="space-y-1">
+                                    {((b.meta as any).scene_audio as any[]).map((t: any, i: number) => (
+                                      <div key={`trk-${i}`} className="text-xs truncate">
+                                        {i + 1}. {String(t?.title ?? `Track ${i + 1}`)}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="text-xs text-gray-500">No tracks uploaded for this scene yet.</div>
+                              )}
+                            </div>
+                          ) : null}
 
                           <input
                             name="image_url"

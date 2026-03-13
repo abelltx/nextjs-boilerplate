@@ -94,6 +94,95 @@ function withStorytellerMeta(baseMeta: any, fd: FormData) {
   return next;
 }
 
+function withSceneAudioMeta(baseMeta: any, fd: FormData) {
+  const next = { ...((baseMeta ?? {}) as Record<string, any>) };
+  if (!fd.has("scene_audio_urls")) return next;
+
+  const raw = String(fd.get("scene_audio_urls") ?? "");
+  const urls = raw
+    .split(/\r?\n/)
+    .map((v) => v.trim())
+    .filter(Boolean);
+
+  if (!urls.length) {
+    delete next.scene_audio_urls;
+    delete next.scene_audio;
+    return next;
+  }
+
+  next.scene_audio_urls = urls;
+  next.scene_audio = urls.map((url: string, idx: number) => {
+    const leaf = url.split("?")[0]?.split("#")[0]?.split("/").pop() ?? "";
+    const label = leaf ? decodeURIComponent(leaf) : `Track ${idx + 1}`;
+    return { id: `track-${idx + 1}`, title: label, url };
+  });
+  return next;
+}
+
+async function withSceneAudioUploads(input: {
+  supabase: Awaited<ReturnType<typeof createClient>>;
+  episodeId: string;
+  blockType: string;
+  fd: FormData;
+  baseMeta: any;
+}) {
+  const bt = String(input.blockType ?? "").trim().toLowerCase();
+  if (bt !== "scene") return { ...((input.baseMeta ?? {}) as Record<string, any>) };
+
+  const next = { ...((input.baseMeta ?? {}) as Record<string, any>) };
+  const storageClient = createAdminClient() ?? input.supabase;
+  const replace = String(input.fd.get("scene_audio_replace") ?? "").trim().toLowerCase() === "on";
+  const clear = String(input.fd.get("scene_audio_clear") ?? "").trim().toLowerCase() === "on";
+
+  const existing = Array.isArray(next.scene_audio)
+    ? (next.scene_audio as any[])
+        .map((t: any, i: number) => ({
+          id: String(t?.id ?? `track-${i + 1}`),
+          title: String(t?.title ?? "").trim() || `Track ${i + 1}`,
+          url: String(t?.url ?? "").trim(),
+        }))
+        .filter((t: any) => t.url)
+    : [];
+
+  let tracks = replace ? [] : [...existing];
+  if (clear) tracks = [];
+
+  const files = input.fd
+    .getAll("scene_audio_files")
+    .filter((v) => typeof v === "object" && v && "arrayBuffer" in (v as any)) as File[];
+
+  for (const file of files) {
+    if (!file.size || file.size <= 0) continue;
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const path = `episode-audio/${input.episodeId}/${Date.now()}-${safeName}`;
+    const { error: upErr } = await storageClient.storage
+      .from(EPISODE_ASSETS_BUCKET)
+      .upload(path, file, {
+        upsert: true,
+        contentType: file.type || "audio/mpeg",
+      });
+    if (upErr) throw new Error(`Audio upload failed: ${upErr.message}`);
+    const { data: pub } = storageClient.storage.from(EPISODE_ASSETS_BUCKET).getPublicUrl(path);
+    const publicUrl = String(pub?.publicUrl ?? "").trim();
+    if (!publicUrl) continue;
+    tracks.push({
+      id: `track-${tracks.length + 1}`,
+      title: String(file.name || `Track ${tracks.length + 1}`),
+      url: publicUrl,
+    });
+  }
+
+  if (!tracks.length) {
+    delete next.scene_audio;
+    delete next.scene_audio_urls;
+    return next;
+  }
+
+  next.scene_audio = tracks;
+  next.scene_audio_urls = tracks.map((t) => t.url);
+  return next;
+}
+
 async function upsertNpcBindingForBlock(input: {
   supabase: Awaited<ReturnType<typeof createClient>>;
   episodeId: string;
@@ -192,7 +281,14 @@ export async function addEpisodeBlockAction(episodeId: string, fd: FormData) {
   const image_url = String(fd.get("image_url") ?? "").trim() || null;
   const uploadedImageUrl = await maybeUploadBlockImage(supabase, episodeId, fd, block_type);
   const finalImageUrl = uploadedImageUrl ?? image_url;
-  const meta = withStorytellerMeta(parseMetaJson(fd.get("meta_json")), fd);
+  let meta = withSceneAudioMeta(withStorytellerMeta(parseMetaJson(fd.get("meta_json")), fd), fd);
+  meta = await withSceneAudioUploads({
+    supabase,
+    episodeId,
+    blockType: block_type,
+    fd,
+    baseMeta: meta,
+  });
   const sceneIdRaw = String(fd.get("scene_id") ?? "").trim();
   const sceneId = sceneIdRaw && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sceneIdRaw)
     ? sceneIdRaw
@@ -347,7 +443,14 @@ export async function updateEpisodeBlockAction(blockId: string, episodeId: strin
         .maybeSingle();
       nextMeta = (existingRow as any)?.meta ?? {};
     }
-    patch.meta = withStorytellerMeta(nextMeta ?? {}, fd);
+    patch.meta = withSceneAudioMeta(withStorytellerMeta(nextMeta ?? {}, fd), fd);
+    patch.meta = await withSceneAudioUploads({
+      supabase,
+      episodeId,
+      blockType: patch.block_type,
+      fd,
+      baseMeta: patch.meta,
+    });
   }
   if (String(patch.block_type).trim().toLowerCase() === "npc" && (fd.has("meta_json") || hasStorytellerFields)) {
     patch.meta = await upsertNpcBindingForBlock({
