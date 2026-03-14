@@ -19,13 +19,13 @@ const EFFECT_KEYS: Record<string, { label: string; value: string }[]> = {
   ac: [{ label: "AC", value: "ac" }],
   speed: [{ label: "Speed", value: "speed" }],
   skill: [
-    "athletics", "acrobatics", "sleight_of_hand", "stealth", "arcana", "history", "investigation", "nature", "religion",
+    "athletics", "acrobatics", "sleight_of_hand", "stealth", "history", "investigation", "nature", "religion",
     "animal_handling", "insight", "medicine", "perception", "survival", "deception", "intimidation", "performance", "persuasion",
   ].map((k) => ({ label: k, value: k })),
   save: ["str_save", "dex_save", "con_save", "int_save", "wis_save", "cha_save"].map((k) => ({ label: k, value: k })),
   resistance: ["bludgeoning", "piercing", "slashing", "fire", "cold", "lightning", "thunder", "acid", "poison", "necrotic", "radiant", "psychic", "force"].map((k) => ({ label: k, value: k })),
   immunity: ["bludgeoning", "piercing", "slashing", "fire", "cold", "lightning", "thunder", "acid", "poison", "necrotic", "radiant", "psychic", "force"].map((k) => ({ label: k, value: k })),
-  advantage: ["athletics", "acrobatics", "sleight_of_hand", "stealth", "arcana", "history", "investigation", "nature", "religion", "animal_handling", "insight", "medicine", "perception", "survival", "deception", "intimidation", "performance", "persuasion", "initiative"].map((k) => ({ label: k, value: k })),
+  advantage: ["athletics", "acrobatics", "sleight_of_hand", "stealth", "history", "investigation", "nature", "religion", "animal_handling", "insight", "medicine", "perception", "survival", "deception", "intimidation", "performance", "persuasion", "initiative"].map((k) => ({ label: k, value: k })),
   special: [{ label: "Special", value: "special" }],
 };
 const EFFECT_MODES: Record<string, { label: string; value: string }[]> = {

@@ -186,7 +186,6 @@ export function SkillsCard({
   const skillDefs: Array<{ key: string; label: string; ability: AbilityKey }> = [
     { key: "acrobatics", label: "Acrobatics", ability: "dex" },
     { key: "animal_handling", label: "Animal Handling", ability: "wis" },
-    { key: "arcana", label: "Arcana", ability: "int" },
     { key: "athletics", label: "Athletics", ability: "str" },
     { key: "deception", label: "Deception", ability: "cha" },
     { key: "history", label: "History", ability: "int" },

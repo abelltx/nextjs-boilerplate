@@ -84,7 +84,6 @@ export default function RollPanel(props: {
     const abilityBySkill: Record<string, AbilityKey> = {
       acrobatics: "dex",
       animal_handling: "wis",
-      arcana: "int",
       athletics: "str",
       deception: "cha",
       history: "int",
@@ -102,7 +101,7 @@ export default function RollPanel(props: {
       survival: "wis",
     };
 
-    const entries = Object.entries(skills).map(([name, bonus]) => {
+    const entries = Object.entries(skills).filter(([name]) => name !== "arcana").map(([name, bonus]) => {
       const ability = abilityBySkill[name];
       const gear = ability ? abilityGearBonus(props.stat, ability) : 0;
       return {

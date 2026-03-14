@@ -11,7 +11,6 @@ const PRESET_CHECKS = [
   "Acrobatics",
   "Stealth",
   "Survival",
-  "Arcana",
   "Religion",
   "History",
   "Persuasion",
