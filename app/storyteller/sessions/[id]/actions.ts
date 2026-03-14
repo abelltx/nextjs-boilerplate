@@ -700,6 +700,7 @@ export async function storytellerSetHexFocus(input: {
   checkKey?: string | null;
   checkDc?: number | null;
   rewardItemIds?: string[];
+  requiredQuestIds?: string[];
   playerText?: string | null;
   storytellerNotes?: string | null;
   checkPrompts?: Array<{
@@ -733,6 +734,7 @@ export async function storytellerSetHexFocus(input: {
     check_key: String(input.checkKey ?? "").trim() || null,
     check_dc: Number.isFinite(checkDcRaw) ? Math.max(0, Math.floor(checkDcRaw)) : null,
     reward_item_ids: cleanIds(input.rewardItemIds),
+    required_quest_ids: cleanIds(input.requiredQuestIds),
     player_text: String(input.playerText ?? "").trim() || null,
     storyteller_notes: String(input.storytellerNotes ?? "").trim() || null,
     check_prompts: (Array.isArray(input.checkPrompts) ? input.checkPrompts : [])
@@ -835,7 +837,7 @@ async function grantItemsToCharacter(admin: any, characterId: string, itemIds: s
 export async function storytellerResolveHexReward(input: {
   sessionId: string;
   decision: "grant" | "hold" | "skip";
-  targetMode?: "highest_roll" | "manual";
+  targetMode?: "highest_roll" | "manual" | "all_joined" | "all_eligible";
   playerId?: string | null;
 }) {
   const sessionId = String(input.sessionId ?? "").trim();
@@ -874,6 +876,41 @@ export async function storytellerResolveHexReward(input: {
   const charByPlayer = new Map<string, string>(targets.map((t) => [t.playerId, t.characterId]));
 
   const targetMode = String(input.targetMode ?? "highest_roll").trim().toLowerCase();
+  const requiredQuestIds = cleanIds(Array.isArray(focus.required_quest_ids) ? focus.required_quest_ids : []);
+
+  if (targetMode === "all_joined" || targetMode === "all_eligible") {
+    let eligibleTargets = targets;
+    if (targetMode === "all_eligible" && requiredQuestIds.length) {
+      const { data: qpRows, error: qpErr } = await admin
+        .from("player_quest_progress")
+        .select("character_id,quest_id,status")
+        .in("character_id", targets.map((t) => t.characterId))
+        .in("quest_id", requiredQuestIds)
+        .eq("status", "active");
+      if (qpErr) throw new Error(qpErr.message);
+      const eligibleChars = new Set(
+        (qpRows ?? [])
+          .map((r: any) => String(r?.character_id ?? "").trim())
+          .filter(Boolean)
+      );
+      eligibleTargets = targets.filter((t) => eligibleChars.has(t.characterId));
+    }
+    if (!eligibleTargets.length) return;
+    for (const t of eligibleTargets) {
+      await grantItemsToCharacter(admin, t.characterId, rewardItemIds);
+    }
+    const next = {
+      ...focus,
+      reward_status: "granted_multi",
+      reward_target_player_ids: eligibleTargets.map((t) => t.playerId),
+      reward_granted_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    const { error: upErr } = await supabase.from("session_state").update({ hex_focus: next }).eq("session_id", sessionId);
+    if (upErr) return;
+    return;
+  }
+
   let winnerPlayerId = String(input.playerId ?? "").trim();
   if (targetMode === "highest_roll") {
     const raw = ((st as any).roll_results ?? {}) as Record<string, any>;

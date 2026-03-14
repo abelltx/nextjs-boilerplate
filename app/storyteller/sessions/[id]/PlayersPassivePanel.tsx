@@ -24,12 +24,14 @@ export default function PlayersPassivePanel({
   joins,
   initialState,
   players,
+  questGlowPlayerIds,
   onRequestSave,
 }: {
   sessionId: string;
   joins: any[];
   initialState: any;
   players: PlayerCardData[];
+  questGlowPlayerIds?: string[];
   onRequestSave: (formData: FormData) => Promise<void>;
 }) {
   const supabase = useMemo(() => supabaseBrowser(), []);
@@ -44,6 +46,15 @@ export default function PlayersPassivePanel({
   const selected = selectedPlayerId ? playersById.get(selectedPlayerId) ?? null : null;
   const rollOpen = Boolean(liveState?.roll_open);
   const rollTarget = String(liveState?.roll_target ?? "all").trim();
+  const questGlowSet = useMemo(
+    () =>
+      new Set(
+        (questGlowPlayerIds ?? [])
+          .map((v) => String(v ?? "").trim())
+          .filter(Boolean)
+      ),
+    [questGlowPlayerIds]
+  );
 
   useEffect(() => {
     setLiveState(initialState ?? {});
@@ -79,6 +90,7 @@ export default function PlayersPassivePanel({
           const hasPlayer = Boolean(playerId);
           const info = hasPlayer ? playersById.get(playerId) : null;
           const hasActiveRoll = hasPlayer && rollOpen && (rollTarget === "all" || rollTarget === playerId);
+          const questGlow = hasPlayer && questGlowSet.has(playerId);
           return (
             <button
               key={i}
@@ -92,7 +104,9 @@ export default function PlayersPassivePanel({
                 "border rounded-lg p-2 text-center disabled:opacity-60 disabled:cursor-not-allowed hover:bg-gray-50 transition",
                 hasActiveRoll
                   ? "border-emerald-400 bg-emerald-50 shadow-[0_0_0_2px_rgba(52,211,153,0.5),0_0_20px_rgba(16,185,129,0.35)]"
-                  : "",
+                  : questGlow
+                    ? "border-amber-400 bg-amber-50 shadow-[0_0_0_2px_rgba(251,191,36,0.45),0_0_18px_rgba(245,158,11,0.25)]"
+                    : "",
               ].join(" ")}
             >
               <div className="text-xs text-gray-500">Player {i + 1}</div>
@@ -102,6 +116,8 @@ export default function PlayersPassivePanel({
               </div>
               {hasActiveRoll ? (
                 <div className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">Roll Active</div>
+              ) : questGlow ? (
+                <div className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-amber-700">Quest Target</div>
               ) : null}
               <DmPlayerRollLineRealtime sessionId={sessionId} playerId={hasPlayer ? playerId : null} initialState={initialState as any} />
             </button>

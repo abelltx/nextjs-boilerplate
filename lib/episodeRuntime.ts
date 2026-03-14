@@ -11,6 +11,7 @@ export type HexMarker = MapMarker & {
   checkKey?: string | null;
   checkDc?: number | null;
   rewardItemIds?: string[];
+  requiredQuestIds?: string[];
   playerText?: string | null;
   storytellerNotes?: string | null;
   checkPrompts?: Array<{
@@ -76,6 +77,14 @@ export function extractHexMarkers(meta: any): HexMarker[] {
       const rewardItemIds = Array.from(
         new Set(rawRewards.map((v: any) => String(v ?? "").trim()).filter(Boolean))
       );
+      const rawRequiredQuests = Array.isArray(m?.required_quest_ids)
+        ? m.required_quest_ids
+        : typeof m?.required_quest_ids === "string"
+          ? m.required_quest_ids.split(",")
+          : [];
+      const requiredQuestIds = Array.from(
+        new Set(rawRequiredQuests.map((v: any) => String(v ?? "").trim()).filter(Boolean))
+      );
       const checkDcRaw = Number(m?.check_dc ?? NaN);
       const rollOutcomesRaw = Array.isArray(m?.roll_outcomes) ? m.roll_outcomes : [];
       const checkPromptsRaw = Array.isArray(m?.check_prompts) ? m.check_prompts : [];
@@ -118,6 +127,7 @@ export function extractHexMarkers(meta: any): HexMarker[] {
         checkKey: String(m?.check_key ?? "").trim() || null,
         checkDc: Number.isFinite(checkDcRaw) ? Math.max(0, Math.floor(checkDcRaw)) : null,
         rewardItemIds,
+        requiredQuestIds,
         playerText: String(m?.player_text ?? "").trim() || null,
         storytellerNotes: String(m?.storyteller_notes ?? "").trim() || null,
         checkPrompts,

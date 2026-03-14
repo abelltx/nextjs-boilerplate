@@ -12,6 +12,7 @@ type Marker = {
   check_key?: string;
   check_dc?: number | null;
   reward_item_ids?: string[];
+  required_quest_ids?: string[];
   player_text?: string;
   storyteller_notes?: string;
   check_prompts?: Array<{
@@ -55,6 +56,11 @@ function normalizeMarkers(input: any): Marker[] {
       ? m.reward_item_ids.map((v: any) => String(v ?? "").trim()).filter(Boolean)
       : typeof m?.reward_item_ids === "string"
         ? m.reward_item_ids.split(",").map((v: string) => v.trim()).filter(Boolean)
+        : [],
+    required_quest_ids: Array.isArray(m?.required_quest_ids)
+      ? m.required_quest_ids.map((v: any) => String(v ?? "").trim()).filter(Boolean)
+      : typeof m?.required_quest_ids === "string"
+        ? m.required_quest_ids.split(",").map((v: string) => v.trim()).filter(Boolean)
         : [],
     player_text: String(m?.player_text ?? "").trim(),
     storyteller_notes: String(m?.storyteller_notes ?? "").trim(),
@@ -351,6 +357,9 @@ export default function MapMarkerEditorClient(props: {
                 <div className="text-[11px] text-gray-600 truncate">
                   Rewards: {(m.reward_item_ids ?? []).length}
                 </div>
+                <div className="text-[11px] text-gray-600 truncate">
+                  Quest gate: {(m.required_quest_ids ?? []).length ? `${(m.required_quest_ids ?? []).length} quest(s)` : "none"}
+                </div>
               </button>
             ))}
             {!markers.length ? <div className="text-xs text-gray-500 px-1 py-2">No hex markers yet.</div> : null}
@@ -502,6 +511,19 @@ export default function MapMarkerEditorClient(props: {
                   })
                 }
                 placeholder="Reward item UUIDs (comma-separated)"
+              />
+              <input
+                className="border rounded p-2 text-sm md:col-span-2"
+                value={(selected.required_quest_ids ?? []).join(", ")}
+                onChange={(e) =>
+                  updateSelected({
+                    required_quest_ids: e.target.value
+                      .split(",")
+                      .map((v) => v.trim())
+                      .filter(Boolean),
+                  })
+                }
+                placeholder="Required active quest IDs (comma-separated, optional)"
               />
               <select
                 className="border rounded p-2 text-sm"

@@ -582,6 +582,35 @@ export default async function DmScreenPage({
       quests: [...quests].sort((a, b) => a.title.localeCompare(b.title)),
     }))
     .sort((a, b) => a.playerName.localeCompare(b.playerName));
+  const activeQuestIdsByCharacter = new Map<string, Set<string>>();
+  for (const row of sessionQuestRows) {
+    const cid = String((row as any)?.character_id ?? "").trim();
+    const qid = String((row as any)?.quest_id ?? "").trim();
+    const st = String((row as any)?.status ?? "").trim().toLowerCase();
+    if (!cid || !qid || st !== "active") continue;
+    const set = activeQuestIdsByCharacter.get(cid) ?? new Set<string>();
+    set.add(qid);
+    activeQuestIdsByCharacter.set(cid, set);
+  }
+  const focusedRequiredQuestIds = Array.from(
+    new Set(
+      (Array.isArray(stageHexFocus?.required_quest_ids) ? (stageHexFocus?.required_quest_ids as any[]) : [])
+        .map((v: any) => String(v ?? "").trim())
+        .filter(Boolean)
+    )
+  );
+  const questGlowPlayerIds = focusedRequiredQuestIds.length
+    ? storytellerPlayers
+        .filter((p: any) => {
+          const cid = String(p?.characterId ?? "").trim();
+          if (!cid) return false;
+          const activeSet = activeQuestIdsByCharacter.get(cid);
+          if (!activeSet) return false;
+          return focusedRequiredQuestIds.some((q) => activeSet.has(q));
+        })
+        .map((p: any) => String(p.playerId ?? "").trim())
+        .filter(Boolean)
+    : [];
   const talkTargetIds = Array.from(
     new Set(
       (blocks ?? [])
@@ -1264,6 +1293,7 @@ export default async function DmScreenPage({
             joins={joins as any[]}
             initialState={state as any}
             players={storytellerPlayers as any[]}
+            questGlowPlayerIds={questGlowPlayerIds}
             onRequestSave={async (fd) => {
               "use server";
               const playerId = String(fd.get("player_id") ?? "").trim();
@@ -1464,6 +1494,7 @@ export default async function DmScreenPage({
                                   checkKey: String(m.checkKey ?? ""),
                                   checkDc: Number(m.checkDc ?? NaN),
                                   rewardItemIds: Array.isArray(m.rewardItemIds) ? m.rewardItemIds : [],
+                                  requiredQuestIds: Array.isArray((m as any).requiredQuestIds) ? (m as any).requiredQuestIds : [],
                                   playerText: String(m.playerText ?? ""),
                                   storytellerNotes: String(m.storytellerNotes ?? ""),
                                   checkPrompts: Array.isArray((m as any).checkPrompts)
@@ -1671,6 +1702,16 @@ export default async function DmScreenPage({
                     <div className="text-[11px] text-gray-700">
                       Reward status: {String(stageHexFocus.reward_status ?? "pending")}
                     </div>
+                    {focusedRequiredQuestIds.length ? (
+                      <div className="text-[11px] text-gray-700">
+                        Required active quest IDs: {focusedRequiredQuestIds.join(", ")}
+                      </div>
+                    ) : null}
+                    {focusedRequiredQuestIds.length ? (
+                      <div className="text-[11px] text-amber-800">
+                        Eligible players now: {questGlowPlayerIds.length}
+                      </div>
+                    ) : null}
                     {Array.isArray(stageHexFocus.reward_item_ids) && stageHexFocus.reward_item_ids.length ? (
                       <div className="space-y-1">
                         <div className="text-[11px] text-gray-700">
@@ -1689,6 +1730,36 @@ export default async function DmScreenPage({
                             }}
                           >
                             <button className="rounded border px-2 py-1 text-xs">Grant (Highest Roll)</button>
+                          </form>
+                          <form
+                            action={async () => {
+                              "use server";
+                              await storytellerResolveHexReward({
+                                sessionId: session.id,
+                                decision: "grant",
+                                targetMode: "all_eligible",
+                              });
+                              redirect(`/storyteller/sessions/${session.id}`);
+                            }}
+                          >
+                            <button className="rounded border px-2 py-1 text-xs">
+                              Grant to Eligible
+                            </button>
+                          </form>
+                          <form
+                            action={async () => {
+                              "use server";
+                              await storytellerResolveHexReward({
+                                sessionId: session.id,
+                                decision: "grant",
+                                targetMode: "all_joined",
+                              });
+                              redirect(`/storyteller/sessions/${session.id}`);
+                            }}
+                          >
+                            <button className="rounded border px-2 py-1 text-xs">
+                              Grant to All Joined
+                            </button>
                           </form>
                           <form
                             action={async () => {
