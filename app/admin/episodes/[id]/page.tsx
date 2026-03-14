@@ -165,6 +165,26 @@ export default async function AdminEpisodeEditPage({
     }
     return { ...b, meta };
   });
+  const questOptionById = new Map<string, { id: string; label: string }>();
+  for (const b of blocksResolved as any[]) {
+    if (String(b?.block_type ?? "").trim().toLowerCase() !== "npc") continue;
+    const meta = (b?.meta ?? {}) as Record<string, any>;
+    const npcName =
+      String(meta?.npc_library?.name ?? "").trim() ||
+      String(b?.title ?? "").trim() ||
+      "NPC";
+    const defs = Array.isArray(meta?.npc_tabs?.quests?.quest_defs)
+      ? (meta.npc_tabs.quests.quest_defs as any[])
+      : [];
+    for (let i = 0; i < defs.length; i += 1) {
+      const q = defs[i];
+      const id = String(q?.id ?? "").trim();
+      if (!id || questOptionById.has(id)) continue;
+      const title = String(q?.title ?? "").trim() || id;
+      questOptionById.set(id, { id, label: `${npcName} - ${title}` });
+    }
+  }
+  const questOptions = Array.from(questOptionById.values()).sort((a, b) => a.label.localeCompare(b.label));
 
   // Group blocks into scenes (scene blocks become headers)
   const sceneGroups: Array<{ scene: any | null; items: any[] }> = [];
@@ -1356,6 +1376,7 @@ export default async function AdminEpisodeEditPage({
                               initialMeta={b.meta ?? {}}
                               mode={String(b.block_type).toLowerCase() === "hex_crawl" ? "hex" : "map"}
                               itemOptions={(itemOptions ?? []) as any[]}
+                              questOptions={questOptions}
                               revealCandidates={blocksResolved
                                 .filter((x: any) => x.id !== b.id && x.block_type !== "scene")
                                 .map((x: any) => ({

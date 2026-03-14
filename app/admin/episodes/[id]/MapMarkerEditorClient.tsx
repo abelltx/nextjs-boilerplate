@@ -93,6 +93,7 @@ export default function MapMarkerEditorClient(props: {
   revealCandidates: Array<{ id: string; title: string }>;
   mode?: "map" | "hex";
   itemOptions?: Array<{ id: string; name?: string | null; is_active?: boolean | null }>;
+  questOptions?: Array<{ id: string; label: string }>;
 }) {
   const [markers, setMarkers] = useState<Marker[]>(() => normalizeMarkers(props.initialMeta));
   const [selectedId, setSelectedId] = useState<string | null>(markers[0]?.id ?? null);
@@ -306,6 +307,9 @@ export default function MapMarkerEditorClient(props: {
   const rewardOptions = (props.itemOptions ?? [])
     .filter((it) => it?.id)
     .map((it) => ({ id: String(it.id), name: String(it.name ?? "Item") }));
+  const questOptions = (props.questOptions ?? [])
+    .filter((q) => q?.id)
+    .map((q) => ({ id: String(q.id), label: String(q.label ?? q.id) }));
 
   return (
     <div className="space-y-2 rounded-lg border p-2">
@@ -525,6 +529,24 @@ export default function MapMarkerEditorClient(props: {
                 }
                 placeholder="Required active quest IDs (comma-separated, optional)"
               />
+              <select
+                className="border rounded p-2 text-sm"
+                defaultValue=""
+                onChange={(e) => {
+                  const v = String(e.target.value ?? "").trim();
+                  if (!v) return;
+                  const next = Array.from(new Set([...(selected.required_quest_ids ?? []), v]));
+                  updateSelected({ required_quest_ids: next });
+                  e.currentTarget.value = "";
+                }}
+              >
+                <option value="">Quick add required quest from this episode</option>
+                {questOptions.map((q) => (
+                  <option key={q.id} value={q.id}>
+                    {q.label}
+                  </option>
+                ))}
+              </select>
               <select
                 className="border rounded p-2 text-sm"
                 defaultValue=""
