@@ -14,6 +14,7 @@ export default function SceneMap(props: {
   className?: string;
   showMagnifier?: boolean;
   initialZoom?: number;
+  activeMarkerId?: string | null;
   onMarkerClick?: (marker: MapMarker, index: number) => void;
 }) {
   const [hover, setHover] = useState(false);
@@ -47,10 +48,18 @@ export default function SceneMap(props: {
         <img src={props.src} alt={props.alt} className="w-full" />
 
         {(props.markers ?? []).map((m, i) => (
+          (() => {
+            const isActive = String(props.activeMarkerId ?? "").trim() !== "" && String(m.id) === String(props.activeMarkerId);
+            return (
           <button
             key={m.id}
             type="button"
-            className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-white bg-black/80 px-2 py-0.5 text-[10px] font-semibold text-white hover:bg-black min-h-6 min-w-6"
+            className={[
+              "absolute -translate-x-1/2 -translate-y-1/2 rounded-full border px-2 py-0.5 text-[10px] font-semibold min-h-6 min-w-6",
+              isActive
+                ? "border-emerald-300 bg-emerald-500/85 text-black animate-pulse shadow-[0_0_0_3px_rgba(16,185,129,0.45),0_0_24px_rgba(16,185,129,0.65)]"
+                : "border-white bg-black/80 text-white hover:bg-black",
+            ].join(" ")}
             style={{ left: `${clamp(m.x)}%`, top: `${clamp(m.y)}%` }}
             title={m.label}
             onMouseEnter={() => setHoveringMarker(true)}
@@ -64,6 +73,8 @@ export default function SceneMap(props: {
           >
             {i + 1}
           </button>
+            );
+          })()
         ))}
 
         {props.showMagnifier && lensOn && hover && !hoveringMarker && !nearMarker ? (

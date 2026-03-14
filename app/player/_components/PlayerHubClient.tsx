@@ -1245,6 +1245,7 @@ function StagePanel({
               src={block.image_url}
               alt={block.title ?? "Presented"}
               markers={markers as any}
+              activeMarkerId={blockType === "hex_crawl" ? String(hexFocus?.marker_id ?? "").trim() || null : null}
               showMagnifier
               initialZoom={blockType === "hex_crawl" ? 12 : 2}
               onMarkerClick={(m) => {
