@@ -165,17 +165,53 @@ export default async function AdminEpisodeEditPage({
     }
     return { ...b, meta };
   });
+  const npcIdsForRuntime = Array.from(
+    new Set(
+      (blocksResolved as any[])
+        .filter((b: any) => String(b?.block_type ?? "").trim().toLowerCase() === "npc")
+        .map((b: any) => {
+          const meta = (b?.meta ?? {}) as Record<string, any>;
+          return String(meta?.npc_binding?.npc_id ?? meta?.npc_library?.npc_id ?? "").trim();
+        })
+        .filter(Boolean)
+    )
+  );
+  const runtimeTabsByNpcId = new Map<string, Record<string, any>>();
+  if (npcIdsForRuntime.length) {
+    const { data: runtimeRows } = await supabase
+      .from("npc_runtime_configs")
+      .select("npc_id,meta_json")
+      .in("npc_id", npcIdsForRuntime);
+    for (const row of runtimeRows ?? []) {
+      const npcId = String((row as any)?.npc_id ?? "").trim();
+      if (!npcId) continue;
+      const metaJson = (((row as any)?.meta_json ?? {}) as Record<string, any>);
+      const episodeScoped =
+        metaJson?.npc_tabs_by_episode &&
+        typeof metaJson.npc_tabs_by_episode === "object" &&
+        metaJson.npc_tabs_by_episode[id]
+          ? (metaJson.npc_tabs_by_episode[id] as Record<string, any>)
+          : null;
+      const runtimeTabs = (episodeScoped ?? metaJson?.npc_tabs ?? {}) as Record<string, any>;
+      runtimeTabsByNpcId.set(npcId, runtimeTabs);
+    }
+  }
+
   const questOptionById = new Map<string, { id: string; label: string }>();
   for (const b of blocksResolved as any[]) {
     if (String(b?.block_type ?? "").trim().toLowerCase() !== "npc") continue;
     const meta = (b?.meta ?? {}) as Record<string, any>;
+    const npcId = String(meta?.npc_binding?.npc_id ?? meta?.npc_library?.npc_id ?? "").trim();
     const npcName =
       String(meta?.npc_library?.name ?? "").trim() ||
       String(b?.title ?? "").trim() ||
       "NPC";
-    const defs = Array.isArray(meta?.npc_tabs?.quests?.quest_defs)
-      ? (meta.npc_tabs.quests.quest_defs as any[])
-      : [];
+    const runtimeTabs = npcId ? runtimeTabsByNpcId.get(npcId) ?? null : null;
+    const defs = Array.isArray(runtimeTabs?.quests?.quest_defs)
+      ? (runtimeTabs?.quests?.quest_defs as any[])
+      : Array.isArray(meta?.npc_tabs?.quests?.quest_defs)
+        ? (meta.npc_tabs.quests.quest_defs as any[])
+        : [];
     for (let i = 0; i < defs.length; i += 1) {
       const q = defs[i];
       const id = String(q?.id ?? "").trim();
