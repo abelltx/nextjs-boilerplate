@@ -1386,6 +1386,14 @@ export default async function AdminEpisodeEditPage({
                             }
                             placeholder="Storyteller Notes (private guidance)"
                           />
+                          <div className="sticky top-2 z-10 rounded border bg-white/95 p-2 backdrop-blur">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="text-[11px] text-gray-600">
+                                Save here after changing this step.
+                              </div>
+                              <button className="px-3 py-2 rounded border bg-black text-white">Save Block</button>
+                            </div>
+                          </div>
                           {String(b.block_type).toLowerCase() === "scene" ? (
                             <SceneAudioUploaderClient
                               episodeId={episode.id}
