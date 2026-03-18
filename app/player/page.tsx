@@ -82,6 +82,26 @@ function toBool(value: unknown, fallback = false) {
   return fallback;
 }
 
+function extractQuestTaskItemId(task: any): string | null {
+  const direct = String(
+    task?.target_item_id ??
+      task?.item_id ??
+      task?.required_item_id ??
+      ""
+  )
+    .trim()
+    .toLowerCase();
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(direct)) {
+    return direct;
+  }
+  const title = String(task?.title ?? "").trim();
+  const tagged = title.match(/\[item_id:([0-9a-f-]{36})\]/i);
+  if (tagged?.[1]) return String(tagged[1]).trim().toLowerCase();
+  const prefixed = title.match(/^(?:have_item|item)\s*:\s*([0-9a-f-]{36})/i);
+  if (prefixed?.[1]) return String(prefixed[1]).trim().toLowerCase();
+  return null;
+}
+
 function applyEffects(
   baseStat: any,
   effects: Array<ItemEffectRow | TraitEffectRow>,
@@ -490,6 +510,11 @@ export default async function PlayerPage() {
     // Never block /player render for optional quest-progress data.
     console.error("Quest progress load skipped:", questProgressErr.message);
   } else {
+    const ownedItemIds = new Set(
+      (inventory ?? [])
+        .map((r: any) => String(r?.item_id ?? "").trim().toLowerCase())
+        .filter((v: string) => /^[0-9a-f-]{36}$/i.test(v))
+    );
     const talkTargetIds = Array.from(
       new Set(
         (questProgressRows ?? [])
@@ -562,62 +587,84 @@ export default async function PlayerPage() {
       const questId = String(row.quest_id ?? "").trim();
       if (!questId) continue;
       const statusRaw = String(row.status ?? "available").trim().toLowerCase();
-      const status =
+      const persistedStatus =
         statusRaw === "active" || statusRaw === "completed" || statusRaw === "claimed"
           ? (statusRaw as "active" | "completed" | "claimed")
           : ("available" as const);
+      const storedDone = Array.isArray(row.completed_task_ids)
+        ? row.completed_task_ids.map((v) => String(v ?? "").trim()).filter(Boolean)
+        : [];
+      const mappedTasks: Array<QuestTaskView> = Array.isArray((row as any)?.reward_meta?.task_defs)
+        ? (row as any).reward_meta.task_defs
+            .map((t: any) => {
+              const id = String(t?.id ?? "").trim();
+              const kind = String(t?.kind ?? "").trim().toLowerCase() || "task";
+              const targetNpcId = String(t?.target_npc_block_id ?? "").trim();
+              const explicitName = String(t?.target_npc_name ?? "").trim();
+              const lookupName = targetNpcId ? npcNameById.get(targetNpcId.toLowerCase()) ?? "" : "";
+              const npcName = explicitName || lookupName;
+              const taskItemId = extractQuestTaskItemId(t);
+              const fallbackTitle =
+                kind === "talk_to_npc" && targetNpcId
+                  ? npcName
+                    ? `Talk to ${npcName}`
+                    : `Talk to NPC (${targetNpcId.slice(0, 8)}...)`
+                  : kind === "have_item" && taskItemId
+                    ? `Have required item (${taskItemId.slice(0, 8)}...)`
+                    : id;
+              const resolvedTitle =
+                kind === "talk_to_npc" && npcName
+                  ? `Talk to ${npcName}`
+                  : String(t?.title ?? "").trim().replace(/\[item_id:[^\]]+\]/gi, "").trim() || fallbackTitle;
+              return {
+                id,
+                title: resolvedTitle,
+                kind,
+                target_npc_block_id: targetNpcId || null,
+                target_npc_name: npcName || null,
+              };
+            })
+            .filter((t: any) => t.id.length > 0)
+        : Array.isArray((row as any)?.reward_meta?.task_ids)
+          ? (row as any).reward_meta.task_ids
+              .map((id: any) => ({
+                id: String(id ?? "").trim(),
+                title: String(id ?? "").trim(),
+                kind: "task",
+              }))
+              .filter((t: any) => t.id.length > 0)
+          : [];
+      const autoDoneTaskIds = Array.isArray((row as any)?.reward_meta?.task_defs)
+        ? (row as any).reward_meta.task_defs
+            .map((t: any) => {
+              const id = String(t?.id ?? "").trim();
+              const kind = String(t?.kind ?? "").trim().toLowerCase() || "task";
+              const itemId = extractQuestTaskItemId(t);
+              if (!id || !itemId) return null;
+              if (!["have_item", "item", "requires_item", "task"].includes(kind)) return null;
+              return ownedItemIds.has(itemId) ? id : null;
+            })
+            .filter((v: any) => Boolean(v))
+        : [];
+      const completedTaskIds = Array.from(new Set([...storedDone, ...autoDoneTaskIds]));
+      const status =
+        persistedStatus === "claimed"
+          ? "claimed"
+          : mappedTasks.length > 0 && mappedTasks.every((t) => completedTaskIds.includes(t.id))
+            ? "completed"
+            : persistedStatus;
       questProgressById[questId] = {
         status,
-        completedTaskIds: Array.isArray(row.completed_task_ids)
-          ? row.completed_task_ids.map((v) => String(v ?? "").trim()).filter(Boolean)
-          : [],
+        completedTaskIds,
         claimedAt: row.claimed_at ?? null,
       };
       questEntries.push({
         questId,
         title: String(row.quest_title ?? "").trim() || questId,
         status,
-        completedTaskIds: Array.isArray(row.completed_task_ids)
-          ? row.completed_task_ids.map((v) => String(v ?? "").trim()).filter(Boolean)
-          : [],
+        completedTaskIds,
         claimedAt: row.claimed_at ?? null,
-        tasks: Array.isArray((row as any)?.reward_meta?.task_defs)
-          ? (row as any).reward_meta.task_defs
-              .map((t: any) => {
-                const id = String(t?.id ?? "").trim();
-                const kind = String(t?.kind ?? "").trim().toLowerCase() || "task";
-                const targetNpcId = String(t?.target_npc_block_id ?? "").trim();
-                const explicitName = String(t?.target_npc_name ?? "").trim();
-                const lookupName = targetNpcId ? npcNameById.get(targetNpcId.toLowerCase()) ?? "" : "";
-                const npcName = explicitName || lookupName;
-                const fallbackTitle =
-                  kind === "talk_to_npc" && targetNpcId
-                    ? npcName
-                      ? `Talk to ${npcName}`
-                      : `Talk to NPC (${targetNpcId.slice(0, 8)}...)`
-                    : id;
-                const resolvedTitle =
-                  kind === "talk_to_npc" && npcName
-                    ? `Talk to ${npcName}`
-                    : String(t?.title ?? "").trim() || fallbackTitle;
-                return {
-                  id,
-                  title: resolvedTitle,
-                  kind,
-                  target_npc_block_id: targetNpcId || null,
-                  target_npc_name: npcName || null,
-                };
-              })
-              .filter((t: any) => t.id.length > 0)
-          : Array.isArray((row as any)?.reward_meta?.task_ids)
-            ? (row as any).reward_meta.task_ids
-                .map((id: any) => ({
-                  id: String(id ?? "").trim(),
-                  title: String(id ?? "").trim(),
-                  kind: "task",
-                }))
-                .filter((t: any) => t.id.length > 0)
-            : [],
+        tasks: mappedTasks,
         rewards: {
           faith: Math.max(0, Number((row as any)?.reward_meta?.faith ?? 0) || 0),
           itemIds: Array.isArray((row as any)?.reward_meta?.item_ids)

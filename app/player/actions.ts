@@ -52,6 +52,54 @@ function cleanQuestTaskIds(input: string[] | undefined) {
   );
 }
 
+function extractTaskItemId(task: any): string | null {
+  const direct = String(
+    task?.target_item_id ??
+      task?.item_id ??
+      task?.required_item_id ??
+      ""
+  )
+    .trim()
+    .toLowerCase();
+  if (isUuid(direct)) return direct;
+
+  const title = String(task?.title ?? "").trim();
+  const tagged = title.match(/\[item_id:([0-9a-f-]{36})\]/i);
+  if (tagged?.[1] && isUuid(tagged[1])) return tagged[1].toLowerCase();
+  const prefixed = title.match(/^(?:have_item|item)\s*:\s*([0-9a-f-]{36})/i);
+  if (prefixed?.[1] && isUuid(prefixed[1])) return prefixed[1].toLowerCase();
+  return null;
+}
+
+async function getAutoCompletedItemTaskIds(
+  supabase: Awaited<ReturnType<typeof supabaseServer>>,
+  characterId: string,
+  taskDefs: any[]
+) {
+  if (!characterId || !Array.isArray(taskDefs) || !taskDefs.length) return [] as string[];
+  const { data: invRows, error: invErr } = await supabase
+    .from("inventory_items")
+    .select("item_id")
+    .eq("character_id", characterId);
+  if (invErr) throw new Error(invErr.message);
+  const ownedItemIds = new Set(
+    (invRows ?? [])
+      .map((r: any) => String(r?.item_id ?? "").trim().toLowerCase())
+      .filter((v) => isUuid(v))
+  );
+
+  return taskDefs
+    .map((t: any) => {
+      const id = String(t?.id ?? "").trim();
+      const kind = String(t?.kind ?? "").trim().toLowerCase();
+      const itemId = extractTaskItemId(t);
+      if (!id || !itemId) return null;
+      if (!["have_item", "item", "requires_item", "task"].includes(kind)) return null;
+      return ownedItemIds.has(itemId) ? id : null;
+    })
+    .filter((v): v is string => Boolean(v));
+}
+
 async function appendGameLogSafe(
   supabase: Awaited<ReturnType<typeof supabaseServer>>,
   input: {
@@ -457,6 +505,7 @@ export async function startNpcQuestAction(input: {
     kind?: string;
     target_npc_block_id?: string | null;
     target_npc_name?: string | null;
+    target_item_id?: string | null;
   }>;
   storytellerControlled?: boolean;
   rewardFaith?: number;
@@ -484,6 +533,7 @@ export async function startNpcQuestAction(input: {
           kind: String(t?.kind ?? "").trim().toLowerCase() || "task",
           target_npc_block_id: String(t?.target_npc_block_id ?? "").trim() || null,
           target_npc_name: String(t?.target_npc_name ?? "").trim() || null,
+          target_item_id: String(t?.target_item_id ?? "").trim() || null,
         }))
         .filter((t) => t.id.length > 0)
     : [];
@@ -515,17 +565,26 @@ export async function startNpcQuestAction(input: {
   if (existing?.status === "claimed") return { ok: true, status: "claimed" };
   if (existing?.id) return { ok: true, status: String(existing.status ?? "active") };
 
+  const effectiveTaskIds = taskIds.length ? taskIds : taskDefs.map((t) => t.id);
+  const autoDone = await getAutoCompletedItemTaskIds(supabase, characterId, taskDefs);
+  const nextDone = Array.from(new Set(autoDone.map((v) => String(v).trim()).filter(Boolean)));
+  const nextStatus =
+    effectiveTaskIds.length > 0 && effectiveTaskIds.every((id) => nextDone.includes(id))
+      ? "completed"
+      : "active";
+
   const { error: insErr } = await supabase.from("player_quest_progress").insert({
     player_id: user.id,
     character_id: characterId,
     quest_id: questId,
     quest_title: questTitle || null,
-    status: "active",
-    completed_task_ids: [],
+    status: nextStatus,
+    completed_task_ids: nextDone,
+    completed_at: nextStatus === "completed" ? new Date().toISOString() : null,
     reward_meta: {
       faith: rewardFaith,
       item_ids: rewardItemIds,
-      task_ids: taskIds,
+      task_ids: effectiveTaskIds,
       task_defs: taskDefs,
       storyteller_controlled: storytellerControlled,
     },
@@ -546,7 +605,7 @@ export async function startNpcQuestAction(input: {
   });
 
   revalidatePath("/player");
-  return { ok: true, status: "active" };
+  return { ok: true, status: nextStatus };
 }
 
 export async function completeNpcQuestTaskAction(input: {
@@ -584,11 +643,15 @@ export async function completeNpcQuestTaskAction(input: {
   }
 
   const currentDone = Array.isArray((row as any)?.completed_task_ids) ? (row as any).completed_task_ids : [];
+  const taskDefs = Array.isArray((row as any)?.reward_meta?.task_defs) ? (row as any).reward_meta.task_defs : [];
+  const autoDone = await getAutoCompletedItemTaskIds(supabase, characterId, taskDefs);
   const storytellerControlled = toBool((row as any)?.reward_meta?.storyteller_controlled, false);
   if (storytellerControlled) {
     return { ok: false, error: "Storyteller controls this quest's progress." };
   }
-  const nextDone = Array.from(new Set([...currentDone.map((v: any) => String(v)), taskId]));
+  const nextDone = Array.from(
+    new Set([...currentDone.map((v: any) => String(v)), ...autoDone.map((v) => String(v)), taskId])
+  );
   const isCompleted = allTaskIds.length > 0 && allTaskIds.every((id) => nextDone.includes(id));
   const nextStatus = (row as any)?.status === "claimed" ? "claimed" : isCompleted ? "completed" : "active";
   if ((row as any)?.status === "claimed") {
@@ -696,12 +759,21 @@ export async function claimNpcQuestRewardsAction(input: {
   }
   if ((row as any)?.status === "claimed") return { ok: true, alreadyClaimed: true };
 
+  const currentDone = Array.isArray((row as any)?.completed_task_ids) ? (row as any).completed_task_ids : [];
+  const taskDefs = Array.isArray((row as any)?.reward_meta?.task_defs) ? (row as any).reward_meta.task_defs : [];
+  const autoDone = await getAutoCompletedItemTaskIds(supabase, characterId, taskDefs);
   const doneSet = new Set(
-    (Array.isArray((row as any)?.completed_task_ids) ? (row as any).completed_task_ids : []).map((v: any) =>
-      String(v).trim()
-    )
+    [...currentDone, ...autoDone].map((v: any) => String(v).trim()).filter(Boolean)
   );
-  const canComplete = allTaskIds.length > 0 ? allTaskIds.every((id) => doneSet.has(id)) : true;
+  const effectiveTaskIds =
+    allTaskIds.length > 0
+      ? allTaskIds
+      : cleanQuestTaskIds(
+          Array.isArray((row as any)?.reward_meta?.task_ids)
+            ? (row as any).reward_meta.task_ids
+            : taskDefs.map((t: any) => String(t?.id ?? ""))
+        );
+  const canComplete = effectiveTaskIds.length > 0 ? effectiveTaskIds.every((id) => doneSet.has(id)) : true;
   if (!canComplete) return { ok: false, error: "Complete all quest tasks first." };
 
   const rewardMeta = ((row as any)?.reward_meta ?? {}) as any;
@@ -806,8 +878,9 @@ export async function claimNpcQuestRewardsAction(input: {
         ...rewardMeta,
         faith: rewardFaith,
         item_ids: rewardItemIds,
-        task_ids: allTaskIds.length ? allTaskIds : rewardMeta?.task_ids ?? [],
+        task_ids: effectiveTaskIds.length ? effectiveTaskIds : rewardMeta?.task_ids ?? [],
       },
+      completed_task_ids: Array.from(doneSet),
     })
     .eq("id", (row as any).id);
   if (claimErr) return { ok: false, error: claimErr.message };

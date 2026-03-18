@@ -350,11 +350,24 @@ export default function NpcTabsEditorClient(props: {
             ? String(q.prereqQuestId ?? "").trim()
             : "";
           const tasks = [
-            ...taskLines.map((line, taskIdx) => ({
-              id: `${id}_task_${taskIdx + 1}`,
-              kind: "task",
-              title: line,
-            })),
+            ...taskLines.map((line, taskIdx) => {
+              const itemMatch = line.match(/^(?:have_item|item)\s*:\s*([0-9a-f-]{36})(?:\s*\|\s*(.+))?$/i);
+              if (itemMatch?.[1]) {
+                const itemId = String(itemMatch[1]).trim().toLowerCase();
+                const label = String(itemMatch[2] ?? "").trim();
+                return {
+                  id: `${id}_task_${taskIdx + 1}`,
+                  kind: "have_item",
+                  title: label || `Have required item [item_id:${itemId}]`,
+                  target_item_id: itemId,
+                };
+              }
+              return {
+                id: `${id}_task_${taskIdx + 1}`,
+                kind: "task",
+                title: line,
+              };
+            }),
             ...npcIds.map((npcId, npcIdx) => {
               const npcName = npcMap.get(npcId)?.name?.trim() || "";
               return {
