@@ -56,6 +56,27 @@ function isUuid(value: unknown) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
 }
 
+function extractTaskItemId(task: any): string | null {
+  const direct = String(task?.target_item_id ?? task?.item_id ?? task?.required_item_id ?? "")
+    .trim()
+    .toLowerCase();
+  if (isUuid(direct)) return direct;
+  const title = String(task?.title ?? "").trim();
+  const tagged = title.match(/\[item_id:([0-9a-f-]{36})\]/i);
+  if (tagged?.[1] && isUuid(tagged[1])) return String(tagged[1]).trim().toLowerCase();
+  const prefixed = title.match(/^(?:have_item|item)\s*:\s*([0-9a-f-]{36})/i);
+  if (prefixed?.[1] && isUuid(prefixed[1])) return String(prefixed[1]).trim().toLowerCase();
+  return null;
+}
+
+function cleanTaskTitle(raw: unknown) {
+  return String(raw ?? "")
+    .trim()
+    .replace(/\[item_id:[^\]]+\]/gi, "")
+    .replace(/^(?:have_item|item)\s*:\s*[0-9a-f-]{36}\s*\|?\s*/i, "")
+    .trim();
+}
+
 function toBool(value: unknown, fallback = false) {
   if (typeof value === "boolean") return value;
   if (typeof value === "number") return value !== 0;
@@ -76,7 +97,15 @@ function parseQuestDrafts(initialMeta: any): QuestDraft[] {
       const tasks = Array.isArray(raw?.tasks) ? raw.tasks : [];
       const plainTasks = tasks
         .filter((t: any) => String(t?.kind ?? "").trim().toLowerCase() !== "talk_to_npc")
-        .map((t: any) => String(t?.title ?? "").trim())
+        .map((t: any) => {
+          const kind = String(t?.kind ?? "").trim().toLowerCase();
+          const itemId = extractTaskItemId(t);
+          const title = cleanTaskTitle(t?.title);
+          if (["have_item", "item", "requires_item"].includes(kind) || itemId) {
+            return itemId ? `have_item:${itemId} | ${title || "Deliver required item"}` : title;
+          }
+          return title;
+        })
         .filter(Boolean);
       const npcTasks = tasks
         .filter((t: any) => String(t?.kind ?? "").trim().toLowerCase() === "talk_to_npc")
