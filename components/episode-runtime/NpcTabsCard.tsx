@@ -31,7 +31,7 @@ type TrainingTrait = {
 type QuestTask = {
   id: string;
   title: string;
-  kind: "task" | "talk_to_npc";
+  kind: "task" | "talk_to_npc" | "have_item";
   targetNpcBlockId?: string | null;
   targetNpcName?: string | null;
 };
@@ -65,6 +65,15 @@ function toBool(value: unknown, fallback = false) {
     if (["false", "0", "no", "off", "null", "undefined"].includes(v)) return false;
   }
   return fallback;
+}
+
+function cleanTaskText(raw: unknown) {
+  const txt = String(raw ?? "").trim();
+  if (!txt) return "";
+  return txt
+    .replace(/\[item_id:[^\]]+\]/gi, "")
+    .replace(/^(?:have_item|item)\s*:\s*[0-9a-f-]{36}\s*\|?\s*/i, "")
+    .trim();
 }
 
 export default function NpcTabsCard(props: {
@@ -274,12 +283,25 @@ export default function NpcTabsCard(props: {
         const tasks = tasksRaw
           .map((t: any, tIdx: number) => {
             const taskId = String(t?.id ?? "").trim() || `${questId}_task_${tIdx + 1}`;
-            const kind = String(t?.kind ?? "").trim().toLowerCase() === "talk_to_npc" ? "talk_to_npc" : "task";
+            const rawKind = String(t?.kind ?? "").trim().toLowerCase();
+            const kind =
+              rawKind === "talk_to_npc"
+                ? "talk_to_npc"
+                : rawKind === "have_item" || rawKind === "item" || rawKind === "requires_item"
+                  ? "have_item"
+                  : "task";
             const targetNpcName = String(t?.target_npc_name ?? "").trim() || null;
             const fallbackTalkTitle = targetNpcName
               ? `Talk to ${targetNpcName}`
               : `Talk to NPC (${String(t?.target_npc_block_id ?? "").trim().slice(0, 8)}...)`;
-            const taskTitle = String(t?.title ?? "").trim() || (kind === "talk_to_npc" ? fallbackTalkTitle : "");
+            const cleaned = cleanTaskText(t?.title);
+            const taskTitle =
+              cleaned ||
+              (kind === "talk_to_npc"
+                ? fallbackTalkTitle
+                : kind === "have_item"
+                  ? "Deliver required item"
+                  : "");
             if (!taskTitle) return null;
             return {
               id: taskId,
@@ -698,7 +720,7 @@ export default function NpcTabsCard(props: {
                 {quest.directions ? <div className="mt-1 text-xs text-neutral-300">{quest.directions}</div> : null}
                 {!prereqMet ? (
                   <div className="mt-1 text-[11px] text-amber-300">
-                    Locked: complete {prereqQuestId || "the required quest"} first.
+                    Locked: complete the required quest first.
                   </div>
                 ) : null}
                 {storytellerControlled ? (
