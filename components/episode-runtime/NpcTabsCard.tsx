@@ -303,21 +303,22 @@ export default function NpcTabsCard(props: {
           .map((t: any, tIdx: number) => {
             const taskId = String(t?.id ?? "").trim() || `${questId}_task_${tIdx + 1}`;
             const rawKind = String(t?.kind ?? "").trim().toLowerCase();
+            const targetNpcId = String(t?.target_npc_block_id ?? "").trim();
+            const detectedItemId = extractTaskItemId(t);
             const kind =
-              rawKind === "talk_to_npc"
+              rawKind === "talk_to_npc" && isUuidLike(targetNpcId)
                 ? "talk_to_npc"
-                : rawKind === "have_item" || rawKind === "item" || rawKind === "requires_item"
+                : (rawKind === "have_item" || rawKind === "item" || rawKind === "requires_item" || Boolean(detectedItemId))
                   ? "have_item"
                   : "task";
             const targetNpcName = String(t?.target_npc_name ?? "").trim() || null;
-            const targetNpcId = String(t?.target_npc_block_id ?? "").trim();
             const fallbackTalkTitle = targetNpcName
               ? `Talk to ${targetNpcName}`
               : isUuidLike(targetNpcId)
                 ? `Talk to NPC (${targetNpcId.slice(0, 8)}...)`
                 : "";
             const cleaned = cleanTaskText(t?.title);
-            const targetItemId = kind === "have_item" ? extractTaskItemId(t) : null;
+            const targetItemId = kind === "have_item" ? detectedItemId : null;
             const taskTitle =
               cleaned ||
               (kind === "talk_to_npc"
