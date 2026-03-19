@@ -51,6 +51,11 @@ function normalizeUuidList(text: unknown) {
   );
 }
 
+function isUuid(value: unknown) {
+  const v = String(value ?? "").trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
+}
+
 function toBool(value: unknown, fallback = false) {
   if (typeof value === "boolean") return value;
   if (typeof value === "number") return value !== 0;
@@ -342,7 +347,7 @@ export default function NpcTabsEditorClient(props: {
             .split(/\r?\n/g)
             .map((v) => v.trim())
             .filter(Boolean);
-          const npcIds = normalizeUuidList(q.talkNpcIds);
+          const npcIds = normalizeUuidList(q.talkNpcIds).filter((id) => isUuid(id));
           const rewardItemIds = normalizeUuidList(q.rewardItemIds);
           const rewardFaith = Math.max(0, Math.floor(Number(q.rewardFaith ?? 0) || 0));
           const prerequisiteEnabled = Boolean(q.prereqEnabled && String(q.prereqQuestId ?? "").trim());
