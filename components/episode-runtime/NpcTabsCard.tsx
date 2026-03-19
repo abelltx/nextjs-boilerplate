@@ -32,6 +32,7 @@ type QuestTask = {
   id: string;
   title: string;
   kind: "task" | "talk_to_npc" | "have_item";
+  targetItemId?: string | null;
   targetNpcBlockId?: string | null;
   targetNpcName?: string | null;
 };
@@ -74,6 +75,24 @@ function cleanTaskText(raw: unknown) {
     .replace(/\[item_id:[^\]]+\]/gi, "")
     .replace(/^(?:have_item|item)\s*:\s*[0-9a-f-]{36}\s*\|?\s*/i, "")
     .trim();
+}
+
+function extractTaskItemId(raw: any): string | null {
+  const direct = String(raw?.target_item_id ?? raw?.item_id ?? raw?.required_item_id ?? "")
+    .trim()
+    .toLowerCase();
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(direct)) return direct;
+  const title = String(raw?.title ?? "").trim();
+  const tagged = title.match(/\[item_id:([0-9a-f-]{36})\]/i);
+  if (tagged?.[1]) return String(tagged[1]).trim().toLowerCase();
+  const prefixed = title.match(/^(?:have_item|item)\s*:\s*([0-9a-f-]{36})/i);
+  if (prefixed?.[1]) return String(prefixed[1]).trim().toLowerCase();
+  return null;
+}
+
+function isUuidLike(value: unknown) {
+  const v = String(value ?? "").trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
 }
 
 export default function NpcTabsCard(props: {
@@ -291,10 +310,14 @@ export default function NpcTabsCard(props: {
                   ? "have_item"
                   : "task";
             const targetNpcName = String(t?.target_npc_name ?? "").trim() || null;
+            const targetNpcId = String(t?.target_npc_block_id ?? "").trim();
             const fallbackTalkTitle = targetNpcName
               ? `Talk to ${targetNpcName}`
-              : `Talk to NPC (${String(t?.target_npc_block_id ?? "").trim().slice(0, 8)}...)`;
+              : isUuidLike(targetNpcId)
+                ? `Talk to NPC (${targetNpcId.slice(0, 8)}...)`
+                : "";
             const cleaned = cleanTaskText(t?.title);
+            const targetItemId = kind === "have_item" ? extractTaskItemId(t) : null;
             const taskTitle =
               cleaned ||
               (kind === "talk_to_npc"
@@ -307,7 +330,8 @@ export default function NpcTabsCard(props: {
               id: taskId,
               title: taskTitle,
               kind,
-              targetNpcBlockId: String(t?.target_npc_block_id ?? "").trim() || null,
+              targetItemId,
+              targetNpcBlockId: targetNpcId || null,
               targetNpcName,
             } as QuestTask;
           })
@@ -689,7 +713,16 @@ export default function NpcTabsCard(props: {
                   String(prereqProgress.status).toLowerCase() === "claimed")
             );
             const completedSet = new Set((progress?.completedTaskIds ?? []).map((id) => String(id).trim()));
-            const allTasksDone = quest.tasks.length > 0 && quest.tasks.every((t) => completedSet.has(t.id));
+            const allTasksDone =
+              quest.tasks.length > 0 &&
+              quest.tasks.every((t) => {
+                if (completedSet.has(t.id)) return true;
+                if (t.kind === "have_item") {
+                  const itemId = String(t.targetItemId ?? "").trim().toLowerCase();
+                  return Boolean(itemId) && ownedSet.has(itemId);
+                }
+                return false;
+              });
             const claimable = status === "completed" || (status === "active" && allTasksDone);
             const rewardItems = quest.rewards.itemIds
               .map((itemId) => {
@@ -730,9 +763,14 @@ export default function NpcTabsCard(props: {
                 {quest.tasks.length ? (
                   <div className="mt-2 space-y-1">
                     {quest.tasks.map((task) => {
-                      const done = completedSet.has(task.id);
+                      const done =
+                        completedSet.has(task.id) ||
+                        (task.kind === "have_item" &&
+                          Boolean(String(task.targetItemId ?? "").trim()) &&
+                          ownedSet.has(String(task.targetItemId ?? "").trim().toLowerCase()));
                       const canMark =
                         !done &&
+                        task.kind === "task" &&
                         (status === "active" || status === "completed") &&
                         !storytellerControlled &&
                         props.playerShop?.onQuestTask &&

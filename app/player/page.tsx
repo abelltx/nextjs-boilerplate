@@ -102,6 +102,14 @@ function extractQuestTaskItemId(task: any): string | null {
   return null;
 }
 
+function cleanQuestTaskTitle(raw: unknown) {
+  return String(raw ?? "")
+    .trim()
+    .replace(/\[item_id:[^\]]+\]/gi, "")
+    .replace(/^(?:have_item|item)\s*:\s*[0-9a-f-]{36}\s*\|?\s*/i, "")
+    .trim();
+}
+
 function applyEffects(
   baseStat: any,
   effects: Array<ItemEffectRow | TraitEffectRow>,
@@ -599,24 +607,28 @@ export default async function PlayerPage() {
             .map((t: any) => {
               const id = String(t?.id ?? "").trim();
               const kind = String(t?.kind ?? "").trim().toLowerCase() || "task";
-              const targetNpcId = String(t?.target_npc_block_id ?? "").trim();
-              const explicitName = String(t?.target_npc_name ?? "").trim();
-              const lookupName = targetNpcId ? npcNameById.get(targetNpcId.toLowerCase()) ?? "" : "";
-              const npcName = explicitName || lookupName;
-              const taskItemId = extractQuestTaskItemId(t);
-              const fallbackTitle =
-                kind === "talk_to_npc" && targetNpcId
-                  ? npcName
+                const targetNpcId = String(t?.target_npc_block_id ?? "").trim();
+                const hasNpcTarget = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+                  targetNpcId
+                );
+                const explicitName = String(t?.target_npc_name ?? "").trim();
+                const lookupName = targetNpcId ? npcNameById.get(targetNpcId.toLowerCase()) ?? "" : "";
+                const npcName = explicitName || lookupName;
+                const taskItemId = extractQuestTaskItemId(t);
+                const cleanedTitle = cleanQuestTaskTitle(t?.title);
+                const fallbackTitle =
+                  kind === "talk_to_npc" && hasNpcTarget
+                    ? npcName
+                      ? `Talk to ${npcName}`
+                      : `Talk to NPC (${targetNpcId.slice(0, 8)}...)`
+                    : kind === "have_item" && taskItemId
+                      ? `Have required item (${taskItemId.slice(0, 8)}...)`
+                      : id;
+                const resolvedTitle =
+                  kind === "talk_to_npc" && npcName
                     ? `Talk to ${npcName}`
-                    : `Talk to NPC (${targetNpcId.slice(0, 8)}...)`
-                  : kind === "have_item" && taskItemId
-                    ? `Have required item (${taskItemId.slice(0, 8)}...)`
-                    : id;
-              const resolvedTitle =
-                kind === "talk_to_npc" && npcName
-                  ? `Talk to ${npcName}`
-                  : String(t?.title ?? "").trim().replace(/\[item_id:[^\]]+\]/gi, "").trim() || fallbackTitle;
-              return {
+                    : cleanedTitle || fallbackTitle;
+                return {
                 id,
                 title: resolvedTitle,
                 kind,
