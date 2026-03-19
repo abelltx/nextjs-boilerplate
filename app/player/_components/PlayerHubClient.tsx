@@ -171,7 +171,14 @@ export default function PlayerHubClient(props: {
     status: "available" | "active" | "completed" | "claimed";
     completedTaskIds: string[];
     claimedAt?: string | null;
-    tasks?: Array<{ id: string; title: string; kind?: string; target_npc_name?: string | null; target_npc_block_id?: string | null }>;
+    tasks?: Array<{
+      id: string;
+      title: string;
+      kind?: string;
+      target_npc_name?: string | null;
+      target_npc_block_id?: string | null;
+      target_item_id?: string | null;
+    }>;
     rewards?: { faith?: number; itemIds?: string[] };
     storytellerControlled?: boolean;
   }>;
@@ -579,7 +586,14 @@ export default function PlayerHubClient(props: {
   async function handleStartNpcQuest(quest: {
     id: string;
     title: string;
-    tasks?: Array<{ id: string; title?: string; kind?: string; targetNpcBlockId?: string | null; targetNpcName?: string | null }>;
+    tasks?: Array<{
+      id: string;
+      title?: string;
+      kind?: string;
+      targetNpcBlockId?: string | null;
+      targetNpcName?: string | null;
+      targetItemId?: string | null;
+    }>;
     rewards?: { faith?: number; itemIds?: string[] };
     storytellerControlled?: boolean;
   }) {
@@ -598,6 +612,7 @@ export default function PlayerHubClient(props: {
               kind: String(t?.kind ?? "").trim().toLowerCase() || "task",
               target_npc_block_id: String(t?.targetNpcBlockId ?? "").trim() || null,
               target_npc_name: String(t?.targetNpcName ?? "").trim() || null,
+              target_item_id: String(t?.targetItemId ?? "").trim() || null,
             }))
           : [],
         rewardFaith: Number(quest.rewards?.faith ?? 0),
@@ -616,8 +631,26 @@ export default function PlayerHubClient(props: {
     }
   }
   async function handleCompleteNpcQuestTask(
-    quest: { id: string; title: string; tasks?: Array<{ id: string }> },
-    task: { id: string }
+    quest: {
+      id: string;
+      title: string;
+      tasks?: Array<{
+        id: string;
+        title?: string;
+        kind?: string;
+        targetNpcBlockId?: string | null;
+        targetNpcName?: string | null;
+        targetItemId?: string | null;
+      }>;
+    },
+    task: {
+      id: string;
+      title?: string;
+      kind?: string;
+      targetNpcBlockId?: string | null;
+      targetNpcName?: string | null;
+      targetItemId?: string | null;
+    }
   ) {
     if (claimingQuestId) return;
     setClaimingQuestId(quest.id);
@@ -628,6 +661,16 @@ export default function PlayerHubClient(props: {
         questTitle: String(quest.title ?? ""),
         taskId: String(task.id ?? ""),
         allTaskIds: Array.isArray(quest.tasks) ? quest.tasks.map((t) => String(t?.id ?? "").trim()).filter(Boolean) : [],
+        taskDefs: Array.isArray(quest.tasks)
+          ? quest.tasks.map((t: any) => ({
+              id: String(t?.id ?? "").trim(),
+              title: String(t?.title ?? "").trim(),
+              kind: String(t?.kind ?? "").trim().toLowerCase() || "task",
+              target_npc_block_id: String(t?.targetNpcBlockId ?? "").trim() || null,
+              target_npc_name: String(t?.targetNpcName ?? "").trim() || null,
+              target_item_id: String(t?.targetItemId ?? "").trim() || null,
+            }))
+          : [],
       });
       if (!res.ok) {
         alert(res.error ?? "Could not update quest task.");
@@ -848,8 +891,26 @@ export default function PlayerHubClient(props: {
                   claimingQuestId={claimingQuestId}
                   onTaskDone={(entry, task) =>
                     handleCompleteNpcQuestTask(
-                      { id: entry.questId, title: entry.title, tasks: (entry.tasks ?? []).map((t) => ({ id: t.id })) },
-                      { id: task.id }
+                      {
+                        id: entry.questId,
+                        title: entry.title,
+                        tasks: (entry.tasks ?? []).map((t) => ({
+                          id: t.id,
+                          title: t.title,
+                          kind: t.kind,
+                          targetNpcBlockId: t.target_npc_block_id ?? null,
+                          targetNpcName: t.target_npc_name ?? null,
+                          targetItemId: (t as any).target_item_id ?? null,
+                        })),
+                      },
+                      {
+                        id: task.id,
+                        title: task.title,
+                        kind: task.kind,
+                        targetNpcBlockId: task.target_npc_block_id ?? null,
+                        targetNpcName: task.target_npc_name ?? null,
+                        targetItemId: (task as any).target_item_id ?? null,
+                      }
                     )
                   }
                   onClaim={(entry) =>
@@ -1011,11 +1072,25 @@ function QuestListPanel(props: {
       status: "available" | "active" | "completed" | "claimed";
       completedTaskIds: string[];
       claimedAt?: string | null;
-      tasks?: Array<{ id: string; title: string; kind?: string; target_npc_name?: string | null; target_npc_block_id?: string | null }>;
+      tasks?: Array<{
+        id: string;
+        title: string;
+        kind?: string;
+        target_npc_name?: string | null;
+        target_npc_block_id?: string | null;
+        target_item_id?: string | null;
+      }>;
       rewards?: { faith?: number; itemIds?: string[] };
       storytellerControlled?: boolean;
     },
-    task: { id: string; title: string; kind?: string; target_npc_name?: string | null; target_npc_block_id?: string | null }
+    task: {
+      id: string;
+      title: string;
+      kind?: string;
+      target_npc_name?: string | null;
+      target_npc_block_id?: string | null;
+      target_item_id?: string | null;
+    }
   ) => void | Promise<void>;
   onClaim?: (entry: {
     questId: string;
@@ -1023,7 +1098,14 @@ function QuestListPanel(props: {
     status: "available" | "active" | "completed" | "claimed";
     completedTaskIds: string[];
     claimedAt?: string | null;
-    tasks?: Array<{ id: string; title: string; kind?: string; target_npc_name?: string | null; target_npc_block_id?: string | null }>;
+    tasks?: Array<{
+      id: string;
+      title: string;
+      kind?: string;
+      target_npc_name?: string | null;
+      target_npc_block_id?: string | null;
+      target_item_id?: string | null;
+    }>;
     rewards?: { faith?: number; itemIds?: string[] };
     storytellerControlled?: boolean;
   }) => void | Promise<void>;
@@ -1033,7 +1115,14 @@ function QuestListPanel(props: {
     status: "available" | "active" | "completed" | "claimed";
     completedTaskIds: string[];
     claimedAt?: string | null;
-    tasks?: Array<{ id: string; title: string; kind?: string; target_npc_name?: string | null; target_npc_block_id?: string | null }>;
+    tasks?: Array<{
+      id: string;
+      title: string;
+      kind?: string;
+      target_npc_name?: string | null;
+      target_npc_block_id?: string | null;
+      target_item_id?: string | null;
+    }>;
     rewards?: { faith?: number; itemIds?: string[] };
     storytellerControlled?: boolean;
   }) => void | Promise<void>;
@@ -1177,7 +1266,14 @@ function StagePanel({
     onQuestStart?: (quest: {
       id: string;
       title: string;
-      tasks?: Array<{ id: string; title?: string; kind?: string; targetNpcBlockId?: string | null; targetNpcName?: string | null }>;
+      tasks?: Array<{
+        id: string;
+        title?: string;
+        kind?: string;
+        targetNpcBlockId?: string | null;
+        targetNpcName?: string | null;
+        targetItemId?: string | null;
+      }>;
       rewards?: { faith?: number; itemIds?: string[] };
     }) => void | Promise<void>;
     onQuestTask?: (

@@ -644,6 +644,14 @@ export async function completeNpcQuestTaskAction(input: {
   questTitle?: string;
   taskId: string;
   allTaskIds?: string[];
+  taskDefs?: Array<{
+    id: string;
+    title?: string;
+    kind?: string;
+    target_npc_block_id?: string | null;
+    target_npc_name?: string | null;
+    target_item_id?: string | null;
+  }>;
 }): Promise<{ ok: boolean; status?: string; completedTaskIds?: string[]; error?: string }> {
   "use server";
   const { user } = await getProfile();
@@ -673,15 +681,23 @@ export async function completeNpcQuestTaskAction(input: {
   }
 
   const currentDone = Array.isArray((row as any)?.completed_task_ids) ? (row as any).completed_task_ids : [];
-  const taskDefs = normalizeQuestTaskDefs(
+  const storedTaskDefs = normalizeQuestTaskDefs(
     Array.isArray((row as any)?.reward_meta?.task_defs) ? (row as any).reward_meta.task_defs : []
   );
+  const inputTaskDefs = normalizeQuestTaskDefs(Array.isArray(input.taskDefs) ? input.taskDefs : []);
+  const taskDefById = new Map<string, any>();
+  for (const t of [...storedTaskDefs, ...inputTaskDefs]) {
+    const id = String(t?.id ?? "").trim();
+    if (!id || taskDefById.has(id)) continue;
+    taskDefById.set(id, t);
+  }
+  const taskDefs = Array.from(taskDefById.values());
   const autoDone = await getAutoCompletedItemTaskIds(supabase, characterId, taskDefs);
   const storytellerControlled = toBool((row as any)?.reward_meta?.storyteller_controlled, false);
   if (storytellerControlled) {
     return { ok: false, error: "Storyteller controls this quest's progress." };
   }
-  const taskDef = taskDefs.find((t: any) => String(t?.id ?? "").trim() === taskId) ?? null;
+  const taskDef = taskDefById.get(taskId) ?? null;
   if (taskDef && String(taskDef.kind ?? "").trim().toLowerCase() === "have_item") {
     const requiredItemId = String(taskDef.target_item_id ?? "").trim().toLowerCase();
     if (requiredItemId && isUuidLike(requiredItemId)) {
