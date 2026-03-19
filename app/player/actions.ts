@@ -1312,21 +1312,21 @@ export async function useInventoryItemAction(input: {
     cfg && typeof cfg.replace_stat_block === "object" && cfg.replace_stat_block
       ? (cfg.replace_stat_block as Record<string, any>)
       : null;
-  const grantItemIds = Array.from(
+  const grantItemIds: string[] = Array.from(
     new Set(
       (Array.isArray(cfg?.grant_item_ids) ? cfg.grant_item_ids : [])
         .map((v: any) => String(v ?? "").trim())
         .filter((v: string) => isUuid(v))
     )
   );
-  const grantTraitIds = Array.from(
+  const grantTraitIds: string[] = Array.from(
     new Set(
       (Array.isArray(cfg?.grant_trait_ids) ? cfg.grant_trait_ids : [])
         .map((v: any) => String(v ?? "").trim())
         .filter((v: string) => isUuid(v))
     )
   );
-  const grantActionIds = Array.from(
+  const grantActionIds: string[] = Array.from(
     new Set(
       (Array.isArray(cfg?.grant_action_ids) ? cfg.grant_action_ids : [])
         .map((v: any) => String(v ?? "").trim())
