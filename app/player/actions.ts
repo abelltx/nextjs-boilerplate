@@ -789,6 +789,49 @@ export async function claimNpcQuestRewardsAction(input: {
     )
   ).slice(0, 25);
 
+  const rewardTaskDefs = Array.isArray(rewardMeta?.task_defs) ? rewardMeta.task_defs : [];
+  const requiredTurnInItemIds = Array.from(
+    new Set(
+      rewardTaskDefs
+        .map((t: any) => {
+          const kind = String(t?.kind ?? "").trim().toLowerCase();
+          if (!["have_item", "item", "requires_item", "task"].includes(kind)) return null;
+          return extractTaskItemId(t);
+        })
+        .filter((v: unknown): v is string => typeof v === "string" && Boolean(v) && isUuid(v))
+    )
+  );
+
+  // Consume required quest items (turn-in) once the quest is being claimed.
+  for (const itemId of requiredTurnInItemIds) {
+    const { data: invRow, error: invErr } = await supabase
+      .from("inventory_items")
+      .select("id,quantity")
+      .eq("character_id", characterId)
+      .eq("item_id", itemId)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (invErr) return { ok: false, error: invErr.message };
+    if (!invRow?.id) {
+      return { ok: false, error: "Required quest item is missing from inventory." };
+    }
+    const qty = Math.max(1, Number((invRow as any).quantity ?? 1));
+    if (qty > 1) {
+      const { error: upErr } = await supabase
+        .from("inventory_items")
+        .update({ quantity: qty - 1 })
+        .eq("id", String((invRow as any).id));
+      if (upErr) return { ok: false, error: upErr.message };
+    } else {
+      const { error: delErr } = await supabase
+        .from("inventory_items")
+        .delete()
+        .eq("id", String((invRow as any).id));
+      if (delErr) return { ok: false, error: delErr.message };
+    }
+  }
+
   let grantedItems = 0;
   if (rewardItemIds.length) {
     const { data: itemRows, error: itemErr } = await supabase
