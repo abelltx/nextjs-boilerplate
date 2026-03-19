@@ -21,7 +21,6 @@ declare
   v_uid uuid := auth.uid();
   v_character record;
   v_inv record;
-  v_cur record;
   v_base jsonb;
   v_next jsonb;
   v_meta jsonb;
@@ -64,13 +63,9 @@ begin
     v_pkg := coalesce(v_inv.item_id::text, p_inventory_item_id::text);
   end if;
 
-  select csc.id, csc.stat_block_current
-  into v_cur
-  from public.character_stats_current csc
-  where csc.character_id = p_character_id
-  for update;
-
-  v_base := coalesce(v_cur.stat_block_current, v_character.stat_block, '{}'::jsonb);
+  -- Use characters.stat_block as the canonical writable source.
+  -- In some environments character_stats_current is a view and cannot be updated.
+  v_base := coalesce(v_character.stat_block, '{}'::jsonb);
   v_meta := coalesce(v_base->'meta', '{}'::jsonb);
   v_ids := coalesce(v_meta->'class_package_applied_ids', '[]'::jsonb);
 
@@ -92,15 +87,9 @@ begin
   v_meta := jsonb_set(v_meta, '{class_package_applied_ids}', v_ids, true);
   v_next := jsonb_set(v_next, '{meta}', v_meta, true);
 
-  if v_cur.id is not null then
-    update public.character_stats_current
-       set stat_block_current = v_next
-     where id = v_cur.id;
-  else
-    update public.characters
-       set stat_block = v_next
-     where id = p_character_id;
-  end if;
+  update public.characters
+     set stat_block = v_next
+   where id = p_character_id;
 
   if nullif(trim(coalesce(p_class_name, '')), '') is not null then
     update public.characters
@@ -183,4 +172,3 @@ $$;
 grant execute on function public.apply_class_package_from_inventory(
   uuid, uuid, text, text, jsonb, uuid[], uuid[], uuid[], boolean
 ) to authenticated, service_role;
-

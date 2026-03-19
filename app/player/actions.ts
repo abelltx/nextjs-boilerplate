@@ -168,6 +168,167 @@ async function appendGameLogSafe(
   }
 }
 
+async function applyClassPackageFallback(
+  supabase: Awaited<ReturnType<typeof supabaseServer>>,
+  input: {
+    userId: string;
+    characterId: string;
+    inventoryItemId: string;
+    packageId: string;
+    className: string;
+    replaceStatBlock: Record<string, any> | null;
+    grantItemIds: string[];
+    grantTraitIds: string[];
+    grantActionIds: string[];
+    consumeOnUse: boolean;
+  }
+) {
+  const owned = await requireOwnedCharacter(supabase, input.userId, input.characterId);
+  if (!owned.ok) return { ok: false as const, error: owned.error };
+
+  const { data: invRow, error: invErr } = await supabase
+    .from("inventory_items")
+    .select("id,item_id,quantity")
+    .eq("id", input.inventoryItemId)
+    .eq("character_id", input.characterId)
+    .maybeSingle();
+  if (invErr) return { ok: false as const, error: invErr.message };
+  if (!invRow?.id) return { ok: false as const, error: "Inventory item not found." };
+
+  const baseStatBlock =
+    owned.character && typeof (owned.character as any).stat_block === "object" && (owned.character as any).stat_block
+      ? ({ ...((owned.character as any).stat_block as Record<string, any>) } as Record<string, any>)
+      : {};
+  const baseMeta =
+    baseStatBlock.meta && typeof baseStatBlock.meta === "object"
+      ? ({ ...(baseStatBlock.meta as Record<string, any>) } as Record<string, any>)
+      : {};
+  const appliedIds = Array.isArray(baseMeta.class_package_applied_ids)
+    ? Array.from(
+        new Set(
+          (baseMeta.class_package_applied_ids as any[])
+            .map((v) => String(v ?? "").trim())
+            .filter(Boolean)
+        )
+      )
+    : [];
+
+  if (appliedIds.includes(input.packageId)) {
+    return { ok: true as const, alreadyApplied: true };
+  }
+
+  const nextStatBlock =
+    input.replaceStatBlock && typeof input.replaceStatBlock === "object"
+      ? ({ ...input.replaceStatBlock } as Record<string, any>)
+      : ({ ...baseStatBlock } as Record<string, any>);
+  const nextMeta =
+    nextStatBlock.meta && typeof nextStatBlock.meta === "object"
+      ? ({ ...(nextStatBlock.meta as Record<string, any>) } as Record<string, any>)
+      : {};
+  nextMeta.class_package_applied_ids = Array.from(new Set([...appliedIds, input.packageId]));
+  nextStatBlock.meta = nextMeta;
+
+  const characterPatch: Record<string, any> = { stat_block: nextStatBlock };
+  if (input.className) characterPatch.class = input.className;
+  const { error: charErr } = await supabase.from("characters").update(characterPatch).eq("id", input.characterId);
+  if (charErr) return { ok: false as const, error: charErr.message };
+
+  for (const traitId of input.grantTraitIds) {
+    const { data: existing, error: exErr } = await supabase
+      .from("player_trait_links")
+      .select("id")
+      .eq("character_id", input.characterId)
+      .eq("trait_id", traitId)
+      .limit(1)
+      .maybeSingle();
+    if (exErr) return { ok: false as const, error: exErr.message };
+    if (existing?.id) continue;
+    const { error: insErr } = await supabase.from("player_trait_links").insert({
+      player_id: input.userId,
+      character_id: input.characterId,
+      trait_id: traitId,
+    });
+    if (insErr) return { ok: false as const, error: insErr.message };
+  }
+
+  for (const actionId of input.grantActionIds) {
+    const { data: existing, error: exErr } = await supabase
+      .from("player_action_links")
+      .select("id")
+      .eq("character_id", input.characterId)
+      .eq("action_id", actionId)
+      .limit(1)
+      .maybeSingle();
+    if (exErr) return { ok: false as const, error: exErr.message };
+    if (existing?.id) continue;
+    const { error: insErr } = await supabase.from("player_action_links").insert({
+      player_id: input.userId,
+      character_id: input.characterId,
+      action_id: actionId,
+    });
+    if (insErr) return { ok: false as const, error: insErr.message };
+  }
+
+  if (input.grantItemIds.length) {
+    const { data: itemRows, error: itemErr } = await supabase
+      .from("items")
+      .select("id,name,is_active,stackable,max_stack")
+      .in("id", input.grantItemIds);
+    if (itemErr) return { ok: false as const, error: itemErr.message };
+    const validItems = (itemRows ?? []).filter((row: any) => row?.id && row.is_active !== false);
+    for (const item of validItems as any[]) {
+      const { data: existing, error: exErr } = await supabase
+        .from("inventory_items")
+        .select("id,quantity")
+        .eq("character_id", input.characterId)
+        .eq("item_id", String(item.id))
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (exErr) return { ok: false as const, error: exErr.message };
+
+      const stackable = toBool(item.stackable, true);
+      const maxStack = Number(item.max_stack ?? NaN);
+      const stackCap = Number.isFinite(maxStack) && maxStack > 0 ? Math.floor(maxStack) : null;
+      if (existing?.id && stackable) {
+        const qty = Math.max(1, Number((existing as any).quantity ?? 1));
+        if (!stackCap || qty < stackCap) {
+          const { error: upErr } = await supabase
+            .from("inventory_items")
+            .update({ quantity: stackCap ? Math.min(stackCap, qty + 1) : qty + 1 })
+            .eq("id", String((existing as any).id));
+          if (upErr) return { ok: false as const, error: upErr.message };
+        }
+        continue;
+      }
+
+      const { error: insErr } = await supabase.from("inventory_items").insert({
+        character_id: input.characterId,
+        item_id: String(item.id),
+        name: String(item.name ?? "Class Reward"),
+        quantity: 1,
+      });
+      if (insErr) return { ok: false as const, error: insErr.message };
+    }
+  }
+
+  if (input.consumeOnUse) {
+    const qty = Math.max(1, Number((invRow as any).quantity ?? 1));
+    if (qty > 1) {
+      const { error: upErr } = await supabase
+        .from("inventory_items")
+        .update({ quantity: qty - 1 })
+        .eq("id", input.inventoryItemId);
+      if (upErr) return { ok: false as const, error: upErr.message };
+    } else {
+      const { error: delErr } = await supabase.from("inventory_items").delete().eq("id", input.inventoryItemId);
+      if (delErr) return { ok: false as const, error: delErr.message };
+    }
+  }
+
+  return { ok: true as const, alreadyApplied: false };
+}
+
 export async function joinSessionAction(
   joinCodeOrId: string
 ): Promise<{ ok: boolean; sessionId?: string; sessionName?: string; error?: string }> {
@@ -1186,11 +1347,45 @@ export async function useInventoryItemAction(input: {
   });
   if (rpcErr) {
     const msg = String(rpcErr?.message ?? "");
-    if (msg.toLowerCase().includes("function public.apply_class_package_from_inventory")) {
-      return {
-        ok: false,
-        error: "Class-package RPC is missing. Run scripts/class-package-rpc.sql in Supabase SQL editor.",
-      };
+    const normalized = msg.toLowerCase();
+    if (
+      normalized.includes("function public.apply_class_package_from_inventory") ||
+      normalized.includes("cannot update view") ||
+      normalized.includes("character_stats_current")
+    ) {
+      const fallback = await applyClassPackageFallback(supabase, {
+        userId: user.id,
+        characterId,
+        inventoryItemId,
+        packageId,
+        className,
+        replaceStatBlock,
+        grantItemIds,
+        grantTraitIds,
+        grantActionIds,
+        consumeOnUse,
+      });
+      if (!fallback.ok) {
+        return {
+          ok: false,
+          error:
+            fallback.error ||
+            "Class package failed. If your database is using the older view-based logic, run scripts/class-package-rpc.sql in Supabase SQL editor.",
+        };
+      }
+      const fallbackMessage = fallback.alreadyApplied
+        ? "Class package already applied."
+        : "Class package applied.";
+      await appendGameLogSafe(supabase, {
+        userId: user.id,
+        characterId,
+        eventType: "class_package_applied",
+        title: `Class package applied: ${className || String(itemRow?.name ?? "Class Item")}`,
+        summary: `Used item: ${String(itemRow?.name ?? itemId)}`,
+        itemId,
+      });
+      revalidatePath("/player");
+      return { ok: true, message: fallbackMessage };
     }
     return { ok: false, error: msg || "Failed to apply class package." };
   }
