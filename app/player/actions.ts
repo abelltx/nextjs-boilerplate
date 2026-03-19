@@ -71,6 +71,45 @@ function extractTaskItemId(task: any): string | null {
   return null;
 }
 
+function isUuidLike(value: unknown) {
+  const v = String(value ?? "").trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
+}
+
+function cleanTaskTitle(raw: unknown) {
+  return String(raw ?? "")
+    .trim()
+    .replace(/\[item_id:[^\]]+\]/gi, "")
+    .replace(/^(?:have_item|item)\s*:\s*[0-9a-f-]{36}\s*\|?\s*/i, "")
+    .trim();
+}
+
+function normalizeQuestTaskDefs(taskDefs: any[]) {
+  return (Array.isArray(taskDefs) ? taskDefs : [])
+    .map((t: any) => {
+      const id = String(t?.id ?? "").trim();
+      if (!id) return null;
+      const rawKind = String(t?.kind ?? "").trim().toLowerCase();
+      const targetNpcId = String(t?.target_npc_block_id ?? "").trim();
+      const detectedItemId = extractTaskItemId(t);
+      const kind =
+        rawKind === "talk_to_npc" && isUuidLike(targetNpcId)
+          ? "talk_to_npc"
+          : (rawKind === "have_item" || rawKind === "item" || rawKind === "requires_item" || Boolean(detectedItemId))
+            ? "have_item"
+            : "task";
+      return {
+        id,
+        title: cleanTaskTitle(t?.title),
+        kind,
+        target_npc_block_id: kind === "talk_to_npc" ? targetNpcId || null : null,
+        target_npc_name: kind === "talk_to_npc" ? String(t?.target_npc_name ?? "").trim() || null : null,
+        target_item_id: kind === "have_item" ? detectedItemId : null,
+      };
+    })
+    .filter((t): t is NonNullable<typeof t> => Boolean(t));
+}
+
 async function getAutoCompletedItemTaskIds(
   supabase: Awaited<ReturnType<typeof supabaseServer>>,
   characterId: string,
@@ -526,16 +565,7 @@ export async function startNpcQuestAction(input: {
 
   const taskIds = cleanQuestTaskIds(input.taskIds);
   const taskDefs = Array.isArray(input.taskDefs)
-    ? input.taskDefs
-        .map((t: any) => ({
-          id: String(t?.id ?? "").trim(),
-          title: String(t?.title ?? "").trim(),
-          kind: String(t?.kind ?? "").trim().toLowerCase() || "task",
-          target_npc_block_id: String(t?.target_npc_block_id ?? "").trim() || null,
-          target_npc_name: String(t?.target_npc_name ?? "").trim() || null,
-          target_item_id: String(t?.target_item_id ?? "").trim() || null,
-        }))
-        .filter((t) => t.id.length > 0)
+    ? normalizeQuestTaskDefs(input.taskDefs)
     : [];
   const rewardItemIds = Array.from(
     new Set(
@@ -643,11 +673,30 @@ export async function completeNpcQuestTaskAction(input: {
   }
 
   const currentDone = Array.isArray((row as any)?.completed_task_ids) ? (row as any).completed_task_ids : [];
-  const taskDefs = Array.isArray((row as any)?.reward_meta?.task_defs) ? (row as any).reward_meta.task_defs : [];
+  const taskDefs = normalizeQuestTaskDefs(
+    Array.isArray((row as any)?.reward_meta?.task_defs) ? (row as any).reward_meta.task_defs : []
+  );
   const autoDone = await getAutoCompletedItemTaskIds(supabase, characterId, taskDefs);
   const storytellerControlled = toBool((row as any)?.reward_meta?.storyteller_controlled, false);
   if (storytellerControlled) {
     return { ok: false, error: "Storyteller controls this quest's progress." };
+  }
+  const taskDef = taskDefs.find((t: any) => String(t?.id ?? "").trim() === taskId) ?? null;
+  if (taskDef && String(taskDef.kind ?? "").trim().toLowerCase() === "have_item") {
+    const requiredItemId = String(taskDef.target_item_id ?? "").trim().toLowerCase();
+    if (requiredItemId && isUuidLike(requiredItemId)) {
+      const { data: invRow, error: invErr } = await supabase
+        .from("inventory_items")
+        .select("id")
+        .eq("character_id", characterId)
+        .eq("item_id", requiredItemId)
+        .limit(1)
+        .maybeSingle();
+      if (invErr) return { ok: false, error: invErr.message };
+      if (!invRow?.id) {
+        return { ok: false, error: "You need the required quest item in your inventory first." };
+      }
+    }
   }
   const nextDone = Array.from(
     new Set([...currentDone.map((v: any) => String(v)), ...autoDone.map((v) => String(v)), taskId])
@@ -789,7 +838,7 @@ export async function claimNpcQuestRewardsAction(input: {
     )
   ).slice(0, 25);
 
-  const rewardTaskDefs = Array.isArray(rewardMeta?.task_defs) ? rewardMeta.task_defs : [];
+  const rewardTaskDefs = normalizeQuestTaskDefs(Array.isArray(rewardMeta?.task_defs) ? rewardMeta.task_defs : []);
   const requiredTurnInItemIds = Array.from(
     new Set(
       rewardTaskDefs
