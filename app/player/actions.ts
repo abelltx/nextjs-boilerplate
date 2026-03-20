@@ -27,6 +27,93 @@ function toBool(value: unknown, fallback = false) {
   return fallback;
 }
 
+function mergeJsonObjects(
+  base: Record<string, any>,
+  patch: Record<string, any>
+): Record<string, any> {
+  const next: Record<string, any> = { ...base };
+  for (const [key, value] of Object.entries(patch)) {
+    if (
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      base[key] &&
+      typeof base[key] === "object" &&
+      !Array.isArray(base[key])
+    ) {
+      next[key] = mergeJsonObjects(
+        base[key] as Record<string, any>,
+        value as Record<string, any>
+      );
+      continue;
+    }
+    next[key] = value;
+  }
+  return next;
+}
+
+const ABILITY_KEYS = ["str", "dex", "con", "int", "wis", "cha"] as const;
+const DERIVED_KEYS = ["hp_max", "hp_current", "defense", "speed"] as const;
+
+function isPlainObject(value: unknown): value is Record<string, any> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function normalizeStatBlockShape(input: unknown): Record<string, any> {
+  const source = isPlainObject(input) ? ({ ...input } as Record<string, any>) : {};
+  const rawAbilities = isPlainObject(source.abilities) ? { ...(source.abilities as Record<string, any>) } : {};
+  const rawDerived = isPlainObject(source.derived) ? { ...(source.derived as Record<string, any>) } : {};
+  const rawResources = isPlainObject(source.resources) ? { ...(source.resources as Record<string, any>) } : {};
+  const rawMeta = isPlainObject(source.meta) ? { ...(source.meta as Record<string, any>) } : {};
+
+  const abilities: Record<string, any> = { ...rawAbilities };
+  for (const key of ABILITY_KEYS) {
+    if (abilities[key] == null && source[key] != null) abilities[key] = source[key];
+    delete source[key];
+  }
+
+  const derived: Record<string, any> = { ...rawDerived };
+  for (const key of DERIVED_KEYS) {
+    if (derived[key] == null && rawResources[key] != null) derived[key] = rawResources[key];
+    if (derived[key] == null && source[key] != null) derived[key] = source[key];
+    delete rawResources[key];
+    delete source[key];
+  }
+
+  delete source.abilities;
+  delete source.derived;
+  delete source.resources;
+  delete source.meta;
+
+  const normalized: Record<string, any> = { ...source };
+  if (Object.keys(abilities).length > 0) normalized.abilities = abilities;
+  if (Object.keys(derived).length > 0) normalized.derived = derived;
+  if (Object.keys(rawResources).length > 0) normalized.resources = rawResources;
+  if (Object.keys(rawMeta).length > 0) normalized.meta = rawMeta;
+  return normalized;
+}
+
+async function syncCharacterStatsCurrent(
+  supabase: Awaited<ReturnType<typeof supabaseServer>>,
+  characterId: string,
+  nextStatBlock: Record<string, any>
+) {
+  const { data: cur, error: curErr } = await supabase
+    .from("character_stats_current")
+    .select("id")
+    .eq("character_id", characterId)
+    .maybeSingle();
+  if (curErr) return { ok: false as const, error: curErr.message };
+  if (!cur?.id) return { ok: true as const };
+
+  const { error: upErr } = await supabase
+    .from("character_stats_current")
+    .update({ stat_block_current: nextStatBlock })
+    .eq("id", (cur as any).id);
+  if (upErr) return { ok: false as const, error: upErr.message };
+  return { ok: true as const };
+}
+
 async function requireOwnedCharacter(
   supabase: Awaited<ReturnType<typeof supabaseServer>>,
   userId: string,
@@ -197,7 +284,7 @@ async function applyClassPackageFallback(
 
   const baseStatBlock =
     owned.character && typeof (owned.character as any).stat_block === "object" && (owned.character as any).stat_block
-      ? ({ ...((owned.character as any).stat_block as Record<string, any>) } as Record<string, any>)
+      ? normalizeStatBlockShape((owned.character as any).stat_block as Record<string, any>)
       : {};
   const baseMeta =
     baseStatBlock.meta && typeof baseStatBlock.meta === "object"
@@ -217,10 +304,18 @@ async function applyClassPackageFallback(
     return { ok: true as const, alreadyApplied: true };
   }
 
-  const nextStatBlock =
+  const normalizedPackageStatBlock =
     input.replaceStatBlock && typeof input.replaceStatBlock === "object"
-      ? ({ ...input.replaceStatBlock } as Record<string, any>)
-      : ({ ...baseStatBlock } as Record<string, any>);
+      ? normalizeStatBlockShape(input.replaceStatBlock as Record<string, any>)
+      : null;
+  const nextStatBlock = normalizedPackageStatBlock
+    ? normalizeStatBlockShape(
+        mergeJsonObjects(
+          { ...baseStatBlock } as Record<string, any>,
+          normalizedPackageStatBlock
+        )
+      )
+    : normalizeStatBlockShape({ ...baseStatBlock });
   const nextMeta =
     nextStatBlock.meta && typeof nextStatBlock.meta === "object"
       ? ({ ...(nextStatBlock.meta as Record<string, any>) } as Record<string, any>)
@@ -232,6 +327,8 @@ async function applyClassPackageFallback(
   if (input.className) characterPatch.class = input.className;
   const { error: charErr } = await supabase.from("characters").update(characterPatch).eq("id", input.characterId);
   if (charErr) return { ok: false as const, error: charErr.message };
+  const syncErr = await syncCharacterStatsCurrent(supabase, input.characterId, nextStatBlock);
+  if (!syncErr.ok) return syncErr;
 
   for (const traitId of input.grantTraitIds) {
     const { data: existing, error: exErr } = await supabase
@@ -1310,7 +1407,7 @@ export async function useInventoryItemAction(input: {
   const className = String(cfg?.class_name ?? "").trim();
   const replaceStatBlock =
     cfg && typeof cfg.replace_stat_block === "object" && cfg.replace_stat_block
-      ? (cfg.replace_stat_block as Record<string, any>)
+      ? normalizeStatBlockShape(cfg.replace_stat_block as Record<string, any>)
       : null;
   const grantItemIds: string[] = Array.from(
     new Set(
@@ -1334,65 +1431,25 @@ export async function useInventoryItemAction(input: {
     )
   );
   const consumeOnUse = Boolean(cfg?.consume_on_use);
-  const { data: rpcData, error: rpcErr } = await supabase.rpc("apply_class_package_from_inventory", {
-    p_character_id: characterId,
-    p_inventory_item_id: inventoryItemId,
-    p_package_id: packageId,
-    p_class_name: className || null,
-    p_replace_stat_block: replaceStatBlock ?? null,
-    p_grant_item_ids: grantItemIds,
-    p_grant_trait_ids: grantTraitIds,
-    p_grant_action_ids: grantActionIds,
-    p_consume_on_use: consumeOnUse,
+  const result = await applyClassPackageFallback(supabase, {
+    userId: user.id,
+    characterId,
+    inventoryItemId,
+    packageId,
+    className,
+    replaceStatBlock,
+    grantItemIds,
+    grantTraitIds,
+    grantActionIds,
+    consumeOnUse,
   });
-  if (rpcErr) {
-    const msg = String(rpcErr?.message ?? "");
-    const normalized = msg.toLowerCase();
-    if (
-      normalized.includes("function public.apply_class_package_from_inventory") ||
-      normalized.includes("cannot update view") ||
-      normalized.includes("character_stats_current")
-    ) {
-      const fallback = await applyClassPackageFallback(supabase, {
-        userId: user.id,
-        characterId,
-        inventoryItemId,
-        packageId,
-        className,
-        replaceStatBlock,
-        grantItemIds,
-        grantTraitIds,
-        grantActionIds,
-        consumeOnUse,
-      });
-      if (!fallback.ok) {
-        return {
-          ok: false,
-          error:
-            fallback.error ||
-            "Class package failed. If your database is using the older view-based logic, run scripts/class-package-rpc.sql in Supabase SQL editor.",
-        };
-      }
-      const fallbackMessage = fallback.alreadyApplied
-        ? "Class package already applied."
-        : "Class package applied.";
-      await appendGameLogSafe(supabase, {
-        userId: user.id,
-        characterId,
-        eventType: "class_package_applied",
-        title: `Class package applied: ${className || String(itemRow?.name ?? "Class Item")}`,
-        summary: `Used item: ${String(itemRow?.name ?? itemId)}`,
-        itemId,
-      });
-      revalidatePath("/player");
-      return { ok: true, message: fallbackMessage };
-    }
-    return { ok: false, error: msg || "Failed to apply class package." };
+  if (!result.ok) {
+    return {
+      ok: false,
+      error: result.error || "Failed to apply class package.",
+    };
   }
-
-  const rpcObj = (rpcData && typeof rpcData === "object" && !Array.isArray(rpcData) ? rpcData : {}) as any;
-  const alreadyApplied = Boolean(rpcObj?.already_applied);
-  const resultMessage = String(rpcObj?.message ?? "").trim() || (alreadyApplied ? "Class package already applied." : "Class package applied.");
+  const resultMessage = result.alreadyApplied ? "Class package already applied." : "Class package applied.";
 
   await appendGameLogSafe(supabase, {
     userId: user.id,
