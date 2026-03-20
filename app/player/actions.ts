@@ -15,6 +15,17 @@ function hasMissingTableError(err: any, table: string) {
   return msg.includes(`relation "${table}" does not exist`) || msg.includes(`relation "public.${table}" does not exist`);
 }
 
+function hasMissingFunctionError(err: any, fn: string) {
+  const msg = String(err?.message ?? "").toLowerCase();
+  const code = String(err?.code ?? "").trim().toUpperCase();
+  return (
+    code === "PGRST202" ||
+    msg.includes(`could not find the function public.${fn}`) ||
+    msg.includes(`function public.${fn}`) ||
+    msg.includes(`public.${fn}(`)
+  );
+}
+
 function toBool(value: unknown, fallback = false) {
   if (typeof value === "boolean") return value;
   if (typeof value === "number") return value !== 0;
@@ -25,31 +36,6 @@ function toBool(value: unknown, fallback = false) {
     if (["false", "0", "no", "off", "null", "undefined"].includes(v)) return false;
   }
   return fallback;
-}
-
-function mergeJsonObjects(
-  base: Record<string, any>,
-  patch: Record<string, any>
-): Record<string, any> {
-  const next: Record<string, any> = { ...base };
-  for (const [key, value] of Object.entries(patch)) {
-    if (
-      value &&
-      typeof value === "object" &&
-      !Array.isArray(value) &&
-      base[key] &&
-      typeof base[key] === "object" &&
-      !Array.isArray(base[key])
-    ) {
-      next[key] = mergeJsonObjects(
-        base[key] as Record<string, any>,
-        value as Record<string, any>
-      );
-      continue;
-    }
-    next[key] = value;
-  }
-  return next;
 }
 
 const ABILITY_KEYS = ["str", "dex", "con", "int", "wis", "cha"] as const;
@@ -112,6 +98,37 @@ async function syncCharacterStatsCurrent(
     .eq("id", (cur as any).id);
   if (upErr) return { ok: false as const, error: upErr.message };
   return { ok: true as const };
+}
+
+function buildClassPackageStatBlock(
+  baseStatBlock: Record<string, any>,
+  replaceStatBlock: Record<string, any> | null,
+  packageId: string,
+  alreadyApplied: boolean
+) {
+  const nextStatBlock = alreadyApplied
+    ? normalizeStatBlockShape({ ...baseStatBlock })
+    : normalizeStatBlockShape(replaceStatBlock ? { ...replaceStatBlock } : { ...baseStatBlock });
+
+  if (!alreadyApplied) {
+    const baseMeta =
+      nextStatBlock.meta && typeof nextStatBlock.meta === "object"
+        ? ({ ...(nextStatBlock.meta as Record<string, any>) } as Record<string, any>)
+        : {};
+    const appliedIds = Array.isArray(baseMeta.class_package_applied_ids)
+      ? Array.from(
+          new Set(
+            (baseMeta.class_package_applied_ids as any[])
+              .map((v) => String(v ?? "").trim())
+              .filter(Boolean)
+          )
+        )
+      : [];
+    baseMeta.class_package_applied_ids = Array.from(new Set([...appliedIds, packageId]));
+    nextStatBlock.meta = baseMeta;
+  }
+
+  return nextStatBlock;
 }
 
 async function requireOwnedCharacter(
@@ -299,34 +316,26 @@ async function applyClassPackageFallback(
         )
       )
     : [];
-
-  if (appliedIds.includes(input.packageId)) {
-    return { ok: true as const, alreadyApplied: true };
-  }
+  const alreadyApplied = appliedIds.includes(input.packageId);
 
   const normalizedPackageStatBlock =
     input.replaceStatBlock && typeof input.replaceStatBlock === "object"
       ? normalizeStatBlockShape(input.replaceStatBlock as Record<string, any>)
       : null;
-  const nextStatBlock = normalizedPackageStatBlock
-    ? normalizeStatBlockShape(
-        mergeJsonObjects(
-          { ...baseStatBlock } as Record<string, any>,
-          normalizedPackageStatBlock
-        )
-      )
-    : normalizeStatBlockShape({ ...baseStatBlock });
-  const nextMeta =
-    nextStatBlock.meta && typeof nextStatBlock.meta === "object"
-      ? ({ ...(nextStatBlock.meta as Record<string, any>) } as Record<string, any>)
-      : {};
-  nextMeta.class_package_applied_ids = Array.from(new Set([...appliedIds, input.packageId]));
-  nextStatBlock.meta = nextMeta;
+  const nextStatBlock = buildClassPackageStatBlock(
+    baseStatBlock,
+    normalizedPackageStatBlock,
+    input.packageId,
+    alreadyApplied
+  );
 
-  const characterPatch: Record<string, any> = { stat_block: nextStatBlock };
-  if (input.className) characterPatch.class = input.className;
-  const { error: charErr } = await supabase.from("characters").update(characterPatch).eq("id", input.characterId);
-  if (charErr) return { ok: false as const, error: charErr.message };
+  if (!alreadyApplied) {
+    const characterPatch: Record<string, any> = { stat_block: nextStatBlock };
+    if (input.className) characterPatch.class = input.className;
+    const { error: charErr } = await supabase.from("characters").update(characterPatch).eq("id", input.characterId);
+    if (charErr) return { ok: false as const, error: charErr.message };
+  }
+
   const syncErr = await syncCharacterStatsCurrent(supabase, input.characterId, nextStatBlock);
   if (!syncErr.ok) return syncErr;
 
@@ -423,7 +432,7 @@ async function applyClassPackageFallback(
     }
   }
 
-  return { ok: true as const, alreadyApplied: false };
+  return { ok: true as const, alreadyApplied };
 }
 
 export async function joinSessionAction(
@@ -1431,7 +1440,7 @@ export async function useInventoryItemAction(input: {
     )
   );
   const consumeOnUse = Boolean(cfg?.consume_on_use);
-  const result = await applyClassPackageFallback(supabase, {
+  const fallbackInput = {
     userId: user.id,
     characterId,
     inventoryItemId,
@@ -1442,7 +1451,64 @@ export async function useInventoryItemAction(input: {
     grantTraitIds,
     grantActionIds,
     consumeOnUse,
+  };
+
+  let result:
+    | { ok: true; alreadyApplied: boolean; warning?: string }
+    | { ok: false; error: string };
+
+  const { data: rpcData, error: rpcErr } = await supabase.rpc("apply_class_package_from_inventory", {
+    p_character_id: characterId,
+    p_inventory_item_id: inventoryItemId,
+    p_package_id: packageId,
+    p_class_name: className || null,
+    p_replace_stat_block: replaceStatBlock ?? null,
+    p_grant_item_ids: grantItemIds,
+    p_grant_trait_ids: grantTraitIds,
+    p_grant_action_ids: grantActionIds,
+    p_consume_on_use: consumeOnUse,
   });
+
+  if (rpcErr && !hasMissingFunctionError(rpcErr, "apply_class_package_from_inventory")) {
+    return { ok: false, error: rpcErr.message || "Failed to apply class package." };
+  }
+
+  if (rpcErr) {
+    result = await applyClassPackageFallback(supabase, fallbackInput);
+  } else {
+    const rpcResult = rpcData && typeof rpcData === "object" ? (rpcData as Record<string, any>) : {};
+    const alreadyApplied = Boolean(rpcResult.already_applied);
+    const nextStatBlock = buildClassPackageStatBlock(
+      normalizeStatBlockShape((owner.character as any)?.stat_block ?? {}),
+      replaceStatBlock,
+      packageId,
+      alreadyApplied
+    );
+    const syncErr = await syncCharacterStatsCurrent(supabase, characterId, nextStatBlock);
+    result = syncErr.ok
+      ? { ok: true, alreadyApplied }
+      : {
+          ok: true,
+          alreadyApplied,
+          warning: syncErr.error,
+        };
+
+    if (alreadyApplied) {
+      const repairResult = await applyClassPackageFallback(supabase, fallbackInput);
+      if (!repairResult.ok) {
+        return {
+          ok: false,
+          error: repairResult.error || "Failed to repair class package state.",
+        };
+      }
+      result = {
+        ok: true,
+        alreadyApplied: true,
+        warning: result.warning,
+      };
+    }
+  }
+
   if (!result.ok) {
     return {
       ok: false,
@@ -1461,5 +1527,8 @@ export async function useInventoryItemAction(input: {
   });
 
   revalidatePath("/player");
-  return { ok: true, message: resultMessage };
+  return {
+    ok: true,
+    message: result.warning ? `${resultMessage} Current stat sync warning: ${result.warning}` : resultMessage,
+  };
 }

@@ -29,6 +29,7 @@ declare
   v_it record;
   v_existing record;
   v_qty int;
+  v_already_applied boolean := false;
 begin
   if v_uid is null then
     raise exception 'Not signed in.';
@@ -74,28 +75,37 @@ begin
     from jsonb_array_elements_text(v_ids) x(val)
     where x.val = v_pkg
   ) then
-    return jsonb_build_object(
-      'ok', true,
-      'already_applied', true,
-      'message', 'Class package already applied.'
-    );
+    v_already_applied := true;
   end if;
 
-  v_next := coalesce(p_replace_stat_block, v_base);
-  v_meta := coalesce(v_next->'meta', '{}'::jsonb);
-  v_ids := coalesce(v_meta->'class_package_applied_ids', '[]'::jsonb) || to_jsonb(v_pkg);
-  v_meta := jsonb_set(v_meta, '{class_package_applied_ids}', v_ids, true);
-  v_next := jsonb_set(v_next, '{meta}', v_meta, true);
+  if not v_already_applied then
+    v_next := coalesce(p_replace_stat_block, v_base);
+    v_meta := coalesce(v_next->'meta', '{}'::jsonb);
+    v_ids := coalesce(v_meta->'class_package_applied_ids', '[]'::jsonb) || to_jsonb(v_pkg);
+    v_meta := jsonb_set(v_meta, '{class_package_applied_ids}', v_ids, true);
+    v_next := jsonb_set(v_next, '{meta}', v_meta, true);
 
-  update public.characters
-     set stat_block = v_next
-   where id = p_character_id;
-
-  if nullif(trim(coalesce(p_class_name, '')), '') is not null then
     update public.characters
-       set class = trim(p_class_name)
+       set stat_block = v_next
      where id = p_character_id;
+
+    if nullif(trim(coalesce(p_class_name, '')), '') is not null then
+      update public.characters
+         set class = trim(p_class_name)
+       where id = p_character_id;
+    end if;
+  else
+    v_next := v_base;
   end if;
+
+  begin
+    update public.character_stats_current
+       set stat_block_current = v_next
+     where character_id = p_character_id;
+  exception
+    when undefined_table or object_not_in_prerequisite_state or feature_not_supported then
+      null;
+  end;
 
   if coalesce(array_length(p_grant_trait_ids, 1), 0) > 0 then
     insert into public.player_trait_links (player_id, character_id, trait_id)
@@ -161,9 +171,9 @@ begin
 
   return jsonb_build_object(
     'ok', true,
-    'already_applied', false,
+    'already_applied', v_already_applied,
     'consumed', coalesce(p_consume_on_use, true),
-    'message', 'Class package applied.',
+    'message', case when v_already_applied then 'Class package repaired.' else 'Class package applied.' end,
     'applied_at', v_now
   );
 end;
