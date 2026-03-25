@@ -79,7 +79,37 @@ begin
   end if;
 
   if not v_already_applied then
-    v_next := coalesce(p_replace_stat_block, v_base);
+    v_next := coalesce(v_base, '{}'::jsonb) || coalesce(p_replace_stat_block, '{}'::jsonb);
+    v_next := jsonb_set(
+      v_next,
+      '{abilities}',
+      coalesce(v_base->'abilities', '{}'::jsonb) || coalesce(p_replace_stat_block->'abilities', '{}'::jsonb),
+      true
+    );
+    v_next := jsonb_set(
+      v_next,
+      '{derived}',
+      coalesce(v_base->'derived', '{}'::jsonb) || coalesce(p_replace_stat_block->'derived', '{}'::jsonb),
+      true
+    );
+    v_next := jsonb_set(
+      v_next,
+      '{resources}',
+      coalesce(v_base->'resources', '{}'::jsonb) || coalesce(p_replace_stat_block->'resources', '{}'::jsonb),
+      true
+    );
+    v_next := jsonb_set(
+      v_next,
+      '{saves}',
+      coalesce(v_base->'saves', '{}'::jsonb) || coalesce(p_replace_stat_block->'saves', '{}'::jsonb),
+      true
+    );
+    v_next := jsonb_set(
+      v_next,
+      '{skills}',
+      coalesce(v_base->'skills', '{}'::jsonb) || coalesce(p_replace_stat_block->'skills', '{}'::jsonb),
+      true
+    );
     v_meta := coalesce(v_next->'meta', '{}'::jsonb);
     v_ids := coalesce(v_meta->'class_package_applied_ids', '[]'::jsonb) || to_jsonb(v_pkg);
     v_meta := jsonb_set(v_meta, '{class_package_applied_ids}', v_ids, true);

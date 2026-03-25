@@ -26,6 +26,11 @@ function hasMissingFunctionError(err: any, fn: string) {
   );
 }
 
+function hasNonUpdatableViewError(err: any) {
+  const msg = String(err?.message ?? "").toLowerCase();
+  return msg.includes("cannot update view") || msg.includes("not automatically updatable");
+}
+
 function toBool(value: unknown, fallback = false) {
   if (typeof value === "boolean") return value;
   if (typeof value === "number") return value !== 0;
@@ -36,6 +41,31 @@ function toBool(value: unknown, fallback = false) {
     if (["false", "0", "no", "off", "null", "undefined"].includes(v)) return false;
   }
   return fallback;
+}
+
+function mergeJsonObjects(
+  base: Record<string, any>,
+  patch: Record<string, any>
+): Record<string, any> {
+  const next: Record<string, any> = { ...base };
+  for (const [key, value] of Object.entries(patch)) {
+    if (
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      base[key] &&
+      typeof base[key] === "object" &&
+      !Array.isArray(base[key])
+    ) {
+      next[key] = mergeJsonObjects(
+        base[key] as Record<string, any>,
+        value as Record<string, any>
+      );
+      continue;
+    }
+    next[key] = value;
+  }
+  return next;
 }
 
 const ABILITY_KEYS = ["str", "dex", "con", "int", "wis", "cha"] as const;
@@ -84,18 +114,11 @@ async function syncCharacterStatsCurrent(
   characterId: string,
   nextStatBlock: Record<string, any>
 ) {
-  const { data: cur, error: curErr } = await supabase
-    .from("character_stats_current")
-    .select("id")
-    .eq("character_id", characterId)
-    .maybeSingle();
-  if (curErr) return { ok: false as const, error: curErr.message };
-  if (!cur?.id) return { ok: true as const };
-
   const { error: upErr } = await supabase
     .from("character_stats_current")
     .update({ stat_block_current: nextStatBlock })
-    .eq("id", (cur as any).id);
+    .eq("character_id", characterId);
+  if (upErr && hasNonUpdatableViewError(upErr)) return { ok: true as const };
   if (upErr) return { ok: false as const, error: upErr.message };
   return { ok: true as const };
 }
@@ -108,7 +131,14 @@ function buildClassPackageStatBlock(
 ) {
   const nextStatBlock = alreadyApplied
     ? normalizeStatBlockShape({ ...baseStatBlock })
-    : normalizeStatBlockShape(replaceStatBlock ? { ...replaceStatBlock } : { ...baseStatBlock });
+    : normalizeStatBlockShape(
+        replaceStatBlock
+          ? mergeJsonObjects(
+              { ...baseStatBlock } as Record<string, any>,
+              replaceStatBlock as Record<string, any>
+            )
+          : { ...baseStatBlock }
+      );
 
   if (!alreadyApplied) {
     const baseMeta =
