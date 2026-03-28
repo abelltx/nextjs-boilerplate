@@ -166,18 +166,56 @@ type PointSupportEffectRow = {
   id: string;
   kind: "point";
   action_id: string;
+  action_name: string | null;
   source_player_id: string;
   source_character_id: string;
   source_name: string | null;
   target_player_id: string;
   target_character_id: string;
   target_name: string | null;
+  choice_owner: string | null;
+  options: Array<{
+    id: string | null;
+    label: string | null;
+    trigger: string | null;
+    grant_advantage: boolean | null;
+    damage_bonus: number | null;
+    consume_on_use: boolean | null;
+  }>;
   status: "pending_choice" | "attack_roll" | "damage_bonus" | "consumed";
   damage_bonus: number | null;
   created_at: string | null;
   chosen_at: string | null;
   consumed_at: string | null;
 };
+
+function normalizeTargetedSupportConfig(input: unknown) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
+  const cfg = input as Record<string, any>;
+  const kind = String(cfg.kind ?? "").trim().toLowerCase();
+  if (kind !== "targeted_support") return null;
+  const options = (Array.isArray(cfg.options) ? cfg.options : [])
+    .map((row: any) => {
+      const trigger = String(row?.trigger ?? "").trim().toLowerCase();
+      if (!["next_attack_roll", "next_damage_roll"].includes(trigger)) return null;
+      return {
+        id: String(row?.id ?? "").trim() || null,
+        label: String(row?.label ?? "").trim() || null,
+        trigger,
+        grant_advantage: typeof row?.grant_advantage === "boolean" ? row.grant_advantage : null,
+        damage_bonus: Number.isFinite(Number(row?.damage_bonus ?? NaN)) ? Number(row.damage_bonus) : null,
+        consume_on_use: typeof row?.consume_on_use === "boolean" ? row.consume_on_use : null,
+      };
+    })
+    .filter((row): row is NonNullable<typeof row> => Boolean(row));
+  if (!options.length) return null;
+  return {
+    kind: "targeted_support" as const,
+    target_scope: String(cfg.target_scope ?? "ally").trim().toLowerCase() || "ally",
+    choice_owner: String(cfg.choice_owner ?? "target").trim().toLowerCase() || "target",
+    options,
+  };
+}
 
 async function getSessionCharacterRoster(
   supabase: Awaited<ReturnType<typeof supabaseServer>>,
@@ -232,12 +270,24 @@ function normalizePointSupportEffects(input: unknown) {
         id,
         kind: "point" as const,
         action_id: String(row?.action_id ?? "").trim(),
+        action_name: String(row?.action_name ?? "").trim() || null,
         source_player_id: String(row?.source_player_id ?? "").trim(),
         source_character_id: String(row?.source_character_id ?? "").trim(),
         source_name: String(row?.source_name ?? "").trim() || null,
         target_player_id: String(row?.target_player_id ?? "").trim(),
         target_character_id: String(row?.target_character_id ?? "").trim(),
         target_name: String(row?.target_name ?? "").trim() || null,
+        choice_owner: String(row?.choice_owner ?? "").trim().toLowerCase() || null,
+        options: (Array.isArray(row?.options) ? row.options : [])
+          .map((opt: any) => ({
+            id: String(opt?.id ?? "").trim() || null,
+            label: String(opt?.label ?? "").trim() || null,
+            trigger: String(opt?.trigger ?? "").trim().toLowerCase() || null,
+            grant_advantage: typeof opt?.grant_advantage === "boolean" ? opt.grant_advantage : null,
+            damage_bonus: Number.isFinite(Number(opt?.damage_bonus ?? NaN)) ? Number(opt.damage_bonus) : null,
+            consume_on_use: typeof opt?.consume_on_use === "boolean" ? opt.consume_on_use : null,
+          }))
+          .filter((opt: any) => Boolean(opt.trigger)),
         status: status as PointSupportEffectRow["status"],
         damage_bonus: Number.isFinite(Number(row?.damage_bonus ?? NaN)) ? Number(row?.damage_bonus) : null,
         created_at: String(row?.created_at ?? "").trim() || null,
@@ -793,15 +843,13 @@ export async function usePointSupportAction(input: {
 
   const { data: action, error: actionErr } = await supabase
     .from("actions")
-    .select("id,name,tags,is_active")
+    .select("id,name,tags,action_config,is_active")
     .eq("id", actionId)
     .maybeSingle();
   if (actionErr) return { ok: false, error: actionErr.message };
   if (!action?.id || action.is_active === false) return { ok: false, error: "Action not available." };
-  const tags = Array.isArray((action as any)?.tags)
-    ? ((action as any).tags as any[]).map((v) => String(v ?? "").trim().toLowerCase()).filter(Boolean)
-    : [];
-  if (!tags.includes("support_point")) return { ok: false, error: "This action is not configured as Point." };
+  const supportConfig = normalizeTargetedSupportConfig((action as any)?.action_config);
+  if (!supportConfig) return { ok: false, error: "This action is not configured as a targeted support action." };
 
   const { data: stateRow, error: stateErr } = await supabase
     .from("session_state")
@@ -828,12 +876,15 @@ export async function usePointSupportAction(input: {
       id: randomUUID(),
       kind: "point" as const,
       action_id: actionId,
+      action_name: String((action as any)?.name ?? "").trim() || null,
       source_player_id: user.id,
       source_character_id: characterId,
       source_name: sourceName,
       target_player_id: target.playerId,
       target_character_id: target.characterId,
       target_name: target.name,
+      choice_owner: supportConfig.choice_owner,
+      options: supportConfig.options,
       status: "pending_choice" as const,
       damage_bonus: null,
       created_at: new Date().toISOString(),
@@ -884,11 +935,16 @@ export async function choosePointSupportAction(input: {
   const next = normalizePointSupportEffects((stateRow as any)?.support_effects).map((row) => {
     if (row.id !== effectId) return row;
     if (row.target_character_id !== characterId || row.status !== "pending_choice") return row;
+    const chosenOption =
+      choice === "attack_roll"
+        ? row.options.find((opt) => opt.trigger === "next_attack_roll" && opt.grant_advantage)
+        : row.options.find((opt) => opt.trigger === "next_damage_roll" && Number.isFinite(Number(opt.damage_bonus ?? NaN)));
+    if (!chosenOption) return row;
     found = true;
     return {
       ...row,
       status: choice,
-      damage_bonus: choice === "damage_bonus" ? 3 : null,
+      damage_bonus: choice === "damage_bonus" ? Number(chosenOption.damage_bonus ?? 0) : null,
       chosen_at: nowIso,
     };
   });

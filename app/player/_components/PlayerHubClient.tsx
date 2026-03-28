@@ -48,16 +48,39 @@ type SessionRosterEntry = {
   name: string;
   className?: string | null;
 };
+type ActionConfig = {
+  kind?: string | null;
+  target_scope?: string | null;
+  choice_owner?: string | null;
+  options?: Array<{
+    id?: string | null;
+    label?: string | null;
+    trigger?: string | null;
+    grant_advantage?: boolean | null;
+    damage_bonus?: number | null;
+    consume_on_use?: boolean | null;
+  }>;
+} | null;
 type PointSupportEffect = {
   id: string;
   kind: "point";
   action_id: string;
+  action_name?: string | null;
   source_player_id: string;
   source_character_id: string;
   source_name?: string | null;
   target_player_id: string;
   target_character_id: string;
   target_name?: string | null;
+  choice_owner?: string | null;
+  options?: Array<{
+    id?: string | null;
+    label?: string | null;
+    trigger?: string | null;
+    grant_advantage?: boolean | null;
+    damage_bonus?: number | null;
+    consume_on_use?: boolean | null;
+  }>;
   status: "pending_choice" | "attack_roll" | "damage_bonus" | "consumed";
   damage_bonus?: number | null;
   created_at?: string | null;
@@ -152,6 +175,26 @@ function normalizeAdvantageKey(raw: string) {
   return String(raw ?? "").trim().toLowerCase().replace(/\s+/g, "_");
 }
 
+function normalizeActionConfig(input: unknown): ActionConfig {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
+  const cfg = input as Record<string, any>;
+  return {
+    kind: String(cfg.kind ?? "").trim().toLowerCase() || null,
+    target_scope: String(cfg.target_scope ?? "").trim().toLowerCase() || null,
+    choice_owner: String(cfg.choice_owner ?? "").trim().toLowerCase() || null,
+    options: Array.isArray(cfg.options)
+      ? cfg.options.map((opt: any) => ({
+          id: String(opt?.id ?? "").trim() || null,
+          label: String(opt?.label ?? "").trim() || null,
+          trigger: String(opt?.trigger ?? "").trim().toLowerCase() || null,
+          grant_advantage: typeof opt?.grant_advantage === "boolean" ? opt.grant_advantage : null,
+          damage_bonus: Number.isFinite(Number(opt?.damage_bonus ?? NaN)) ? Number(opt.damage_bonus) : null,
+          consume_on_use: typeof opt?.consume_on_use === "boolean" ? opt.consume_on_use : null,
+        }))
+      : [],
+  };
+}
+
 function abilityModifier(score: unknown) {
   const n = Number(score);
   if (!Number.isFinite(n)) return 0;
@@ -177,6 +220,7 @@ export default function PlayerHubClient(props: {
     name: string;
     type?: string | null;
     tags?: string[];
+    action_config?: ActionConfig;
     summary?: string | null;
     rules_text?: string | null;
     range_normal?: number | null;
@@ -427,7 +471,8 @@ export default function PlayerHubClient(props: {
     () =>
       temporaryAttackPointEffects.map((row) => {
         const sourceName = String(row?.source_name ?? "").trim();
-        return sourceName ? `Point (${sourceName})` : "Point";
+        const actionName = String(row?.action_name ?? "").trim() || "Support";
+        return sourceName ? `${actionName} (${sourceName})` : actionName;
       }),
     [temporaryAttackPointEffects]
   );
@@ -439,7 +484,8 @@ export default function PlayerHubClient(props: {
     () =>
       temporaryDamagePointEffects.map((row) => {
         const sourceName = String(row?.source_name ?? "").trim();
-        return sourceName ? `Point (${sourceName})` : "Point";
+        const actionName = String(row?.action_name ?? "").trim() || "Support";
+        return sourceName ? `${actionName} (${sourceName})` : actionName;
       }),
     [temporaryDamagePointEffects]
   );
@@ -571,12 +617,12 @@ export default function PlayerHubClient(props: {
         targetCharacterId,
       });
       if (!res.ok) {
-        alert(res.error ?? "Could not use Point.");
+        alert(res.error ?? "Could not use support action.");
         return;
       }
       router.refresh();
     } catch (e: any) {
-      alert(e?.message ?? "Could not use Point.");
+      alert(e?.message ?? "Could not use support action.");
     } finally {
       setUsingPointActionId(null);
     }
@@ -593,12 +639,12 @@ export default function PlayerHubClient(props: {
         choice,
       });
       if (!res.ok) {
-        alert(res.error ?? "Could not choose Point bonus.");
+        alert(res.error ?? "Could not choose support effect.");
         return;
       }
       router.refresh();
     } catch (e: any) {
-      alert(e?.message ?? "Could not choose Point bonus.");
+      alert(e?.message ?? "Could not choose support effect.");
     } finally {
       setResolvingPointId(null);
     }
@@ -1587,6 +1633,7 @@ function ActionListPanel(props: {
     name: string;
     type?: string | null;
     tags?: string[];
+    action_config?: ActionConfig;
     summary?: string | null;
     rules_text?: string | null;
     range_normal?: number | null;
@@ -1715,7 +1762,7 @@ function ActionListPanel(props: {
                 {a.range_max ? ` (${a.range_max})` : ""}
               </div>
               <div className="col-span-2 text-xs text-neutral-300">
-                {Array.isArray(a.tags) && a.tags.includes("support_point") ? (
+                {normalizeActionConfig(a.action_config)?.kind === "targeted_support" ? (
                   <div className="space-y-1">
                     <select
                       value={pointTargetByAction[a.id] ?? ""}
@@ -1746,7 +1793,7 @@ function ActionListPanel(props: {
                       }
                       onClick={() => props.onUsePoint?.(a.id, String(pointTargetByAction[a.id] ?? "").trim())}
                     >
-                      {props.pointActionBusyId === a.id ? "Pointing..." : "Use Point"}
+                      {props.pointActionBusyId === a.id ? "Applying..." : "Use Action"}
                     </button>
                   </div>
                 ) : a.uses_attack_roll !== false && a.attack_bonus_override != null ? (
@@ -1839,32 +1886,43 @@ function PendingPointChoicePanel(props: {
 }) {
   return (
     <div className="rounded-2xl border border-amber-400/60 bg-amber-500/10 p-4">
-      <div className="text-sm font-semibold text-amber-100">Point</div>
-      <div className="mt-1 text-xs text-amber-50/90">Choose how to use the prophet’s guidance on your next attack.</div>
+      <div className="text-sm font-semibold text-amber-100">Support Choice</div>
+      <div className="mt-1 text-xs text-amber-50/90">Choose how to use the active support effect on your next attack.</div>
       <div className="mt-3 space-y-3">
         {props.effects.map((effect) => {
           const sourceName = String(effect.source_name ?? "").trim() || "An ally";
+          const actionName = String(effect.action_name ?? "").trim() || "Support";
+          const attackOption = Array.isArray(effect.options)
+            ? effect.options.find((opt) => String(opt?.trigger ?? "").trim().toLowerCase() === "next_attack_roll" && Boolean(opt?.grant_advantage))
+            : null;
+          const damageOption = Array.isArray(effect.options)
+            ? effect.options.find((opt) => String(opt?.trigger ?? "").trim().toLowerCase() === "next_damage_roll")
+            : null;
           const busy = props.resolvingId === effect.id;
           return (
             <div key={effect.id} className="rounded-xl border border-amber-300/40 bg-neutral-950/40 p-3">
-              <div className="text-sm text-neutral-100">{sourceName} pointed you toward an opening.</div>
+              <div className="text-sm text-neutral-100">{sourceName} used {actionName} on you.</div>
               <div className="mt-2 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => props.onChoose(effect.id, "attack_roll")}
-                  disabled={busy}
-                  className="rounded border border-neutral-700 px-3 py-1.5 text-sm hover:bg-neutral-900 disabled:opacity-60"
-                >
-                  {busy ? "Choosing..." : "Next attack: advantage"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => props.onChoose(effect.id, "damage_bonus")}
-                  disabled={busy}
-                  className="rounded border border-neutral-700 px-3 py-1.5 text-sm hover:bg-neutral-900 disabled:opacity-60"
-                >
-                  {busy ? "Choosing..." : "Next hit: +3 damage"}
-                </button>
+                {attackOption ? (
+                  <button
+                    type="button"
+                    onClick={() => props.onChoose(effect.id, "attack_roll")}
+                    disabled={busy}
+                    className="rounded border border-neutral-700 px-3 py-1.5 text-sm hover:bg-neutral-900 disabled:opacity-60"
+                  >
+                    {busy ? "Choosing..." : String(attackOption.label ?? "Next attack: advantage")}
+                  </button>
+                ) : null}
+                {damageOption ? (
+                  <button
+                    type="button"
+                    onClick={() => props.onChoose(effect.id, "damage_bonus")}
+                    disabled={busy}
+                    className="rounded border border-neutral-700 px-3 py-1.5 text-sm hover:bg-neutral-900 disabled:opacity-60"
+                  >
+                    {busy ? "Choosing..." : String(damageOption.label ?? "Next hit: damage bonus")}
+                  </button>
+                ) : null}
               </div>
             </div>
           );

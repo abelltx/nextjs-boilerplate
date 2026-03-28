@@ -10,14 +10,49 @@ function numberOrNull(raw: FormDataEntryValue | null) {
   return Number.isFinite(n) ? n : null;
 }
 
-function mergeActionTags(tagsRaw: string, behaviorRaw: FormDataEntryValue | null) {
+function mergeActionTags(tagsRaw: string) {
   const tags = tagsRaw
     ? tagsRaw.split(",").map((t) => t.trim()).filter(Boolean)
     : [];
-  const behavior = String(behaviorRaw ?? "").trim().toLowerCase();
-  const next = tags.filter((tag) => tag.toLowerCase() !== "support_point");
-  if (behavior === "support_point") next.push("support_point");
-  return Array.from(new Set(next));
+  return Array.from(new Set(tags));
+}
+
+function buildActionConfig(formData: FormData) {
+  const behavior = String(formData.get("action_behavior") ?? "").trim().toLowerCase();
+  if (behavior !== "targeted_support") return null;
+
+  const targetScope = String(formData.get("support_target_scope") ?? "ally").trim().toLowerCase() || "ally";
+  const choiceOwner = String(formData.get("support_choice_owner") ?? "target").trim().toLowerCase() || "target";
+  const grantAttackAdvantage = formData.get("support_grant_attack_roll_advantage") === "on";
+  const damageBonus = numberOrNull(formData.get("support_damage_bonus"));
+  const options: Array<Record<string, unknown>> = [];
+
+  if (grantAttackAdvantage) {
+    options.push({
+      id: "attack_roll_advantage",
+      label: "Advantage on next attack roll",
+      trigger: "next_attack_roll",
+      grant_advantage: true,
+      consume_on_use: true,
+    });
+  }
+  if (damageBonus !== null && damageBonus !== 0) {
+    options.push({
+      id: "damage_bonus",
+      label: `${damageBonus > 0 ? "+" : ""}${damageBonus} damage on next hit`,
+      trigger: "next_damage_roll",
+      damage_bonus: damageBonus,
+      consume_on_use: true,
+    });
+  }
+  if (!options.length) return null;
+
+  return {
+    kind: "targeted_support",
+    target_scope: targetScope,
+    choice_owner: choiceOwner,
+    options,
+  };
 }
 
 export async function createActionAction(formData: FormData) {
@@ -28,7 +63,8 @@ export async function createActionAction(formData: FormData) {
   const summary = String(formData.get("summary") ?? "").trim() || null;
   const rules_text = String(formData.get("rules_text") ?? "").trim() || null;
   const tagsRaw = String(formData.get("tags") ?? "").trim();
-  const tags = mergeActionTags(tagsRaw, formData.get("action_behavior"));
+  const tags = mergeActionTags(tagsRaw);
+  const action_config = buildActionConfig(formData);
   const is_active = formData.get("is_active") === "on";
   const uses_attack_roll = formData.get("uses_attack_roll") === "on";
   const attack_bonus_override = numberOrNull(formData.get("attack_bonus_override"));
@@ -51,6 +87,7 @@ export async function createActionAction(formData: FormData) {
     summary,
     rules_text,
     tags,
+    action_config,
     is_active,
     uses_attack_roll,
     attack_bonus_override,
@@ -79,6 +116,7 @@ export async function createActionAction(formData: FormData) {
       summary,
       rules_text,
       tags,
+      action_config,
       is_active,
     };
     const retry = await supabase.from("actions").insert(fallbackPayload).select("id").maybeSingle();

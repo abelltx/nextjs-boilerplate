@@ -512,6 +512,7 @@ export default async function PlayerPage() {
       name: String(r.name ?? "Action"),
       type: r.type ?? null,
       tags: Array.isArray(r.tags) ? r.tags.map((v: any) => String(v ?? "").trim()).filter(Boolean) : [],
+      action_config: r.action_config ?? null,
       summary: r.summary ?? null,
       rules_text: r.rules_text ?? null,
       range_normal: Number.isFinite(Number(r.range_normal)) ? Number(r.range_normal) : null,

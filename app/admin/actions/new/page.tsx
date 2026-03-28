@@ -2,7 +2,7 @@ import { createActionAction } from "./actions";
 
 const ACTION_BEHAVIOR_OPTIONS = [
   { value: "", label: "Standard Action" },
-  { value: "support_point", label: "Point Support" },
+  { value: "targeted_support", label: "Targeted Support" },
 ];
 const DAMAGE_DICE_OPTIONS = [
   "",
@@ -100,8 +100,23 @@ export default async function ActionNewPage({
                 ))}
               </select>
               <span className="text-xs text-muted-foreground">
-                Use this for special nonstandard action flows like Prophet support abilities.
+                Use this for special nonstandard action flows that target another character.
               </span>
+            </label>
+
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Support Target</span>
+              <select name="support_target_scope" defaultValue="ally" className="w-full rounded-md border px-3 py-2">
+                <option value="ally">ally</option>
+              </select>
+            </label>
+
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Who Chooses</span>
+              <select name="support_choice_owner" defaultValue="target" className="w-full rounded-md border px-3 py-2">
+                <option value="target">target</option>
+                <option value="source">source</option>
+              </select>
             </label>
 
             <label className="grid gap-2 md:col-span-2">
@@ -117,6 +132,32 @@ export default async function ActionNewPage({
             <label className="grid gap-2 md:col-span-2">
               <span className="text-sm font-medium">Tags (comma separated)</span>
               <input name="tags" className="w-full rounded-md border px-3 py-2" placeholder="undead, grapple, fire" />
+            </label>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border bg-card p-4 shadow-sm space-y-4">
+          <div>
+            <h2 className="font-semibold">Support Effects</h2>
+            <p className="text-sm text-muted-foreground">
+              These options are used when <code>Action Behavior</code> is set to <code>Targeted Support</code>.
+            </p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" name="support_grant_attack_roll_advantage" />
+              <span>Grant advantage on next attack roll</span>
+            </label>
+
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Next-hit damage bonus</span>
+              <input
+                name="support_damage_bonus"
+                defaultValue=""
+                className="w-full rounded-md border px-3 py-2"
+                inputMode="numeric"
+                placeholder="e.g. 3"
+              />
             </label>
           </div>
         </div>

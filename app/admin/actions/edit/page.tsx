@@ -42,7 +42,7 @@ const DAMAGE_TYPE_OPTIONS = [
 ];
 const ACTION_BEHAVIOR_OPTIONS = [
   { value: "", label: "Standard Action" },
-  { value: "support_point", label: "Point Support" },
+  { value: "targeted_support", label: "Targeted Support" },
 ];
 
 function isUuid(v: unknown) {
@@ -75,7 +75,12 @@ export default async function ActionEditPage({
   if (error) redirect(`/admin/actions?err=${encodeURIComponent(error.message)}`);
   if (!action) redirect("/admin/actions?err=not_found_or_rls");
   const actionTags = Array.isArray(action.tags) ? action.tags.map((v: any) => String(v ?? "").trim()).filter(Boolean) : [];
-  const actionBehavior = actionTags.includes("support_point") ? "support_point" : "";
+  const actionConfig = action && typeof action.action_config === "object" && action.action_config ? (action.action_config as any) : null;
+  const supportOptions = Array.isArray(actionConfig?.options) ? (actionConfig.options as any[]) : [];
+  const supportAttackAdvantage = supportOptions.some((opt: any) => String(opt?.trigger ?? "").trim().toLowerCase() === "next_attack_roll" && Boolean(opt?.grant_advantage));
+  const supportDamageBonus =
+    supportOptions.find((opt: any) => String(opt?.trigger ?? "").trim().toLowerCase() === "next_damage_roll")?.damage_bonus ?? "";
+  const actionBehavior = String(actionConfig?.kind ?? "").trim().toLowerCase() === "targeted_support" ? "targeted_support" : "";
 
   return (
     <div className="mx-auto w-full max-w-5xl p-6 space-y-4">
@@ -145,8 +150,31 @@ export default async function ActionEditPage({
                 ))}
               </select>
               <span className="text-xs text-muted-foreground">
-                Use this for special nonstandard action flows like Prophet support abilities.
+                Use this for special nonstandard action flows that target another character.
               </span>
+            </label>
+
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Support Target</span>
+              <select
+                name="support_target_scope"
+                defaultValue={String(actionConfig?.target_scope ?? "ally")}
+                className="w-full rounded-lg border px-3 py-2"
+              >
+                <option value="ally">ally</option>
+              </select>
+            </label>
+
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Who Chooses</span>
+              <select
+                name="support_choice_owner"
+                defaultValue={String(actionConfig?.choice_owner ?? "target")}
+                className="w-full rounded-lg border px-3 py-2"
+              >
+                <option value="target">target</option>
+                <option value="source">source</option>
+              </select>
             </label>
 
             <label className="grid gap-2 md:col-span-2">
@@ -171,9 +199,39 @@ export default async function ActionEditPage({
               <span className="text-sm font-medium">Tags (comma separated)</span>
               <input
                 name="tags"
-                defaultValue={actionTags.filter((tag: string) => tag !== "support_point").join(", ")}
+                defaultValue={actionTags.join(", ")}
                 className="w-full rounded-lg border px-3 py-2"
                 placeholder="undead, grapple, fire"
+              />
+            </label>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border bg-card p-4 shadow-sm space-y-4">
+          <div>
+            <h2 className="font-semibold">Support Effects</h2>
+            <p className="text-sm text-muted-foreground">
+              These options are used when <code>Action Behavior</code> is set to <code>Targeted Support</code>.
+            </p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                name="support_grant_attack_roll_advantage"
+                defaultChecked={supportAttackAdvantage}
+              />
+              <span>Grant advantage on next attack roll</span>
+            </label>
+
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Next-hit damage bonus</span>
+              <input
+                name="support_damage_bonus"
+                defaultValue={supportDamageBonus}
+                className="w-full rounded-lg border px-3 py-2"
+                inputMode="numeric"
+                placeholder="e.g. 3"
               />
             </label>
           </div>
