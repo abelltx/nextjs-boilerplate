@@ -1,4 +1,9 @@
 import { createActionAction } from "./actions";
+
+const ACTION_BEHAVIOR_OPTIONS = [
+  { value: "", label: "Standard Action" },
+  { value: "support_point", label: "Point Support" },
+];
 const DAMAGE_DICE_OPTIONS = [
   "",
   "1d4",
@@ -83,6 +88,20 @@ export default async function ActionNewPage({
                 <option value="ranged">ranged</option>
                 <option value="other">other</option>
               </select>
+            </label>
+
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Action Behavior</span>
+              <select name="action_behavior" defaultValue="" className="w-full rounded-md border px-3 py-2">
+                {ACTION_BEHAVIOR_OPTIONS.map((opt) => (
+                  <option key={opt.value || "standard"} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              <span className="text-xs text-muted-foreground">
+                Use this for special nonstandard action flows like Prophet support abilities.
+              </span>
             </label>
 
             <label className="grid gap-2 md:col-span-2">

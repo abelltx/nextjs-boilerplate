@@ -10,6 +10,16 @@ function numberOrNull(raw: FormDataEntryValue | null) {
   return Number.isFinite(n) ? n : null;
 }
 
+function mergeActionTags(tagsRaw: string, behaviorRaw: FormDataEntryValue | null) {
+  const tags = tagsRaw
+    ? tagsRaw.split(",").map((t) => t.trim()).filter(Boolean)
+    : [];
+  const behavior = String(behaviorRaw ?? "").trim().toLowerCase();
+  const next = tags.filter((tag) => tag.toLowerCase() !== "support_point");
+  if (behavior === "support_point") next.push("support_point");
+  return Array.from(new Set(next));
+}
+
 export async function createActionAction(formData: FormData) {
   const supabase = await createClient();
 
@@ -18,9 +28,7 @@ export async function createActionAction(formData: FormData) {
   const summary = String(formData.get("summary") ?? "").trim() || null;
   const rules_text = String(formData.get("rules_text") ?? "").trim() || null;
   const tagsRaw = String(formData.get("tags") ?? "").trim();
-  const tags = tagsRaw
-    ? tagsRaw.split(",").map((t) => t.trim()).filter(Boolean)
-    : [];
+  const tags = mergeActionTags(tagsRaw, formData.get("action_behavior"));
   const is_active = formData.get("is_active") === "on";
   const uses_attack_roll = formData.get("uses_attack_roll") === "on";
   const attack_bonus_override = numberOrNull(formData.get("attack_bonus_override"));

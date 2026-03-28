@@ -14,6 +14,20 @@ function isUuid(v: unknown) {
   );
 }
 
+function mergeActionTags(tagsRaw: string, behaviorRaw: FormDataEntryValue | null) {
+  const tags =
+    tagsRaw.length === 0
+      ? []
+      : tagsRaw
+          .split(",")
+          .map((t) => t.trim())
+          .filter(Boolean);
+  const behavior = String(behaviorRaw ?? "").trim().toLowerCase();
+  const next = tags.filter((tag) => tag.toLowerCase() !== "support_point");
+  if (behavior === "support_point") next.push("support_point");
+  return Array.from(new Set(next));
+}
+
 /**
  * List page POST handler:
  * - validates UUID
@@ -51,13 +65,7 @@ export async function updateActionAction(formData: FormData) {
   const rules_text = String(formData.get("rules_text") ?? "").trim() || null;
 
   const tagsRaw = String(formData.get("tags") ?? "").trim();
-  const tags =
-    tagsRaw.length === 0
-      ? []
-      : tagsRaw
-          .split(",")
-          .map((t) => t.trim())
-          .filter(Boolean);
+  const tags = mergeActionTags(tagsRaw, formData.get("action_behavior"));
 
   const is_active = formData.get("is_active") === "on";
 

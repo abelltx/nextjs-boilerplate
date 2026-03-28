@@ -4,6 +4,7 @@ import { supabaseServer } from "@/lib/supabase/server";
 import { getProfile } from "@/lib/auth/getProfile";
 import { revalidatePath } from "next/cache";
 import { randomUUID } from "crypto";
+import { createAdminClient } from "@/utils/supabase/admin";
 
 function isUuid(value: string) {
   const v = value.trim();
@@ -161,6 +162,92 @@ function buildClassPackageStatBlock(
   return nextStatBlock;
 }
 
+type PointSupportEffectRow = {
+  id: string;
+  kind: "point";
+  action_id: string;
+  source_player_id: string;
+  source_character_id: string;
+  source_name: string | null;
+  target_player_id: string;
+  target_character_id: string;
+  target_name: string | null;
+  status: "pending_choice" | "attack_roll" | "damage_bonus" | "consumed";
+  damage_bonus: number | null;
+  created_at: string | null;
+  chosen_at: string | null;
+  consumed_at: string | null;
+};
+
+async function getSessionCharacterRoster(
+  supabase: Awaited<ReturnType<typeof supabaseServer>>,
+  sessionId: string
+) {
+  const admin = createAdminClient() ?? supabase;
+  const { data: joins, error: joinsErr } = await supabase
+    .from("session_players")
+    .select("player_id")
+    .eq("session_id", sessionId);
+  if (joinsErr) throw new Error(joinsErr.message);
+  const playerIds = Array.from(new Set((joins ?? []).map((r: any) => String(r?.player_id ?? "").trim()).filter(Boolean)));
+  if (!playerIds.length) return [] as Array<{ playerId: string; characterId: string; name: string; className: string | null }>;
+
+  const { data: chars, error: charsErr } = await admin
+    .from("characters")
+    .select("id,user_id,name,class,created_at")
+    .in("user_id", playerIds)
+    .order("created_at", { ascending: true });
+  if (charsErr) throw new Error(charsErr.message);
+
+  const firstCharByUser = new Map<string, { characterId: string; name: string; className: string | null }>();
+  for (const row of chars ?? []) {
+    const playerId = String((row as any)?.user_id ?? "").trim();
+    const characterId = String((row as any)?.id ?? "").trim();
+    if (!playerId || !characterId || firstCharByUser.has(playerId)) continue;
+    firstCharByUser.set(playerId, {
+      characterId,
+      name: String((row as any)?.name ?? "").trim() || "Adventurer",
+      className: String((row as any)?.class ?? "").trim() || null,
+    });
+  }
+
+  return playerIds
+    .map((playerId) => {
+      const row = firstCharByUser.get(playerId);
+      return row
+        ? { playerId, characterId: row.characterId, name: row.name, className: row.className }
+        : null;
+    })
+    .filter((row): row is NonNullable<typeof row> => Boolean(row));
+}
+
+function normalizePointSupportEffects(input: unknown) {
+  return (Array.isArray(input) ? input : [])
+    .map((row: any) => {
+      const id = String(row?.id ?? "").trim();
+      const status = String(row?.status ?? "").trim().toLowerCase();
+      if (!id) return null;
+      if (!["pending_choice", "attack_roll", "damage_bonus", "consumed"].includes(status)) return null;
+      return {
+        id,
+        kind: "point" as const,
+        action_id: String(row?.action_id ?? "").trim(),
+        source_player_id: String(row?.source_player_id ?? "").trim(),
+        source_character_id: String(row?.source_character_id ?? "").trim(),
+        source_name: String(row?.source_name ?? "").trim() || null,
+        target_player_id: String(row?.target_player_id ?? "").trim(),
+        target_character_id: String(row?.target_character_id ?? "").trim(),
+        target_name: String(row?.target_name ?? "").trim() || null,
+        status: status as PointSupportEffectRow["status"],
+        damage_bonus: Number.isFinite(Number(row?.damage_bonus ?? NaN)) ? Number(row?.damage_bonus) : null,
+        created_at: String(row?.created_at ?? "").trim() || null,
+        chosen_at: String(row?.chosen_at ?? "").trim() || null,
+        consumed_at: String(row?.consumed_at ?? "").trim() || null,
+      };
+    })
+    .filter((row): row is PointSupportEffectRow => Boolean(row));
+}
+
 async function requireOwnedCharacter(
   supabase: Awaited<ReturnType<typeof supabaseServer>>,
   userId: string,
@@ -168,7 +255,7 @@ async function requireOwnedCharacter(
 ) {
   const { data: ch, error: chErr } = await supabase
     .from("characters")
-    .select("id,user_id,stat_block")
+    .select("id,user_id,name,stat_block")
     .eq("id", characterId)
     .maybeSingle();
   if (chErr) return { ok: false as const, error: chErr.message };
@@ -653,6 +740,214 @@ export async function requestRollApprovalAction(input: {
   const { error: upErr } = await supabase
     .from("session_state")
     .update({ roll_requests: next })
+    .eq("session_id", sessionId);
+  if (upErr) return { ok: false, error: upErr.message };
+  revalidatePath("/player");
+  return { ok: true };
+}
+
+export async function usePointSupportAction(input: {
+  sessionId: string;
+  characterId: string;
+  actionId: string;
+  targetCharacterId: string;
+}): Promise<{ ok: boolean; alreadyPending?: boolean; error?: string }> {
+  "use server";
+  const { user } = await getProfile();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const sessionId = String(input.sessionId ?? "").trim();
+  const characterId = String(input.characterId ?? "").trim();
+  const actionId = String(input.actionId ?? "").trim();
+  const targetCharacterId = String(input.targetCharacterId ?? "").trim();
+  if (!sessionId || !characterId || !actionId || !targetCharacterId) {
+    return { ok: false, error: "Missing session, action, or target." };
+  }
+
+  const supabase = await supabaseServer();
+  const owner = await requireOwnedCharacter(supabase, user.id, characterId);
+  if (!owner.ok) return { ok: false, error: owner.error };
+
+  const { data: joinRow, error: joinErr } = await supabase
+    .from("session_players")
+    .select("player_id")
+    .eq("session_id", sessionId)
+    .eq("player_id", user.id)
+    .maybeSingle();
+  if (joinErr) return { ok: false, error: joinErr.message };
+  if (!joinRow?.player_id) return { ok: false, error: "You are not in this session." };
+
+  const roster = await getSessionCharacterRoster(supabase, sessionId);
+  const target = roster.find((row) => row.characterId === targetCharacterId);
+  if (!target) return { ok: false, error: "Target ally not found in this session." };
+  if (target.characterId === characterId) return { ok: false, error: "Point must target an ally." };
+
+  const { data: learned, error: learnedErr } = await supabase
+    .from("player_action_links")
+    .select("action_id")
+    .eq("character_id", characterId)
+    .eq("action_id", actionId)
+    .maybeSingle();
+  if (learnedErr) return { ok: false, error: learnedErr.message };
+  if (!learned?.action_id) return { ok: false, error: "You have not learned this action." };
+
+  const { data: action, error: actionErr } = await supabase
+    .from("actions")
+    .select("id,name,tags,is_active")
+    .eq("id", actionId)
+    .maybeSingle();
+  if (actionErr) return { ok: false, error: actionErr.message };
+  if (!action?.id || action.is_active === false) return { ok: false, error: "Action not available." };
+  const tags = Array.isArray((action as any)?.tags)
+    ? ((action as any).tags as any[]).map((v) => String(v ?? "").trim().toLowerCase()).filter(Boolean)
+    : [];
+  if (!tags.includes("support_point")) return { ok: false, error: "This action is not configured as Point." };
+
+  const { data: stateRow, error: stateErr } = await supabase
+    .from("session_state")
+    .select("support_effects")
+    .eq("session_id", sessionId)
+    .maybeSingle();
+  if (stateErr) return { ok: false, error: stateErr.message };
+  if (!stateRow) return { ok: false, error: "Session state not found." };
+
+  const current = normalizePointSupportEffects((stateRow as any)?.support_effects);
+  const existing = current.find(
+    (row) =>
+      row.kind === "point" &&
+      row.target_character_id === targetCharacterId &&
+      row.action_id === actionId &&
+      ["pending_choice", "attack_roll", "damage_bonus"].includes(row.status)
+  );
+  if (existing) return { ok: true, alreadyPending: true };
+
+  const sourceName = String((owner.character as any)?.name ?? "").trim() || "Ally";
+  const next = [
+    ...current,
+    {
+      id: randomUUID(),
+      kind: "point" as const,
+      action_id: actionId,
+      source_player_id: user.id,
+      source_character_id: characterId,
+      source_name: sourceName,
+      target_player_id: target.playerId,
+      target_character_id: target.characterId,
+      target_name: target.name,
+      status: "pending_choice" as const,
+      damage_bonus: null,
+      created_at: new Date().toISOString(),
+      chosen_at: null,
+      consumed_at: null,
+    },
+  ];
+
+  const { error: upErr } = await supabase
+    .from("session_state")
+    .update({ support_effects: next })
+    .eq("session_id", sessionId);
+  if (upErr) return { ok: false, error: upErr.message };
+  revalidatePath("/player");
+  return { ok: true };
+}
+
+export async function choosePointSupportAction(input: {
+  sessionId: string;
+  characterId: string;
+  effectId: string;
+  choice: "attack_roll" | "damage_bonus";
+}): Promise<{ ok: boolean; error?: string }> {
+  "use server";
+  const { user } = await getProfile();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const sessionId = String(input.sessionId ?? "").trim();
+  const characterId = String(input.characterId ?? "").trim();
+  const effectId = String(input.effectId ?? "").trim();
+  const choice = input.choice === "damage_bonus" ? "damage_bonus" : "attack_roll";
+  if (!sessionId || !characterId || !effectId) return { ok: false, error: "Missing session or Point choice." };
+
+  const supabase = await supabaseServer();
+  const owner = await requireOwnedCharacter(supabase, user.id, characterId);
+  if (!owner.ok) return { ok: false, error: owner.error };
+
+  const { data: stateRow, error: stateErr } = await supabase
+    .from("session_state")
+    .select("support_effects")
+    .eq("session_id", sessionId)
+    .maybeSingle();
+  if (stateErr) return { ok: false, error: stateErr.message };
+  if (!stateRow) return { ok: false, error: "Session state not found." };
+
+  let found = false;
+  const nowIso = new Date().toISOString();
+  const next = normalizePointSupportEffects((stateRow as any)?.support_effects).map((row) => {
+    if (row.id !== effectId) return row;
+    if (row.target_character_id !== characterId || row.status !== "pending_choice") return row;
+    found = true;
+    return {
+      ...row,
+      status: choice,
+      damage_bonus: choice === "damage_bonus" ? 3 : null,
+      chosen_at: nowIso,
+    };
+  });
+  if (!found) return { ok: false, error: "Point choice is no longer available." };
+
+  const { error: upErr } = await supabase
+    .from("session_state")
+    .update({ support_effects: next })
+    .eq("session_id", sessionId);
+  if (upErr) return { ok: false, error: upErr.message };
+  revalidatePath("/player");
+  return { ok: true };
+}
+
+export async function consumePointSupportEffectsAction(input: {
+  sessionId: string;
+  characterId: string;
+  effectIds: string[];
+}): Promise<{ ok: boolean; error?: string }> {
+  "use server";
+  const { user } = await getProfile();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const sessionId = String(input.sessionId ?? "").trim();
+  const characterId = String(input.characterId ?? "").trim();
+  const effectIds = Array.from(new Set((Array.isArray(input.effectIds) ? input.effectIds : []).map((v) => String(v ?? "").trim()).filter(Boolean)));
+  if (!sessionId || !characterId || !effectIds.length) return { ok: false, error: "Missing Point effect." };
+
+  const supabase = await supabaseServer();
+  const owner = await requireOwnedCharacter(supabase, user.id, characterId);
+  if (!owner.ok) return { ok: false, error: owner.error };
+
+  const { data: stateRow, error: stateErr } = await supabase
+    .from("session_state")
+    .select("support_effects")
+    .eq("session_id", sessionId)
+    .maybeSingle();
+  if (stateErr) return { ok: false, error: stateErr.message };
+  if (!stateRow) return { ok: false, error: "Session state not found." };
+
+  const ids = new Set(effectIds);
+  const nowIso = new Date().toISOString();
+  let changed = false;
+  const next = normalizePointSupportEffects((stateRow as any)?.support_effects).map((row) => {
+    if (!ids.has(row.id)) return row;
+    if (row.target_character_id !== characterId) return row;
+    if (!["attack_roll", "damage_bonus"].includes(row.status)) return row;
+    changed = true;
+    return {
+      ...row,
+      status: "consumed" as const,
+      consumed_at: nowIso,
+    };
+  });
+  if (!changed) return { ok: true };
+
+  const { error: upErr } = await supabase
+    .from("session_state")
+    .update({ support_effects: next })
     .eq("session_id", sessionId);
   if (upErr) return { ok: false, error: upErr.message };
   revalidatePath("/player");

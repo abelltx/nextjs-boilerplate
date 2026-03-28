@@ -40,6 +40,10 @@ const DAMAGE_TYPE_OPTIONS = [
   "temporary_hp",
   "utility",
 ];
+const ACTION_BEHAVIOR_OPTIONS = [
+  { value: "", label: "Standard Action" },
+  { value: "support_point", label: "Point Support" },
+];
 
 function isUuid(v: unknown) {
   if (typeof v !== "string") return false;
@@ -70,6 +74,8 @@ export default async function ActionEditPage({
 
   if (error) redirect(`/admin/actions?err=${encodeURIComponent(error.message)}`);
   if (!action) redirect("/admin/actions?err=not_found_or_rls");
+  const actionTags = Array.isArray(action.tags) ? action.tags.map((v: any) => String(v ?? "").trim()).filter(Boolean) : [];
+  const actionBehavior = actionTags.includes("support_point") ? "support_point" : "";
 
   return (
     <div className="mx-auto w-full max-w-5xl p-6 space-y-4">
@@ -125,6 +131,24 @@ export default async function ActionEditPage({
               </select>
             </label>
 
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Action Behavior</span>
+              <select
+                name="action_behavior"
+                defaultValue={actionBehavior}
+                className="w-full rounded-lg border px-3 py-2"
+              >
+                {ACTION_BEHAVIOR_OPTIONS.map((opt) => (
+                  <option key={opt.value || "standard"} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              <span className="text-xs text-muted-foreground">
+                Use this for special nonstandard action flows like Prophet support abilities.
+              </span>
+            </label>
+
             <label className="grid gap-2 md:col-span-2">
               <span className="text-sm font-medium">Summary</span>
               <input
@@ -147,7 +171,7 @@ export default async function ActionEditPage({
               <span className="text-sm font-medium">Tags (comma separated)</span>
               <input
                 name="tags"
-                defaultValue={Array.isArray(action.tags) ? action.tags.join(", ") : ""}
+                defaultValue={actionTags.filter((tag: string) => tag !== "support_point").join(", ")}
                 className="w-full rounded-lg border px-3 py-2"
                 placeholder="undead, grapple, fire"
               />

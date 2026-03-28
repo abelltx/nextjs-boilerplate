@@ -15,11 +15,14 @@ import {
   claimNpcGearItemAction,
   claimNpcQuestRewardsAction,
   claimNpcTrainingTraitAction,
+  choosePointSupportAction,
   completeNpcQuestTaskAction,
+  consumePointSupportEffectsAction,
   leaveSessionAction,
   requestRollApprovalAction,
   startNpcQuestAction,
   submitRollResultAction,
+  usePointSupportAction,
 } from "../actions";
 import RevealCard from "@/components/episode-runtime/RevealCard";
 import SceneMap from "@/components/episode-runtime/SceneMap";
@@ -38,6 +41,28 @@ type GuidedRoll = {
   label: string;
   total: number;
   breakdown: string;
+};
+type SessionRosterEntry = {
+  playerId: string;
+  characterId: string;
+  name: string;
+  className?: string | null;
+};
+type PointSupportEffect = {
+  id: string;
+  kind: "point";
+  action_id: string;
+  source_player_id: string;
+  source_character_id: string;
+  source_name?: string | null;
+  target_player_id: string;
+  target_character_id: string;
+  target_name?: string | null;
+  status: "pending_choice" | "attack_roll" | "damage_bonus" | "consumed";
+  damage_bonus?: number | null;
+  created_at?: string | null;
+  chosen_at?: string | null;
+  consumed_at?: string | null;
 };
 type QuestProgress = {
   status: "available" | "active" | "completed" | "claimed";
@@ -140,6 +165,7 @@ export default function PlayerHubClient(props: {
   character: any;
   inventory: any[];
   sessions: any[];
+  sessionRosterById?: Record<string, SessionRosterEntry[]>;
   sessionStates: Record<string, any>;
   presentedBlocks: Record<string, any>;
   gameLog: any[];
@@ -150,6 +176,7 @@ export default function PlayerHubClient(props: {
     id: string;
     name: string;
     type?: string | null;
+    tags?: string[];
     summary?: string | null;
     rules_text?: string | null;
     range_normal?: number | null;
@@ -282,6 +309,18 @@ export default function PlayerHubClient(props: {
 
   const stageState = stage?.state ?? (selectedSessionId ? props.sessionStates?.[selectedSessionId] : null);
   const stageBlock = stage?.block ?? null;
+  const sessionRoster = useMemo(
+    () =>
+      (selectedSessionId ? props.sessionRosterById?.[selectedSessionId] ?? [] : [])
+        .filter((row) => String(row?.characterId ?? "").trim().length > 0),
+    [selectedSessionId, props.sessionRosterById]
+  );
+  const pointEffects = useMemo(
+    () =>
+      (Array.isArray(stageState?.support_effects) ? (stageState.support_effects as any[]) : [])
+        .filter((row: any) => String(row?.kind ?? "").trim().toLowerCase() === "point") as PointSupportEffect[],
+    [stageState]
+  );
   const stageIsLive = isLiveState(stageState);
   const liveSessionNameForHeader =
     stage?.session?.name ??
@@ -357,12 +396,61 @@ export default function PlayerHubClient(props: {
     }
     return [] as string[];
   }, [rollOpen, promptTarget, advantageMap]);
+  const pendingPointChoices = useMemo(
+    () =>
+      pointEffects.filter(
+        (row) =>
+          String(row?.target_character_id ?? "").trim() === String(props.character?.id ?? "").trim() &&
+          String(row?.status ?? "").trim().toLowerCase() === "pending_choice"
+      ),
+    [pointEffects, props.character?.id]
+  );
+  const temporaryAttackPointEffects = useMemo(
+    () =>
+      pointEffects.filter(
+        (row) =>
+          String(row?.target_character_id ?? "").trim() === String(props.character?.id ?? "").trim() &&
+          String(row?.status ?? "").trim().toLowerCase() === "attack_roll"
+      ),
+    [pointEffects, props.character?.id]
+  );
+  const temporaryDamagePointEffects = useMemo(
+    () =>
+      pointEffects.filter(
+        (row) =>
+          String(row?.target_character_id ?? "").trim() === String(props.character?.id ?? "").trim() &&
+          String(row?.status ?? "").trim().toLowerCase() === "damage_bonus"
+      ),
+    [pointEffects, props.character?.id]
+  );
+  const temporaryAttackAdvantageSources = useMemo(
+    () =>
+      temporaryAttackPointEffects.map((row) => {
+        const sourceName = String(row?.source_name ?? "").trim();
+        return sourceName ? `Point (${sourceName})` : "Point";
+      }),
+    [temporaryAttackPointEffects]
+  );
+  const temporaryDamageBonus = useMemo(
+    () => temporaryDamagePointEffects.reduce((sum, row) => sum + Math.max(0, Number(row?.damage_bonus ?? 0) || 0), 0),
+    [temporaryDamagePointEffects]
+  );
+  const temporaryDamageBonusSources = useMemo(
+    () =>
+      temporaryDamagePointEffects.map((row) => {
+        const sourceName = String(row?.source_name ?? "").trim();
+        return sourceName ? `Point (${sourceName})` : "Point";
+      }),
+    [temporaryDamagePointEffects]
+  );
   const stageStoryText = String(stage?.session?.story_text ?? selectedSession?.story_text ?? "");
   const [diceMode, setDiceMode] = useState<"digital" | "manual">("digital");
   const [manualValue, setManualValue] = useState("");
   const [manualValueB, setManualValueB] = useState("");
   const [submittingRoll, setSubmittingRoll] = useState(false);
   const [requestingRoll, setRequestingRoll] = useState(false);
+  const [usingPointActionId, setUsingPointActionId] = useState<string | null>(null);
+  const [resolvingPointId, setResolvingPointId] = useState<string | null>(null);
   const [requestCheckKey, setRequestCheckKey] = useState("Perception");
   const [requestMessage, setRequestMessage] = useState("");
   const promptBoxRef = useRef<HTMLDivElement | null>(null);
@@ -469,6 +557,50 @@ export default function PlayerHubClient(props: {
       router.refresh();
     } finally {
       setRequestingRoll(false);
+    }
+  }
+
+  async function handleUsePoint(actionId: string, targetCharacterId: string) {
+    if (!selectedSessionId || !actionId || !targetCharacterId || usingPointActionId) return;
+    setUsingPointActionId(actionId);
+    try {
+      const res = await usePointSupportAction({
+        sessionId: selectedSessionId,
+        characterId: String(props.character?.id ?? ""),
+        actionId,
+        targetCharacterId,
+      });
+      if (!res.ok) {
+        alert(res.error ?? "Could not use Point.");
+        return;
+      }
+      router.refresh();
+    } catch (e: any) {
+      alert(e?.message ?? "Could not use Point.");
+    } finally {
+      setUsingPointActionId(null);
+    }
+  }
+
+  async function handleChoosePoint(effectId: string, choice: "attack_roll" | "damage_bonus") {
+    if (!selectedSessionId || !effectId || resolvingPointId) return;
+    setResolvingPointId(effectId);
+    try {
+      const res = await choosePointSupportAction({
+        sessionId: selectedSessionId,
+        characterId: String(props.character?.id ?? ""),
+        effectId,
+        choice,
+      });
+      if (!res.ok) {
+        alert(res.error ?? "Could not choose Point bonus.");
+        return;
+      }
+      router.refresh();
+    } catch (e: any) {
+      alert(e?.message ?? "Could not choose Point bonus.");
+    } finally {
+      setResolvingPointId(null);
     }
   }
 
@@ -1006,9 +1138,26 @@ export default function PlayerHubClient(props: {
                     showSkillChecks={false}
                     showRollConsole={false}
                   />
+                  {pendingPointChoices.length ? (
+                    <PendingPointChoicePanel
+                      effects={pendingPointChoices}
+                      resolvingId={resolvingPointId}
+                      onChoose={handleChoosePoint}
+                    />
+                  ) : null}
                   <ActionListPanel
+                    characterId={String(props.character?.id ?? "")}
                     actions={props.playerActions ?? []}
+                    sessionId={selectedSessionId}
+                    sessionRoster={sessionRoster.filter((row) => String(row.characterId) !== String(props.character?.id ?? ""))}
+                    onUsePoint={handleUsePoint}
+                    pointActionBusyId={usingPointActionId}
                     attackAdvantageSources={advantageMap[normalizeAdvantageKey("attack_roll")] ?? []}
+                    temporaryAttackAdvantageEffectIds={temporaryAttackPointEffects.map((row) => String(row.id ?? "").trim()).filter(Boolean)}
+                    temporaryAttackAdvantageSources={temporaryAttackAdvantageSources}
+                    temporaryDamageBonus={temporaryDamageBonus}
+                    temporaryDamageBonusEffectIds={temporaryDamagePointEffects.map((row) => String(row.id ?? "").trim()).filter(Boolean)}
+                    temporaryDamageBonusSources={temporaryDamageBonusSources}
                   />
                   <TraitListPanel traits={props.playerTraits ?? []} />
                 </div>
@@ -1432,10 +1581,12 @@ function StagePanel({
 }
 
 function ActionListPanel(props: {
+  characterId: string;
   actions: Array<{
     id: string;
     name: string;
     type?: string | null;
+    tags?: string[];
     summary?: string | null;
     rules_text?: string | null;
     range_normal?: number | null;
@@ -1450,18 +1601,32 @@ function ActionListPanel(props: {
     on_fail?: string | null;
     on_success?: string | null;
   }>;
+  sessionId?: string | null;
+  sessionRoster?: SessionRosterEntry[];
+  onUsePoint?: (actionId: string, targetCharacterId: string) => void | Promise<void>;
+  pointActionBusyId?: string | null;
   attackAdvantageSources?: string[];
+  temporaryAttackAdvantageEffectIds?: string[];
+  temporaryAttackAdvantageSources?: string[];
+  temporaryDamageBonus?: number;
+  temporaryDamageBonusEffectIds?: string[];
+  temporaryDamageBonusSources?: string[];
 }) {
   const [rolls, setRolls] = useState<Record<string, { hit?: string; damage?: string }>>({});
+  const [pointTargetByAction, setPointTargetByAction] = useState<Record<string, string>>({});
   const HEAL_TYPES = new Set(["healing", "temporary_hp"]);
+  const router = useRouter();
 
   function rollDie(sides: number) {
     return Math.floor(Math.random() * sides) + 1;
   }
 
-  function rollHit(action: any) {
+  async function rollHit(action: any) {
     const bonus = Number(action.attack_bonus_override ?? 0);
-    const attackAdvantageSources = props.attackAdvantageSources ?? [];
+    const attackAdvantageSources = [
+      ...(props.attackAdvantageSources ?? []),
+      ...(props.temporaryAttackAdvantageSources ?? []),
+    ];
     const hasAttackAdvantage = Array.isArray(attackAdvantageSources) && attackAdvantageSources.length > 0;
     const d20 = rollDie(20);
     const d20b = hasAttackAdvantage ? rollDie(20) : null;
@@ -1476,9 +1641,21 @@ function ActionListPanel(props: {
           : `${total} (d20 ${d20}${bonus ? ` + ${bonus}` : ""})`,
       },
     }));
+    if (props.sessionId && props.characterId && (props.temporaryAttackAdvantageEffectIds ?? []).length) {
+      const res = await consumePointSupportEffectsAction({
+        sessionId: props.sessionId,
+        characterId: props.characterId,
+        effectIds: props.temporaryAttackAdvantageEffectIds ?? [],
+      });
+      if (!res.ok) {
+        alert(res.error ?? "Could not consume Point attack bonus.");
+        return;
+      }
+      router.refresh();
+    }
   }
 
-  function rollDamage(action: any) {
+  async function rollDamage(action: any) {
     const formula = String(action.damage_dice ?? "").trim().toLowerCase();
     const bonusFromField = Number(action.damage_bonus ?? 0);
     const m = formula.match(/^(\d*)d(\d+)([+-]\d+)?$/i);
@@ -1486,7 +1663,11 @@ function ActionListPanel(props: {
     const count = Math.max(1, Number(m[1] || 1));
     const sides = Math.max(2, Number(m[2] || 2));
     const inlineBonus = Number(m[3] || 0);
-    const bonus = (Number.isFinite(inlineBonus) ? inlineBonus : 0) + (Number.isFinite(bonusFromField) ? bonusFromField : 0);
+    const tempBonus = Math.max(0, Number(props.temporaryDamageBonus ?? 0) || 0);
+    const bonus =
+      (Number.isFinite(inlineBonus) ? inlineBonus : 0) +
+      (Number.isFinite(bonusFromField) ? bonusFromField : 0) +
+      tempBonus;
     const rollsArr = Array.from({ length: count }, () => rollDie(sides));
     const total = rollsArr.reduce((t, n) => t + n, 0) + bonus;
     const outcomeLabel = HEAL_TYPES.has(String(action.damage_type ?? "").toLowerCase()) ? "heal" : "damage";
@@ -1497,6 +1678,18 @@ function ActionListPanel(props: {
         damage: `${total} ${outcomeLabel} ([${rollsArr.join(", ")}]${bonus ? ` ${bonus > 0 ? "+" : "-"} ${Math.abs(bonus)}` : ""})`,
       },
     }));
+    if (props.sessionId && props.characterId && (props.temporaryDamageBonusEffectIds ?? []).length) {
+      const res = await consumePointSupportEffectsAction({
+        sessionId: props.sessionId,
+        characterId: props.characterId,
+        effectIds: props.temporaryDamageBonusEffectIds ?? [],
+      });
+      if (!res.ok) {
+        alert(res.error ?? "Could not consume Point damage bonus.");
+        return;
+      }
+      router.refresh();
+    }
   }
 
   return (
@@ -1522,7 +1715,41 @@ function ActionListPanel(props: {
                 {a.range_max ? ` (${a.range_max})` : ""}
               </div>
               <div className="col-span-2 text-xs text-neutral-300">
-                {a.uses_attack_roll !== false && a.attack_bonus_override != null ? (
+                {Array.isArray(a.tags) && a.tags.includes("support_point") ? (
+                  <div className="space-y-1">
+                    <select
+                      value={pointTargetByAction[a.id] ?? ""}
+                      onChange={(e) =>
+                        setPointTargetByAction((prev) => ({
+                          ...prev,
+                          [a.id]: e.currentTarget.value,
+                        }))
+                      }
+                      className="w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-[11px]"
+                      disabled={!props.sessionId || Boolean(props.pointActionBusyId)}
+                    >
+                      <option value="">Choose ally</option>
+                      {(props.sessionRoster ?? []).map((row) => (
+                        <option key={row.characterId} value={row.characterId}>
+                          {row.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="rounded border border-neutral-700 px-2 py-0.5 text-[11px] hover:bg-neutral-900 disabled:opacity-60"
+                      disabled={
+                        !props.sessionId ||
+                        !(props.sessionRoster ?? []).length ||
+                        !String(pointTargetByAction[a.id] ?? "").trim() ||
+                        Boolean(props.pointActionBusyId)
+                      }
+                      onClick={() => props.onUsePoint?.(a.id, String(pointTargetByAction[a.id] ?? "").trim())}
+                    >
+                      {props.pointActionBusyId === a.id ? "Pointing..." : "Use Point"}
+                    </button>
+                  </div>
+                ) : a.uses_attack_roll !== false && a.attack_bonus_override != null ? (
                   <div className="space-y-1">
                     <div>+{a.attack_bonus_override}</div>
                     <button
@@ -1532,10 +1759,10 @@ function ActionListPanel(props: {
                     >
                       Roll Hit
                     </button>
-                    {Array.isArray(props.attackAdvantageSources) &&
-                    props.attackAdvantageSources.length ? (
+                    {Array.isArray([...((props.attackAdvantageSources ?? []) as string[]), ...((props.temporaryAttackAdvantageSources ?? []) as string[])]) &&
+                    [...(props.attackAdvantageSources ?? []), ...(props.temporaryAttackAdvantageSources ?? [])].length ? (
                       <div className="text-[11px] text-emerald-300">
-                        Adv: {props.attackAdvantageSources.join(", ")}
+                        Adv: {[...(props.attackAdvantageSources ?? []), ...(props.temporaryAttackAdvantageSources ?? [])].join(", ")}
                       </div>
                     ) : null}
                     {rolls[a.id]?.hit ? <div className="text-emerald-300">{rolls[a.id]?.hit}</div> : null}
@@ -1548,6 +1775,11 @@ function ActionListPanel(props: {
                 {a.damage_dice ? (
                   <div>
                     <div>{`${a.damage_dice}${a.damage_type ? ` ${a.damage_type}` : ""}`}</div>
+                    {Number(props.temporaryDamageBonus ?? 0) > 0 ? (
+                      <div className="text-[11px] text-emerald-300">
+                        +{props.temporaryDamageBonus} dmg: {(props.temporaryDamageBonusSources ?? []).join(", ")}
+                      </div>
+                    ) : null}
                     <button
                       type="button"
                       className="mt-1 rounded border border-neutral-700 px-2 py-0.5 text-[11px] hover:bg-neutral-900"
@@ -1596,6 +1828,48 @@ function TraitListPanel(props: { traits: Array<{ id: string; name: string; summa
       ) : (
         <div className="mt-3 text-sm text-neutral-400">No learned traits yet.</div>
       )}
+    </div>
+  );
+}
+
+function PendingPointChoicePanel(props: {
+  effects: PointSupportEffect[];
+  resolvingId?: string | null;
+  onChoose: (effectId: string, choice: "attack_roll" | "damage_bonus") => void | Promise<void>;
+}) {
+  return (
+    <div className="rounded-2xl border border-amber-400/60 bg-amber-500/10 p-4">
+      <div className="text-sm font-semibold text-amber-100">Point</div>
+      <div className="mt-1 text-xs text-amber-50/90">Choose how to use the prophet’s guidance on your next attack.</div>
+      <div className="mt-3 space-y-3">
+        {props.effects.map((effect) => {
+          const sourceName = String(effect.source_name ?? "").trim() || "An ally";
+          const busy = props.resolvingId === effect.id;
+          return (
+            <div key={effect.id} className="rounded-xl border border-amber-300/40 bg-neutral-950/40 p-3">
+              <div className="text-sm text-neutral-100">{sourceName} pointed you toward an opening.</div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => props.onChoose(effect.id, "attack_roll")}
+                  disabled={busy}
+                  className="rounded border border-neutral-700 px-3 py-1.5 text-sm hover:bg-neutral-900 disabled:opacity-60"
+                >
+                  {busy ? "Choosing..." : "Next attack: advantage"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => props.onChoose(effect.id, "damage_bonus")}
+                  disabled={busy}
+                  className="rounded border border-neutral-700 px-3 py-1.5 text-sm hover:bg-neutral-900 disabled:opacity-60"
+                >
+                  {busy ? "Choosing..." : "Next hit: +3 damage"}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

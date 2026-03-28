@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth/getProfile";
 import { supabaseServer } from "@/lib/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 import PlayerHubClient from "./_components/PlayerHubClient";
 import { parsePassiveEffectNotes } from "@/lib/passiveEffectNotes";
 
@@ -297,6 +298,7 @@ export default async function PlayerPage() {
   // ---- Sessions joined ----
   let sessions: any[] = [];
   let sessionStates: Record<string, any> = {};
+  let sessionRosterById: Record<string, Array<{ playerId: string; characterId: string; name: string; className: string | null }>> = {};
 
   const { data: joins, error: joinErr } = await supabase
     .from("session_players")
@@ -307,6 +309,7 @@ export default async function PlayerPage() {
   if (joinErr) throw new Error(`Failed to load session joins: ${joinErr.message}`);
 
   if (joins?.length) {
+    const admin = createAdminClient() ?? supabase;
     const sessionIds = joins.map((j: any) => j.session_id).filter(Boolean);
 
     const { data: sData, error: sErr } = await supabase
@@ -325,6 +328,56 @@ export default async function PlayerPage() {
     if (stErr) throw new Error(`Failed to load session state: ${stErr.message}`);
 
     for (const row of stData ?? []) sessionStates[row.session_id] = row;
+
+    const { data: sessionPlayerRows, error: sessionPlayersErr } = await admin
+      .from("session_players")
+      .select("session_id,player_id")
+      .in("session_id", sessionIds);
+    if (sessionPlayersErr) throw new Error(`Failed to load session roster: ${sessionPlayersErr.message}`);
+
+    const sessionPlayerRowsSafe = (sessionPlayerRows ?? []) as Array<{ session_id: string | null; player_id: string | null }>;
+    const joinedPlayerIds = Array.from(
+      new Set(
+        sessionPlayerRowsSafe
+          .map((row) => String(row.player_id ?? "").trim())
+          .filter(Boolean)
+      )
+    );
+
+    const { data: rosterChars, error: rosterCharsErr } = joinedPlayerIds.length
+      ? await admin
+          .from("characters")
+          .select("id,user_id,name,class,created_at")
+          .in("user_id", joinedPlayerIds)
+          .order("created_at", { ascending: true })
+      : { data: [], error: null as any };
+    if (rosterCharsErr) throw new Error(`Failed to load session characters: ${rosterCharsErr.message}`);
+
+    const firstCharByUser = new Map<string, { characterId: string; name: string; className: string | null }>();
+    for (const row of (rosterChars ?? []) as any[]) {
+      const playerId = String(row?.user_id ?? "").trim();
+      const characterId = String(row?.id ?? "").trim();
+      if (!playerId || !characterId || firstCharByUser.has(playerId)) continue;
+      firstCharByUser.set(playerId, {
+        characterId,
+        name: String(row?.name ?? "").trim() || "Adventurer",
+        className: String(row?.class ?? "").trim() || null,
+      });
+    }
+
+    for (const row of sessionPlayerRowsSafe) {
+      const sessionId = String(row.session_id ?? "").trim();
+      const playerId = String(row.player_id ?? "").trim();
+      const char = firstCharByUser.get(playerId);
+      if (!sessionId || !playerId || !char?.characterId) continue;
+      if (!Array.isArray(sessionRosterById[sessionId])) sessionRosterById[sessionId] = [];
+      sessionRosterById[sessionId].push({
+        playerId,
+        characterId: char.characterId,
+        name: char.name,
+        className: char.className,
+      });
+    }
   }
 
   // ---- Presented blocks lookup (for stage) ----
@@ -458,6 +511,7 @@ export default async function PlayerPage() {
       id: String(r.id),
       name: String(r.name ?? "Action"),
       type: r.type ?? null,
+      tags: Array.isArray(r.tags) ? r.tags.map((v: any) => String(v ?? "").trim()).filter(Boolean) : [],
       summary: r.summary ?? null,
       rules_text: r.rules_text ?? null,
       range_normal: Number.isFinite(Number(r.range_normal)) ? Number(r.range_normal) : null,
@@ -712,6 +766,7 @@ export default async function PlayerPage() {
       character={character}
       inventory={inventory ?? []}
       sessions={sessions ?? []}
+      sessionRosterById={sessionRosterById}
       sessionStates={sessionStates ?? {}}
       presentedBlocks={presentedBlocks ?? {}}
       gameLog={gameLog ?? []}
