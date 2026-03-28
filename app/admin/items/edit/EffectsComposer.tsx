@@ -78,6 +78,7 @@ const EFFECT_KEYS: Record<string, { label: string; value: string }[]> = {
     "performance",
     "persuasion",
     "initiative",
+    "attack_roll",
   ].map((k) => ({ label: k, value: k })),
   passive: [{ label: "Passive", value: "passive" }],
   special: [

@@ -1006,7 +1006,10 @@ export default function PlayerHubClient(props: {
                     showSkillChecks={false}
                     showRollConsole={false}
                   />
-                  <ActionListPanel actions={props.playerActions ?? []} />
+                  <ActionListPanel
+                    actions={props.playerActions ?? []}
+                    attackAdvantageSources={advantageMap[normalizeAdvantageKey("attack_roll")] ?? []}
+                  />
                   <TraitListPanel traits={props.playerTraits ?? []} />
                 </div>
               )}
@@ -1447,6 +1450,7 @@ function ActionListPanel(props: {
     on_fail?: string | null;
     on_success?: string | null;
   }>;
+  attackAdvantageSources?: string[];
 }) {
   const [rolls, setRolls] = useState<Record<string, { hit?: string; damage?: string }>>({});
   const HEAL_TYPES = new Set(["healing", "temporary_hp"]);
@@ -1457,13 +1461,19 @@ function ActionListPanel(props: {
 
   function rollHit(action: any) {
     const bonus = Number(action.attack_bonus_override ?? 0);
+    const attackAdvantageSources = props.attackAdvantageSources ?? [];
+    const hasAttackAdvantage = Array.isArray(attackAdvantageSources) && attackAdvantageSources.length > 0;
     const d20 = rollDie(20);
-    const total = d20 + (Number.isFinite(bonus) ? bonus : 0);
+    const d20b = hasAttackAdvantage ? rollDie(20) : null;
+    const chosen = d20b == null ? d20 : Math.max(d20, d20b);
+    const total = chosen + (Number.isFinite(bonus) ? bonus : 0);
     setRolls((prev) => ({
       ...prev,
       [action.id]: {
         ...(prev[action.id] ?? {}),
-        hit: `${total} (d20 ${d20}${bonus ? ` + ${bonus}` : ""})`,
+        hit: hasAttackAdvantage
+          ? `${total} (adv ${chosen} from [${d20}, ${d20b}]${bonus ? ` + ${bonus}` : ""})`
+          : `${total} (d20 ${d20}${bonus ? ` + ${bonus}` : ""})`,
       },
     }));
   }
@@ -1522,6 +1532,12 @@ function ActionListPanel(props: {
                     >
                       Roll Hit
                     </button>
+                    {Array.isArray(props.attackAdvantageSources) &&
+                    props.attackAdvantageSources.length ? (
+                      <div className="text-[11px] text-emerald-300">
+                        Adv: {props.attackAdvantageSources.join(", ")}
+                      </div>
+                    ) : null}
                     {rolls[a.id]?.hit ? <div className="text-emerald-300">{rolls[a.id]?.hit}</div> : null}
                   </div>
                 ) : a.save_dc_override != null ? (
