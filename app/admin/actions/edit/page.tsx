@@ -209,11 +209,20 @@ export default async function ActionEditPage({
 
         <div className="rounded-2xl border bg-card p-4 shadow-sm space-y-4">
           <div>
-            <h2 className="font-semibold">Support Effects</h2>
+            <h2 className="font-semibold">Behavior Config</h2>
             <p className="text-sm text-muted-foreground">
-              These options are used when <code>Action Behavior</code> is set to <code>Targeted Support</code>.
+              The helper fields below build one common config shape. For full flexibility, paste raw JSON and it will override the helper inputs.
             </p>
           </div>
+          <label className="grid gap-2">
+            <span className="text-sm font-medium">Action Config JSON</span>
+            <textarea
+              name="action_config_json"
+              defaultValue={actionConfig ? JSON.stringify(actionConfig, null, 2) : ""}
+              className="min-h-[180px] w-full rounded-lg border px-3 py-2 font-mono text-sm"
+              placeholder={`{\n  "kind": "targeted_support",\n  "target_scope": "ally",\n  "choice_owner": "target",\n  "options": []\n}`}
+            />
+          </label>
           <div className="grid gap-4 md:grid-cols-2">
             <label className="flex items-center gap-2 text-sm">
               <input

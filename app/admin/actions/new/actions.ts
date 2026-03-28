@@ -18,6 +18,15 @@ function mergeActionTags(tagsRaw: string) {
 }
 
 function buildActionConfig(formData: FormData) {
+  const rawJson = String(formData.get("action_config_json") ?? "").trim();
+  if (rawJson) {
+    try {
+      return JSON.parse(rawJson);
+    } catch {
+      redirect("/admin/actions/new?err=bad_action_config_json");
+    }
+  }
+
   const behavior = String(formData.get("action_behavior") ?? "").trim().toLowerCase();
   if (behavior !== "targeted_support") return null;
 
