@@ -4,6 +4,7 @@ import { createClient } from "@/utils/supabase/server";
 import { updateActionAction, deleteActionAction } from "./actions";
 import DeleteActionButton from "./DeleteActionButton";
 import ActionDamageRollClient from "../ActionDamageRollClient";
+import ActionBehaviorComposer from "../ActionBehaviorComposer";
 
 const COOKIE_KEY = "action_edit_id";
 const DAMAGE_DICE_OPTIONS = [
@@ -40,10 +41,6 @@ const DAMAGE_TYPE_OPTIONS = [
   "temporary_hp",
   "utility",
 ];
-const ACTION_BEHAVIOR_OPTIONS = [
-  { value: "", label: "Standard Action" },
-  { value: "targeted_support", label: "Targeted Support" },
-];
 
 function isUuid(v: unknown) {
   if (typeof v !== "string") return false;
@@ -76,11 +73,6 @@ export default async function ActionEditPage({
   if (!action) redirect("/admin/actions?err=not_found_or_rls");
   const actionTags = Array.isArray(action.tags) ? action.tags.map((v: any) => String(v ?? "").trim()).filter(Boolean) : [];
   const actionConfig = action && typeof action.action_config === "object" && action.action_config ? (action.action_config as any) : null;
-  const supportOptions = Array.isArray(actionConfig?.options) ? (actionConfig.options as any[]) : [];
-  const supportAttackAdvantage = supportOptions.some((opt: any) => String(opt?.trigger ?? "").trim().toLowerCase() === "next_attack_roll" && Boolean(opt?.grant_advantage));
-  const supportDamageBonus =
-    supportOptions.find((opt: any) => String(opt?.trigger ?? "").trim().toLowerCase() === "next_damage_roll")?.damage_bonus ?? "";
-  const actionBehavior = String(actionConfig?.kind ?? "").trim().toLowerCase() === "targeted_support" ? "targeted_support" : "";
 
   return (
     <div className="mx-auto w-full max-w-5xl p-6 space-y-4">
@@ -136,47 +128,6 @@ export default async function ActionEditPage({
               </select>
             </label>
 
-            <label className="grid gap-2">
-              <span className="text-sm font-medium">Action Behavior</span>
-              <select
-                name="action_behavior"
-                defaultValue={actionBehavior}
-                className="w-full rounded-lg border px-3 py-2"
-              >
-                {ACTION_BEHAVIOR_OPTIONS.map((opt) => (
-                  <option key={opt.value || "standard"} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-              <span className="text-xs text-muted-foreground">
-                Use this for special nonstandard action flows that target another character.
-              </span>
-            </label>
-
-            <label className="grid gap-2">
-              <span className="text-sm font-medium">Support Target</span>
-              <select
-                name="support_target_scope"
-                defaultValue={String(actionConfig?.target_scope ?? "ally")}
-                className="w-full rounded-lg border px-3 py-2"
-              >
-                <option value="ally">ally</option>
-              </select>
-            </label>
-
-            <label className="grid gap-2">
-              <span className="text-sm font-medium">Who Chooses</span>
-              <select
-                name="support_choice_owner"
-                defaultValue={String(actionConfig?.choice_owner ?? "target")}
-                className="w-full rounded-lg border px-3 py-2"
-              >
-                <option value="target">target</option>
-                <option value="source">source</option>
-              </select>
-            </label>
-
             <label className="grid gap-2 md:col-span-2">
               <span className="text-sm font-medium">Summary</span>
               <input
@@ -207,44 +158,13 @@ export default async function ActionEditPage({
           </div>
         </div>
 
-        <div className="rounded-2xl border bg-card p-4 shadow-sm space-y-4">
-          <div>
-            <h2 className="font-semibold">Behavior Config</h2>
-            <p className="text-sm text-muted-foreground">
-              The helper fields below build one common config shape. For full flexibility, paste raw JSON and it will override the helper inputs.
-            </p>
-          </div>
-          <label className="grid gap-2">
-            <span className="text-sm font-medium">Action Config JSON</span>
-            <textarea
-              name="action_config_json"
-              defaultValue={actionConfig ? JSON.stringify(actionConfig, null, 2) : ""}
-              className="min-h-[180px] w-full rounded-lg border px-3 py-2 font-mono text-sm"
-              placeholder={`{\n  "kind": "targeted_support",\n  "target_scope": "ally",\n  "choice_owner": "target",\n  "options": []\n}`}
-            />
-          </label>
-          <div className="grid gap-4 md:grid-cols-2">
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                name="support_grant_attack_roll_advantage"
-                defaultChecked={supportAttackAdvantage}
-              />
-              <span>Grant advantage on next attack roll</span>
-            </label>
-
-            <label className="grid gap-2">
-              <span className="text-sm font-medium">Next-hit damage bonus</span>
-              <input
-                name="support_damage_bonus"
-                defaultValue={supportDamageBonus}
-                className="w-full rounded-lg border px-3 py-2"
-                inputMode="numeric"
-                placeholder="e.g. 3"
-              />
-            </label>
-          </div>
-        </div>
+        <ActionBehaviorComposer
+          defaultBehavior={String(actionConfig?.kind ?? "")}
+          defaultTargetScope={String(actionConfig?.target_scope ?? "ally")}
+          defaultChoiceOwner={String(actionConfig?.choice_owner ?? "target")}
+          defaultSupportOptions={Array.isArray(actionConfig?.options) ? actionConfig.options : []}
+          defaultActionConfigJson={actionConfig ? JSON.stringify(actionConfig, null, 2) : ""}
+        />
 
         <div className="rounded-2xl border bg-card p-4 shadow-sm space-y-4">
           <div className="flex items-center justify-between">

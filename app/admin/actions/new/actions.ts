@@ -32,26 +32,30 @@ function buildActionConfig(formData: FormData) {
 
   const targetScope = String(formData.get("support_target_scope") ?? "ally").trim().toLowerCase() || "ally";
   const choiceOwner = String(formData.get("support_choice_owner") ?? "target").trim().toLowerCase() || "target";
-  const grantAttackAdvantage = formData.get("support_grant_attack_roll_advantage") === "on";
-  const damageBonus = numberOrNull(formData.get("support_damage_bonus"));
   const options: Array<Record<string, unknown>> = [];
+  const labels = formData.getAll("support_option_label");
+  const triggers = formData.getAll("support_option_trigger");
+  const damageBonuses = formData.getAll("support_option_damage_bonus");
+  const grantAdvantages = formData.getAll("support_option_grant_advantage");
+  const consumeOnUse = formData.getAll("support_option_consume_on_use");
 
-  if (grantAttackAdvantage) {
+  for (let i = 0; i < triggers.length; i += 1) {
+    const trigger = String(triggers[i] ?? "").trim().toLowerCase();
+    if (!trigger) continue;
+    const label = String(labels[i] ?? "").trim() || null;
+    const damageBonus = numberOrNull(damageBonuses[i] ?? null);
+    const grantAdvantage = String(grantAdvantages[i] ?? "").trim().toLowerCase() === "on";
+    const consume = String(consumeOnUse[i] ?? "").trim().toLowerCase() === "on";
+    if (!grantAdvantage && damageBonus === null) continue;
     options.push({
-      id: "attack_roll_advantage",
-      label: "Advantage on next attack roll",
-      trigger: "next_attack_roll",
-      grant_advantage: true,
-      consume_on_use: true,
-    });
-  }
-  if (damageBonus !== null && damageBonus !== 0) {
-    options.push({
-      id: "damage_bonus",
-      label: `${damageBonus > 0 ? "+" : ""}${damageBonus} damage on next hit`,
-      trigger: "next_damage_roll",
+      id: label
+        ? label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || `option_${i + 1}`
+        : `option_${i + 1}`,
+      label: label || (trigger === "next_attack_roll" ? "Next attack roll bonus" : "Next damage roll bonus"),
+      trigger,
+      grant_advantage: grantAdvantage || undefined,
       damage_bonus: damageBonus,
-      consume_on_use: true,
+      consume_on_use: consume,
     });
   }
   if (!options.length) return null;

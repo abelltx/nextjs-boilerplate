@@ -1,9 +1,5 @@
 import { createActionAction } from "./actions";
-
-const ACTION_BEHAVIOR_OPTIONS = [
-  { value: "", label: "Standard Action" },
-  { value: "targeted_support", label: "Targeted Support" },
-];
+import ActionBehaviorComposer from "../ActionBehaviorComposer";
 const DAMAGE_DICE_OPTIONS = [
   "",
   "1d4",
@@ -90,35 +86,6 @@ export default async function ActionNewPage({
               </select>
             </label>
 
-            <label className="grid gap-2">
-              <span className="text-sm font-medium">Action Behavior</span>
-              <select name="action_behavior" defaultValue="" className="w-full rounded-md border px-3 py-2">
-                {ACTION_BEHAVIOR_OPTIONS.map((opt) => (
-                  <option key={opt.value || "standard"} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-              <span className="text-xs text-muted-foreground">
-                Use this for special nonstandard action flows that target another character.
-              </span>
-            </label>
-
-            <label className="grid gap-2">
-              <span className="text-sm font-medium">Support Target</span>
-              <select name="support_target_scope" defaultValue="ally" className="w-full rounded-md border px-3 py-2">
-                <option value="ally">ally</option>
-              </select>
-            </label>
-
-            <label className="grid gap-2">
-              <span className="text-sm font-medium">Who Chooses</span>
-              <select name="support_choice_owner" defaultValue="target" className="w-full rounded-md border px-3 py-2">
-                <option value="target">target</option>
-                <option value="source">source</option>
-              </select>
-            </label>
-
             <label className="grid gap-2 md:col-span-2">
               <span className="text-sm font-medium">Summary</span>
               <input name="summary" className="w-full rounded-md border px-3 py-2" />
@@ -136,39 +103,7 @@ export default async function ActionNewPage({
           </div>
         </div>
 
-        <div className="rounded-2xl border bg-card p-4 shadow-sm space-y-4">
-          <div>
-            <h2 className="font-semibold">Behavior Config</h2>
-            <p className="text-sm text-muted-foreground">
-              The helper fields below build one common config shape. For full flexibility, paste raw JSON and it will override the helper inputs.
-            </p>
-          </div>
-          <label className="grid gap-2">
-            <span className="text-sm font-medium">Action Config JSON</span>
-            <textarea
-              name="action_config_json"
-              className="min-h-[180px] w-full rounded-md border px-3 py-2 font-mono text-sm"
-              placeholder={`{\n  "kind": "targeted_support",\n  "target_scope": "ally",\n  "choice_owner": "target",\n  "options": [\n    {\n      "id": "attack_roll_advantage",\n      "label": "Advantage on next attack roll",\n      "trigger": "next_attack_roll",\n      "grant_advantage": true,\n      "consume_on_use": true\n    },\n    {\n      "id": "damage_bonus",\n      "label": "+3 damage on next hit",\n      "trigger": "next_damage_roll",\n      "damage_bonus": 3,\n      "consume_on_use": true\n    }\n  ]\n}`}
-            />
-          </label>
-          <div className="grid gap-4 md:grid-cols-2">
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" name="support_grant_attack_roll_advantage" />
-              <span>Grant advantage on next attack roll</span>
-            </label>
-
-            <label className="grid gap-2">
-              <span className="text-sm font-medium">Next-hit damage bonus</span>
-              <input
-                name="support_damage_bonus"
-                defaultValue=""
-                className="w-full rounded-md border px-3 py-2"
-                inputMode="numeric"
-                placeholder="e.g. 3"
-              />
-            </label>
-          </div>
-        </div>
+        <ActionBehaviorComposer />
 
         <div className="rounded-2xl border bg-card p-4 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
