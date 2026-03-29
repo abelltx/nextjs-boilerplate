@@ -22,6 +22,30 @@ function newSupportOptionRow(id: number): SupportOptionRow {
   };
 }
 
+function normalizeSupportRows(
+  input: Array<{
+    label?: string | null;
+    trigger?: string | null;
+    grant_advantage?: boolean | null;
+    damage_bonus?: number | null;
+    consume_on_use?: boolean | null;
+  }> | undefined
+): SupportOptionRow[] {
+  if (!Array.isArray(input) || !input.length) return [newSupportOptionRow(1)];
+  const rows = input
+    .map((row, index) => ({
+      id: index + 1,
+      label: String(row?.label ?? "").trim(),
+      trigger: String(row?.trigger ?? "next_attack_roll").trim() || "next_attack_roll",
+      grantAdvantage: row?.grant_advantage !== false,
+      damageBonus:
+        row?.damage_bonus == null || Number.isNaN(Number(row.damage_bonus)) ? "" : String(Number(row.damage_bonus)),
+      consumeOnUse: row?.consume_on_use !== false,
+    }))
+    .filter((row) => row.trigger.length > 0);
+  return rows.length ? rows : [newSupportOptionRow(1)];
+}
+
 export default function ActionBehaviorComposer(props: {
   defaultBehavior?: string | null;
   defaultTargetScope?: string | null;
@@ -36,22 +60,14 @@ export default function ActionBehaviorComposer(props: {
   defaultActionConfigJson?: string;
 }) {
   const [behavior, setBehavior] = useState<string>(String(props.defaultBehavior ?? ""));
-  const [rows, setRows] = useState<SupportOptionRow[]>(
-    (Array.isArray(props.defaultSupportOptions) && props.defaultSupportOptions.length
-      ? props.defaultSupportOptions
-          .map((row, index) => ({
-            id: index + 1,
-            label: String(row?.label ?? "").trim(),
-            trigger: String(row?.trigger ?? "next_attack_roll").trim() || "next_attack_roll",
-            grantAdvantage: Boolean(row?.grant_advantage),
-            damageBonus:
-              row?.damage_bonus == null || Number.isNaN(Number(row.damage_bonus)) ? "" : String(Number(row.damage_bonus)),
-            consumeOnUse: row?.consume_on_use !== false,
-          }))
-          .filter((row) => row.trigger.length > 0)
-      : [newSupportOptionRow(1)]) as SupportOptionRow[]
-  );
+  const [targetScope, setTargetScope] = useState<string>(String(props.defaultTargetScope ?? "ally") || "ally");
+  const [choiceOwner, setChoiceOwner] = useState<string>(String(props.defaultChoiceOwner ?? "target") || "target");
+  const [rows, setRows] = useState<SupportOptionRow[]>(() => normalizeSupportRows(props.defaultSupportOptions));
   const nextId = useMemo(() => Math.max(0, ...rows.map((row) => row.id)) + 1, [rows]);
+
+  function updateRow(id: number, patch: Partial<SupportOptionRow>) {
+    setRows((prev) => prev.map((row) => (row.id === id ? { ...row, ...patch } : row)));
+  }
 
   return (
     <div className="rounded-2xl border bg-card p-4 shadow-sm space-y-4">
@@ -80,7 +96,8 @@ export default function ActionBehaviorComposer(props: {
           <span className="text-sm font-medium">Support Target</span>
           <select
             name="support_target_scope"
-            defaultValue={String(props.defaultTargetScope ?? "ally")}
+            value={targetScope}
+            onChange={(e) => setTargetScope(e.currentTarget.value)}
             className="w-full rounded-md border px-3 py-2"
             disabled={behavior !== "targeted_support"}
           >
@@ -93,7 +110,8 @@ export default function ActionBehaviorComposer(props: {
           <span className="text-sm font-medium">Who Chooses</span>
           <select
             name="support_choice_owner"
-            defaultValue={String(props.defaultChoiceOwner ?? "target")}
+            value={choiceOwner}
+            onChange={(e) => setChoiceOwner(e.currentTarget.value)}
             className="w-full rounded-md border px-3 py-2"
             disabled={behavior !== "targeted_support"}
           >
@@ -123,6 +141,12 @@ export default function ActionBehaviorComposer(props: {
 
           {rows.map((row, index) => (
             <div key={row.id} className="rounded-xl border p-3 space-y-3">
+              <input type="hidden" name="support_option_label" value={row.label} />
+              <input type="hidden" name="support_option_trigger" value={row.trigger} />
+              <input type="hidden" name="support_option_damage_bonus" value={row.damageBonus} />
+              <input type="hidden" name="support_option_grant_advantage" value={row.grantAdvantage ? "on" : ""} />
+              <input type="hidden" name="support_option_consume_on_use" value={row.consumeOnUse ? "on" : ""} />
+
               <div className="flex items-center justify-between gap-3">
                 <div className="text-xs text-muted-foreground">Option #{index + 1}</div>
                 {rows.length > 1 ? (
@@ -140,13 +164,8 @@ export default function ActionBehaviorComposer(props: {
                 <label className="grid gap-2 md:col-span-2">
                   <span className="text-sm font-medium">Label</span>
                   <input
-                    name="support_option_label"
                     value={row.label}
-                    onChange={(e) =>
-                      setRows((prev) =>
-                        prev.map((item) => (item.id === row.id ? { ...item, label: e.currentTarget.value } : item))
-                      )
-                    }
+                    onChange={(e) => updateRow(row.id, { label: e.currentTarget.value })}
                     className="w-full rounded-md border px-3 py-2"
                     placeholder="e.g. Advantage on next attack roll"
                   />
@@ -155,32 +174,22 @@ export default function ActionBehaviorComposer(props: {
                 <label className="grid gap-2">
                   <span className="text-sm font-medium">Trigger</span>
                   <select
-                    name="support_option_trigger"
                     value={row.trigger}
-                    onChange={(e) =>
-                      setRows((prev) =>
-                        prev.map((item) => (item.id === row.id ? { ...item, trigger: e.currentTarget.value } : item))
-                      )
-                    }
-                  className="w-full rounded-md border px-3 py-2"
-                >
-                  <option value="next_attack_roll">next attack roll</option>
-                  <option value="next_damage_roll">next damage roll</option>
-                  <option value="next_skill_check">next skill check</option>
-                  <option value="reroll_next_roll">reroll next roll</option>
-                </select>
-              </label>
+                    onChange={(e) => updateRow(row.id, { trigger: e.currentTarget.value })}
+                    className="w-full rounded-md border px-3 py-2"
+                  >
+                    <option value="next_attack_roll">next attack roll</option>
+                    <option value="next_damage_roll">next damage roll</option>
+                    <option value="next_skill_check">next skill check</option>
+                    <option value="reroll_next_roll">reroll next roll</option>
+                  </select>
+                </label>
 
                 <label className="grid gap-2">
                   <span className="text-sm font-medium">Damage Bonus</span>
                   <input
-                    name="support_option_damage_bonus"
                     value={row.damageBonus}
-                    onChange={(e) =>
-                      setRows((prev) =>
-                        prev.map((item) => (item.id === row.id ? { ...item, damageBonus: e.currentTarget.value } : item))
-                      )
-                    }
+                    onChange={(e) => updateRow(row.id, { damageBonus: e.currentTarget.value })}
                     className="w-full rounded-md border px-3 py-2"
                     inputMode="numeric"
                     placeholder="e.g. 3"
@@ -190,13 +199,8 @@ export default function ActionBehaviorComposer(props: {
                 <label className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
-                    name="support_option_grant_advantage"
                     checked={row.grantAdvantage}
-                    onChange={(e) =>
-                      setRows((prev) =>
-                        prev.map((item) => (item.id === row.id ? { ...item, grantAdvantage: e.currentTarget.checked } : item))
-                      )
-                    }
+                    onChange={(e) => updateRow(row.id, { grantAdvantage: e.currentTarget.checked })}
                   />
                   <span>Grant advantage</span>
                 </label>
@@ -204,13 +208,8 @@ export default function ActionBehaviorComposer(props: {
                 <label className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
-                    name="support_option_consume_on_use"
                     checked={row.consumeOnUse}
-                    onChange={(e) =>
-                      setRows((prev) =>
-                        prev.map((item) => (item.id === row.id ? { ...item, consumeOnUse: e.currentTarget.checked } : item))
-                      )
-                    }
+                    onChange={(e) => updateRow(row.id, { consumeOnUse: e.currentTarget.checked })}
                   />
                   <span>Consume on use</span>
                 </label>
