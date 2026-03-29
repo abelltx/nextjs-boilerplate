@@ -42,6 +42,7 @@ type GuidedRoll = {
   total: number;
   breakdown: string;
 };
+type SupportChoice = "next_attack_roll" | "next_damage_roll" | "next_skill_check" | "reroll_next_roll";
 type SessionRosterEntry = {
   playerId: string;
   characterId: string;
@@ -81,7 +82,7 @@ type PointSupportEffect = {
     damage_bonus?: number | null;
     consume_on_use?: boolean | null;
   }>;
-  status: "pending_choice" | "attack_roll" | "damage_bonus" | "consumed";
+  status: "pending_choice" | "next_attack_roll" | "next_damage_roll" | "next_skill_check" | "reroll_next_roll" | "consumed";
   damage_bonus?: number | null;
   created_at?: string | null;
   chosen_at?: string | null;
@@ -422,24 +423,6 @@ export default function PlayerHubClient(props: {
     });
     return out;
   }, [advantageMap]);
-  const skillAdvantageMap: Record<string, boolean> = useMemo(() => {
-    const out: Record<string, boolean> = {};
-    SKILL_ALIASES.forEach((s) => {
-      const keys = [s.key, ...s.aliases].map((v) => normalizeAdvantageKey(v));
-      out[s.key] = keys.some((k) => Array.isArray(advantageMap[k]) && advantageMap[k].length > 0);
-    });
-    return out;
-  }, [advantageMap]);
-  const activePromptAdvantageSources = useMemo(() => {
-    if (!rollOpen || !promptTarget) return [] as string[];
-    if (promptTarget.kind === "ability") {
-      return advantageMap[normalizeAdvantageKey(promptTarget.abilityKey)] ?? [];
-    }
-    if (promptTarget.kind === "skill") {
-      return advantageMap[normalizeAdvantageKey(promptTarget.skillKey)] ?? [];
-    }
-    return [] as string[];
-  }, [rollOpen, promptTarget, advantageMap]);
   const pendingPointChoices = useMemo(
     () =>
       pointEffects.filter(
@@ -454,7 +437,7 @@ export default function PlayerHubClient(props: {
       pointEffects.filter(
         (row) =>
           String(row?.target_character_id ?? "").trim() === String(props.character?.id ?? "").trim() &&
-          String(row?.status ?? "").trim().toLowerCase() === "attack_roll"
+          String(row?.status ?? "").trim().toLowerCase() === "next_attack_roll"
       ),
     [pointEffects, props.character?.id]
   );
@@ -463,7 +446,25 @@ export default function PlayerHubClient(props: {
       pointEffects.filter(
         (row) =>
           String(row?.target_character_id ?? "").trim() === String(props.character?.id ?? "").trim() &&
-          String(row?.status ?? "").trim().toLowerCase() === "damage_bonus"
+          String(row?.status ?? "").trim().toLowerCase() === "next_damage_roll"
+      ),
+    [pointEffects, props.character?.id]
+  );
+  const temporarySkillPointEffects = useMemo(
+    () =>
+      pointEffects.filter(
+        (row) =>
+          String(row?.target_character_id ?? "").trim() === String(props.character?.id ?? "").trim() &&
+          String(row?.status ?? "").trim().toLowerCase() === "next_skill_check"
+      ),
+    [pointEffects, props.character?.id]
+  );
+  const temporaryRerollPointEffects = useMemo(
+    () =>
+      pointEffects.filter(
+        (row) =>
+          String(row?.target_character_id ?? "").trim() === String(props.character?.id ?? "").trim() &&
+          String(row?.status ?? "").trim().toLowerCase() === "reroll_next_roll"
       ),
     [pointEffects, props.character?.id]
   );
@@ -489,11 +490,53 @@ export default function PlayerHubClient(props: {
       }),
     [temporaryDamagePointEffects]
   );
+  const temporarySkillAdvantageSources = useMemo(
+    () =>
+      temporarySkillPointEffects.map((row) => {
+        const sourceName = String(row?.source_name ?? "").trim();
+        const actionName = String(row?.action_name ?? "").trim() || "Support";
+        return sourceName ? `${actionName} (${sourceName})` : actionName;
+      }),
+    [temporarySkillPointEffects]
+  );
+  const temporaryRerollSources = useMemo(
+    () =>
+      temporaryRerollPointEffects.map((row) => {
+        const sourceName = String(row?.source_name ?? "").trim();
+        const actionName = String(row?.action_name ?? "").trim() || "Support";
+        return sourceName ? `${actionName} (${sourceName})` : actionName;
+      }),
+    [temporaryRerollPointEffects]
+  );
+  const skillAdvantageMap: Record<string, boolean> = useMemo(() => {
+    const out: Record<string, boolean> = {};
+    SKILL_ALIASES.forEach((s) => {
+      const keys = [s.key, ...s.aliases].map((v) => normalizeAdvantageKey(v));
+      out[s.key] =
+        keys.some((k) => Array.isArray(advantageMap[k]) && advantageMap[k].length > 0) ||
+        temporarySkillPointEffects.length > 0;
+    });
+    return out;
+  }, [advantageMap, temporarySkillPointEffects.length]);
+  const activePromptAdvantageSources = useMemo(() => {
+    if (!rollOpen || !promptTarget) return [] as string[];
+    if (promptTarget.kind === "ability") {
+      return advantageMap[normalizeAdvantageKey(promptTarget.abilityKey)] ?? [];
+    }
+    if (promptTarget.kind === "skill") {
+      return [
+        ...(advantageMap[normalizeAdvantageKey(promptTarget.skillKey)] ?? []),
+        ...temporarySkillAdvantageSources,
+      ];
+    }
+    return [] as string[];
+  }, [rollOpen, promptTarget, advantageMap, temporarySkillAdvantageSources]);
   const stageStoryText = String(stage?.session?.story_text ?? selectedSession?.story_text ?? "");
   const [diceMode, setDiceMode] = useState<"digital" | "manual">("digital");
   const [manualValue, setManualValue] = useState("");
   const [manualValueB, setManualValueB] = useState("");
   const [submittingRoll, setSubmittingRoll] = useState(false);
+  const [pendingPromptRerollEffectId, setPendingPromptRerollEffectId] = useState<string | null>(null);
   const [requestingRoll, setRequestingRoll] = useState(false);
   const [usingPointActionId, setUsingPointActionId] = useState<string | null>(null);
   const [resolvingPointId, setResolvingPointId] = useState<string | null>(null);
@@ -515,7 +558,7 @@ export default function PlayerHubClient(props: {
   const alreadySubmittedRound = Boolean(
     rollOpen && currentRoundId && myExistingResult?.round_id && String(myExistingResult.round_id) === currentRoundId
   );
-  const rollLocked = rollOpen && (Boolean(guidedResult) || Boolean(flight) || alreadySubmittedRound);
+  const rollLocked = rollOpen && !pendingPromptRerollEffectId && (Boolean(guidedResult) || Boolean(flight) || alreadySubmittedRound);
   const rollRequests = Array.isArray(stageState?.roll_requests) ? (stageState.roll_requests as any[]) : [];
   const myPendingRequest = rollRequests.find(
     (r: any) =>
@@ -531,26 +574,41 @@ export default function PlayerHubClient(props: {
       setManualValue("");
       setManualValueB("");
       setSubmittingRoll(false);
+      setPendingPromptRerollEffectId(null);
     }
   }, [rollOpen, rollPrompt]);
 
-  async function submitRoll(value: number, source: "manual" | "digital") {
+  async function submitRoll(value: number, source: "manual" | "digital", rerollEffectId?: string | null) {
     if (!selectedSessionId) return;
     setSubmittingRoll(true);
     const res = await submitRollResultAction({
       sessionId: selectedSessionId,
+      characterId: String(props.character?.id ?? ""),
       rollValue: value,
       source,
+      rerollEffectId: rerollEffectId || undefined,
     });
     setSubmittingRoll(false);
     if (!res.ok) {
       alert(res.error ?? "Could not submit roll.");
       return;
     }
+    if (promptTarget?.kind === "skill" && temporarySkillPointEffects.length) {
+      const consumeRes = await consumePointSupportEffectsAction({
+        sessionId: selectedSessionId,
+        characterId: String(props.character?.id ?? ""),
+        effectIds: temporarySkillPointEffects.map((row) => row.id),
+      });
+      if (!consumeRes.ok) {
+        alert(consumeRes.error ?? "Could not consume skill support effect.");
+        return;
+      }
+    }
+    setPendingPromptRerollEffectId(null);
     router.refresh();
   }
 
-  function calculateManualRollTotal(rawA: number, rawB?: number | null) {
+  function calculateRequestedRollTotal(rawA: number, rawB?: number | null) {
     const hasAdvantage = (activePromptAdvantageSources?.length ?? 0) > 0;
     const pickedDie = hasAdvantage && Number.isFinite(Number(rawB))
       ? Math.max(rawA, Number(rawB))
@@ -573,10 +631,11 @@ export default function PlayerHubClient(props: {
     }
 
     const total = pickedDie + bonus;
+    const dieLabel = promptTarget?.kind === "die" ? `d${Math.max(2, Number(promptTarget.die || 20))}` : "d20";
     const advText =
       hasAdvantage && Number.isFinite(Number(rawB))
-        ? `adv[d20(${rawA}), d20(${Number(rawB)})=>${pickedDie}]`
-        : `d20(${pickedDie})`;
+        ? `adv[${dieLabel}(${rawA}), ${dieLabel}(${Number(rawB)})=>${pickedDie}]`
+        : `${dieLabel}(${pickedDie})`;
     const sign = bonus >= 0 ? "+" : "-";
     const absBonus = Math.abs(bonus);
     const breakdown =
@@ -584,6 +643,28 @@ export default function PlayerHubClient(props: {
         ? `${advText}`
         : `${advText} ${sign} ${absBonus} (${bonusLabel})`;
     return { total, breakdown };
+  }
+
+  async function handlePromptReroll() {
+    const rerollEffectId = String(
+      pendingPromptRerollEffectId ?? temporaryRerollPointEffects[0]?.id ?? ""
+    ).trim();
+    if (!rerollEffectId || !selectedSessionId || submittingRoll) return;
+
+    if (diceMode === "manual") {
+      setPendingPromptRerollEffectId(rerollEffectId);
+      setGuidedResult(null);
+      setManualValue("");
+      setManualValueB("");
+      return;
+    }
+
+    const dieSides = promptTarget?.kind === "die" ? Math.max(2, Number(promptTarget.die || 20)) : 20;
+    const rawA = Math.floor(Math.random() * dieSides) + 1;
+    const rawB = (activePromptAdvantageSources?.length ?? 0) > 0 ? Math.floor(Math.random() * dieSides) + 1 : null;
+    const computed = calculateRequestedRollTotal(rawA, rawB);
+    setGuidedResult({ label: "Reroll", total: computed.total, breakdown: computed.breakdown });
+    await submitRoll(computed.total, "digital", rerollEffectId);
   }
 
   async function handleRequestRoll() {
@@ -628,7 +709,7 @@ export default function PlayerHubClient(props: {
     }
   }
 
-  async function handleChoosePoint(effectId: string, choice: "attack_roll" | "damage_bonus") {
+  async function handleChoosePoint(effectId: string, choice: SupportChoice) {
     if (!selectedSessionId || !effectId || resolvingPointId) return;
     setResolvingPointId(effectId);
     try {
@@ -1022,13 +1103,17 @@ export default function PlayerHubClient(props: {
                           alert("Advantage is active. Enter your second d20 roll.");
                           return;
                         }
-                        const computed = calculateManualRollTotal(rawA, rawB);
+                        const computed = calculateRequestedRollTotal(rawA, rawB);
                         setGuidedResult({ label: "Table Dice", total: computed.total, breakdown: computed.breakdown });
-                        await submitRoll(computed.total, "manual");
+                        await submitRoll(computed.total, "manual", pendingPromptRerollEffectId);
                       }}
                       rollLocked={rollLocked}
                       submitting={submittingRoll}
                       advantageSources={activePromptAdvantageSources}
+                      rerollSources={temporaryRerollSources}
+                      rerollReady={Boolean(guidedResult || alreadySubmittedRound || pendingPromptRerollEffectId)}
+                      rerollPendingManual={Boolean(pendingPromptRerollEffectId && diceMode === "manual")}
+                      onUseReroll={handlePromptReroll}
                     />
                   </div>
                 ) : null}
@@ -1195,7 +1280,7 @@ export default function PlayerHubClient(props: {
                     characterId={String(props.character?.id ?? "")}
                     actions={props.playerActions ?? []}
                     sessionId={selectedSessionId}
-                    sessionRoster={sessionRoster.filter((row) => String(row.characterId) !== String(props.character?.id ?? ""))}
+                    sessionRoster={sessionRoster}
                     onUsePoint={handleUsePoint}
                     pointActionBusyId={usingPointActionId}
                     attackAdvantageSources={advantageMap[normalizeAdvantageKey("attack_roll")] ?? []}
@@ -1204,6 +1289,8 @@ export default function PlayerHubClient(props: {
                     temporaryDamageBonus={temporaryDamageBonus}
                     temporaryDamageBonusEffectIds={temporaryDamagePointEffects.map((row) => String(row.id ?? "").trim()).filter(Boolean)}
                     temporaryDamageBonusSources={temporaryDamageBonusSources}
+                    temporaryRerollEffectIds={temporaryRerollPointEffects.map((row) => String(row.id ?? "").trim()).filter(Boolean)}
+                    temporaryRerollSources={temporaryRerollSources}
                   />
                   <TraitListPanel traits={props.playerTraits ?? []} />
                 </div>
@@ -1658,6 +1745,8 @@ function ActionListPanel(props: {
   temporaryDamageBonus?: number;
   temporaryDamageBonusEffectIds?: string[];
   temporaryDamageBonusSources?: string[];
+  temporaryRerollEffectIds?: string[];
+  temporaryRerollSources?: string[];
 }) {
   const [rolls, setRolls] = useState<Record<string, { hit?: string; damage?: string }>>({});
   const [pointTargetByAction, setPointTargetByAction] = useState<Record<string, string>>({});
@@ -1668,7 +1757,23 @@ function ActionListPanel(props: {
     return Math.floor(Math.random() * sides) + 1;
   }
 
-  async function rollHit(action: any) {
+  async function consumeFirstRerollEffect() {
+    const effectId = String((props.temporaryRerollEffectIds ?? [])[0] ?? "").trim();
+    if (!props.sessionId || !props.characterId || !effectId) return true;
+    const res = await consumePointSupportEffectsAction({
+      sessionId: props.sessionId,
+      characterId: props.characterId,
+      effectIds: [effectId],
+    });
+    if (!res.ok) {
+      alert(res.error ?? "Could not consume reroll effect.");
+      return false;
+    }
+    router.refresh();
+    return true;
+  }
+
+  async function rollHit(action: any, isReroll = false) {
     const bonus = Number(action.attack_bonus_override ?? 0);
     const attackAdvantageSources = [
       ...(props.attackAdvantageSources ?? []),
@@ -1688,6 +1793,10 @@ function ActionListPanel(props: {
           : `${total} (d20 ${d20}${bonus ? ` + ${bonus}` : ""})`,
       },
     }));
+    if (isReroll) {
+      const ok = await consumeFirstRerollEffect();
+      if (!ok) return;
+    }
     if (props.sessionId && props.characterId && (props.temporaryAttackAdvantageEffectIds ?? []).length) {
       const res = await consumePointSupportEffectsAction({
         sessionId: props.sessionId,
@@ -1702,7 +1811,7 @@ function ActionListPanel(props: {
     }
   }
 
-  async function rollDamage(action: any) {
+  async function rollDamage(action: any, isReroll = false) {
     const formula = String(action.damage_dice ?? "").trim().toLowerCase();
     const bonusFromField = Number(action.damage_bonus ?? 0);
     const m = formula.match(/^(\d*)d(\d+)([+-]\d+)?$/i);
@@ -1725,6 +1834,10 @@ function ActionListPanel(props: {
         damage: `${total} ${outcomeLabel} ([${rollsArr.join(", ")}]${bonus ? ` ${bonus > 0 ? "+" : "-"} ${Math.abs(bonus)}` : ""})`,
       },
     }));
+    if (isReroll) {
+      const ok = await consumeFirstRerollEffect();
+      if (!ok) return;
+    }
     if (props.sessionId && props.characterId && (props.temporaryDamageBonusEffectIds ?? []).length) {
       const res = await consumePointSupportEffectsAction({
         sessionId: props.sessionId,
@@ -1753,6 +1866,19 @@ function ActionListPanel(props: {
           </div>
           {props.actions.map((a) => (
             <div key={a.id} className="grid grid-cols-12 gap-2 border-b border-neutral-800 px-3 py-2 text-sm last:border-b-0">
+              {(() => {
+                const actionConfig = normalizeActionConfig(a.action_config);
+                const availableTargets =
+                  actionConfig?.kind === "targeted_support"
+                    ? (props.sessionRoster ?? []).filter((row) =>
+                        actionConfig.target_scope === "ally_or_self"
+                          ? true
+                          : String(row.characterId) !== String(props.characterId)
+                      )
+                    : [];
+                const hasReroll = (props.temporaryRerollEffectIds ?? []).length > 0;
+                return (
+                  <>
               <div className="col-span-3 min-w-0">
                 <div className="truncate font-semibold text-neutral-100">{a.name}</div>
                 <div className="text-[11px] text-neutral-400">{a.type ?? "other"}</div>
@@ -1762,7 +1888,7 @@ function ActionListPanel(props: {
                 {a.range_max ? ` (${a.range_max})` : ""}
               </div>
               <div className="col-span-2 text-xs text-neutral-300">
-                {normalizeActionConfig(a.action_config)?.kind === "targeted_support" ? (
+                {actionConfig?.kind === "targeted_support" ? (
                   <div className="space-y-1">
                     <select
                       value={pointTargetByAction[a.id] ?? ""}
@@ -1775,8 +1901,8 @@ function ActionListPanel(props: {
                       className="w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-[11px]"
                       disabled={!props.sessionId || Boolean(props.pointActionBusyId)}
                     >
-                      <option value="">Choose ally</option>
-                      {(props.sessionRoster ?? []).map((row) => (
+                      <option value="">{actionConfig.target_scope === "ally_or_self" ? "Choose ally or self" : "Choose ally"}</option>
+                      {availableTargets.map((row) => (
                         <option key={row.characterId} value={row.characterId}>
                           {row.name}
                         </option>
@@ -1787,7 +1913,7 @@ function ActionListPanel(props: {
                       className="rounded border border-neutral-700 px-2 py-0.5 text-[11px] hover:bg-neutral-900 disabled:opacity-60"
                       disabled={
                         !props.sessionId ||
-                        !(props.sessionRoster ?? []).length ||
+                        !availableTargets.length ||
                         !String(pointTargetByAction[a.id] ?? "").trim() ||
                         Boolean(props.pointActionBusyId)
                       }
@@ -1813,6 +1939,15 @@ function ActionListPanel(props: {
                       </div>
                     ) : null}
                     {rolls[a.id]?.hit ? <div className="text-emerald-300">{rolls[a.id]?.hit}</div> : null}
+                    {hasReroll && rolls[a.id]?.hit ? (
+                      <button
+                        type="button"
+                        className="rounded border border-amber-600/70 px-2 py-0.5 text-[11px] text-amber-200 hover:bg-neutral-900"
+                        onClick={() => rollHit(a, true)}
+                      >
+                        Reroll Hit
+                      </button>
+                    ) : null}
                   </div>
                 ) : a.save_dc_override != null ? (
                   <div>{`DC ${a.save_dc_override}${a.save_ability ? ` ${String(a.save_ability).toUpperCase()}` : ""}`}</div>
@@ -1835,6 +1970,15 @@ function ActionListPanel(props: {
                       {HEAL_TYPES.has(String(a.damage_type ?? "").toLowerCase()) ? "Roll Heal" : "Roll Dmg"}
                     </button>
                     {rolls[a.id]?.damage ? <div className="text-emerald-300">{rolls[a.id]?.damage}</div> : null}
+                    {hasReroll && rolls[a.id]?.damage ? (
+                      <button
+                        type="button"
+                        className="mt-1 rounded border border-amber-600/70 px-2 py-0.5 text-[11px] text-amber-200 hover:bg-neutral-900"
+                        onClick={() => rollDamage(a, true)}
+                      >
+                        Reroll Dmg
+                      </button>
+                    ) : null}
                   </div>
                 ) : null}
               </div>
@@ -1845,7 +1989,13 @@ function ActionListPanel(props: {
                 ) : null}
                 {a.on_fail?.trim() ? <div>{`On fail: ${a.on_fail}`}</div> : null}
                 {a.on_success?.trim() ? <div>{`On success: ${a.on_success}`}</div> : null}
+                {hasReroll ? (
+                  <div className="text-amber-300">Reroll ready: {(props.temporaryRerollSources ?? []).join(", ")}</div>
+                ) : null}
               </div>
+                  </>
+                );
+              })()}
             </div>
           ))}
         </div>
@@ -1882,47 +2032,44 @@ function TraitListPanel(props: { traits: Array<{ id: string; name: string; summa
 function PendingPointChoicePanel(props: {
   effects: PointSupportEffect[];
   resolvingId?: string | null;
-  onChoose: (effectId: string, choice: "attack_roll" | "damage_bonus") => void | Promise<void>;
+  onChoose: (effectId: string, choice: SupportChoice) => void | Promise<void>;
 }) {
   return (
     <div className="rounded-2xl border border-amber-400/60 bg-amber-500/10 p-4">
       <div className="text-sm font-semibold text-amber-100">Support Choice</div>
-      <div className="mt-1 text-xs text-amber-50/90">Choose how to use the active support effect on your next attack.</div>
+      <div className="mt-1 text-xs text-amber-50/90">Choose how to resolve the active support effect.</div>
       <div className="mt-3 space-y-3">
         {props.effects.map((effect) => {
           const sourceName = String(effect.source_name ?? "").trim() || "An ally";
           const actionName = String(effect.action_name ?? "").trim() || "Support";
-          const attackOption = Array.isArray(effect.options)
-            ? effect.options.find((opt) => String(opt?.trigger ?? "").trim().toLowerCase() === "next_attack_roll" && Boolean(opt?.grant_advantage))
-            : null;
-          const damageOption = Array.isArray(effect.options)
-            ? effect.options.find((opt) => String(opt?.trigger ?? "").trim().toLowerCase() === "next_damage_roll")
-            : null;
+          const options = (Array.isArray(effect.options) ? effect.options : [])
+            .map((opt) => {
+              const trigger = String(opt?.trigger ?? "").trim().toLowerCase() as SupportChoice | "";
+              if (!["next_attack_roll", "next_damage_roll", "next_skill_check", "reroll_next_roll"].includes(trigger)) {
+                return null;
+              }
+              return {
+                trigger: trigger as SupportChoice,
+                label: String(opt?.label ?? "").trim() || null,
+              };
+            })
+            .filter((opt): opt is { trigger: SupportChoice; label: string | null } => Boolean(opt));
           const busy = props.resolvingId === effect.id;
           return (
             <div key={effect.id} className="rounded-xl border border-amber-300/40 bg-neutral-950/40 p-3">
               <div className="text-sm text-neutral-100">{sourceName} used {actionName} on you.</div>
               <div className="mt-2 flex flex-wrap gap-2">
-                {attackOption ? (
+                {options.map((option) => (
                   <button
                     type="button"
-                    onClick={() => props.onChoose(effect.id, "attack_roll")}
+                    key={`${effect.id}-${option.trigger}`}
+                    onClick={() => props.onChoose(effect.id, option.trigger)}
                     disabled={busy}
                     className="rounded border border-neutral-700 px-3 py-1.5 text-sm hover:bg-neutral-900 disabled:opacity-60"
                   >
-                    {busy ? "Choosing..." : String(attackOption.label ?? "Next attack: advantage")}
+                    {busy ? "Choosing..." : String(option.label ?? option.trigger)}
                   </button>
-                ) : null}
-                {damageOption ? (
-                  <button
-                    type="button"
-                    onClick={() => props.onChoose(effect.id, "damage_bonus")}
-                    disabled={busy}
-                    className="rounded border border-neutral-700 px-3 py-1.5 text-sm hover:bg-neutral-900 disabled:opacity-60"
-                  >
-                    {busy ? "Choosing..." : String(damageOption.label ?? "Next hit: damage bonus")}
-                  </button>
-                ) : null}
+                ))}
               </div>
             </div>
           );
@@ -1945,8 +2092,13 @@ function RollRequestPanel(props: {
   rollLocked: boolean;
   submitting: boolean;
   advantageSources?: string[];
+  rerollSources?: string[];
+  rerollReady?: boolean;
+  rerollPendingManual?: boolean;
+  onUseReroll?: () => void | Promise<void>;
 }) {
   const hasAdvantage = Array.isArray(props.advantageSources) && props.advantageSources.length > 0;
+  const hasReroll = Array.isArray(props.rerollSources) && props.rerollSources.length > 0;
   return (
     <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
       <div className="flex items-center justify-between gap-3">
@@ -1983,11 +2135,17 @@ function RollRequestPanel(props: {
           Advantage active: {props.advantageSources.join(", ")}
         </div>
       ) : null}
+      {hasReroll ? (
+        <div className="mt-2 rounded-lg border border-amber-300/60 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+          Reroll available: {props.rerollSources?.join(", ")}
+        </div>
+      ) : null}
 
       {props.diceMode === "manual" ? (
         <div className="mt-3 space-y-2">
           <div className="text-xs text-neutral-300">
             Enter only your d20 roll{hasAdvantage ? "s" : ""}. The app adds modifiers automatically.
+            {props.rerollPendingManual ? " Reroll is armed for your next submit." : ""}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <input
@@ -2020,10 +2178,32 @@ function RollRequestPanel(props: {
             >
               Submit
             </button>
+            {hasReroll && props.rerollReady ? (
+              <button
+                type="button"
+                onClick={props.onUseReroll}
+                disabled={props.submitting}
+                className="rounded-lg border border-amber-600/70 px-3 py-1.5 text-sm text-amber-200 hover:bg-neutral-900 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Use Reroll
+              </button>
+            ) : null}
           </div>
         </div>
       ) : (
-        <div className="mt-3 text-xs text-neutral-400">Digital Dice active: click the glowing target to roll once.</div>
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-neutral-400">
+          <span>Digital Dice active: click the glowing target to roll once.</span>
+          {hasReroll && props.rerollReady ? (
+            <button
+              type="button"
+              onClick={props.onUseReroll}
+              disabled={props.submitting}
+              className="rounded-lg border border-amber-600/70 px-3 py-1.5 text-sm text-amber-200 hover:bg-neutral-900 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Use Reroll
+            </button>
+          ) : null}
+        </div>
       )}
 
       {props.guidedResult ? (

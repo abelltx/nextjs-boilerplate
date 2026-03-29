@@ -182,7 +182,7 @@ type PointSupportEffectRow = {
     damage_bonus: number | null;
     consume_on_use: boolean | null;
   }>;
-  status: "pending_choice" | "attack_roll" | "damage_bonus" | "consumed";
+  status: "pending_choice" | "next_attack_roll" | "next_damage_roll" | "next_skill_check" | "reroll_next_roll" | "consumed";
   damage_bonus: number | null;
   created_at: string | null;
   chosen_at: string | null;
@@ -197,7 +197,7 @@ function normalizeTargetedSupportConfig(input: unknown) {
   const options = (Array.isArray(cfg.options) ? cfg.options : [])
     .map((row: any) => {
       const trigger = String(row?.trigger ?? "").trim().toLowerCase();
-      if (!["next_attack_roll", "next_damage_roll"].includes(trigger)) return null;
+      if (!["next_attack_roll", "next_damage_roll", "next_skill_check", "reroll_next_roll"].includes(trigger)) return null;
       return {
         id: String(row?.id ?? "").trim() || null,
         label: String(row?.label ?? "").trim() || null,
@@ -265,7 +265,7 @@ function normalizePointSupportEffects(input: unknown) {
       const id = String(row?.id ?? "").trim();
       const status = String(row?.status ?? "").trim().toLowerCase();
       if (!id) return null;
-      if (!["pending_choice", "attack_roll", "damage_bonus", "consumed"].includes(status)) return null;
+      if (!["pending_choice", "next_attack_roll", "next_damage_roll", "next_skill_check", "reroll_next_roll", "consumed"].includes(status)) return null;
       return {
         id,
         kind: "point" as const,
@@ -686,8 +686,10 @@ export async function leaveSessionAction(sessionId: string): Promise<{ ok: boole
 
 export async function submitRollResultAction(input: {
   sessionId: string;
+  characterId?: string;
   rollValue: number;
   source: "manual" | "digital";
+  rerollEffectId?: string;
 }): Promise<{ ok: boolean; error?: string }> {
   "use server";
   const { user } = await getProfile();
@@ -712,8 +714,36 @@ export async function submitRollResultAction(input: {
   const roundId = String((st as any).roll_round_id ?? "");
 
   const current = ((st as any)?.roll_results ?? {}) as Record<string, any>;
-  if (current[user.id]?.round_id && current[user.id].round_id === roundId) {
+  const rerollEffectId = String(input.rerollEffectId ?? "").trim();
+  if (current[user.id]?.round_id && current[user.id].round_id === roundId && !rerollEffectId) {
     return { ok: false, error: "You already submitted a roll for this request." };
+  }
+
+  let nextSupportEffects: PointSupportEffectRow[] | null = null;
+  if (rerollEffectId) {
+    const characterId = String(input.characterId ?? "").trim();
+    if (!characterId) return { ok: false, error: "Missing character for reroll." };
+    const owner = await requireOwnedCharacter(supabase, user.id, characterId);
+    if (!owner.ok) return { ok: false, error: owner.error };
+    const supportEffects = normalizePointSupportEffects((st as any)?.support_effects);
+    const effect = supportEffects.find((row) => row.id === rerollEffectId);
+    if (!effect) return { ok: false, error: "Reroll effect not found." };
+    if (effect.target_character_id !== characterId) {
+      return { ok: false, error: "This reroll belongs to a different character." };
+    }
+    if (effect.status !== "reroll_next_roll") {
+      return { ok: false, error: "This reroll is no longer available." };
+    }
+    const nowIso = new Date().toISOString();
+    nextSupportEffects = supportEffects.map((row) =>
+      row.id === rerollEffectId
+        ? {
+            ...row,
+            status: "consumed" as const,
+            consumed_at: nowIso,
+          }
+        : row
+    );
   }
 
   const next = {
@@ -728,7 +758,14 @@ export async function submitRollResultAction(input: {
 
   const { error: upErr } = await supabase
     .from("session_state")
-    .update({ roll_results: next })
+    .update(
+      nextSupportEffects
+        ? {
+            roll_results: next,
+            support_effects: nextSupportEffects,
+          }
+        : { roll_results: next }
+    )
     .eq("session_id", input.sessionId);
 
   if (upErr) return { ok: false, error: upErr.message };
@@ -829,8 +866,7 @@ export async function usePointSupportAction(input: {
 
   const roster = await getSessionCharacterRoster(supabase, sessionId);
   const target = roster.find((row) => row.characterId === targetCharacterId);
-  if (!target) return { ok: false, error: "Target ally not found in this session." };
-  if (target.characterId === characterId) return { ok: false, error: "Point must target an ally." };
+  if (!target) return { ok: false, error: "Target character not found in this session." };
 
   const { data: learned, error: learnedErr } = await supabase
     .from("player_action_links")
@@ -850,6 +886,9 @@ export async function usePointSupportAction(input: {
   if (!action?.id || action.is_active === false) return { ok: false, error: "Action not available." };
   const supportConfig = normalizeTargetedSupportConfig((action as any)?.action_config);
   if (!supportConfig) return { ok: false, error: "This action is not configured as a targeted support action." };
+  if (target.characterId === characterId && supportConfig.target_scope !== "ally_or_self") {
+    return { ok: false, error: "This action must target an ally." };
+  }
 
   const { data: stateRow, error: stateErr } = await supabase
     .from("session_state")
@@ -865,7 +904,9 @@ export async function usePointSupportAction(input: {
       row.kind === "point" &&
       row.target_character_id === targetCharacterId &&
       row.action_id === actionId &&
-      ["pending_choice", "attack_roll", "damage_bonus"].includes(row.status)
+      ["pending_choice", "next_attack_roll", "next_damage_roll", "next_skill_check", "reroll_next_roll"].includes(
+        row.status
+      )
   );
   if (existing) return { ok: true, alreadyPending: true };
 
@@ -906,7 +947,7 @@ export async function choosePointSupportAction(input: {
   sessionId: string;
   characterId: string;
   effectId: string;
-  choice: "attack_roll" | "damage_bonus";
+  choice: "next_attack_roll" | "next_damage_roll" | "next_skill_check" | "reroll_next_roll";
 }): Promise<{ ok: boolean; error?: string }> {
   "use server";
   const { user } = await getProfile();
@@ -915,7 +956,14 @@ export async function choosePointSupportAction(input: {
   const sessionId = String(input.sessionId ?? "").trim();
   const characterId = String(input.characterId ?? "").trim();
   const effectId = String(input.effectId ?? "").trim();
-  const choice = input.choice === "damage_bonus" ? "damage_bonus" : "attack_roll";
+  const choice =
+    input.choice === "next_damage_roll"
+      ? "next_damage_roll"
+      : input.choice === "next_skill_check"
+        ? "next_skill_check"
+        : input.choice === "reroll_next_roll"
+          ? "reroll_next_roll"
+          : "next_attack_roll";
   if (!sessionId || !characterId || !effectId) return { ok: false, error: "Missing session or Point choice." };
 
   const supabase = await supabaseServer();
@@ -936,15 +984,19 @@ export async function choosePointSupportAction(input: {
     if (row.id !== effectId) return row;
     if (row.target_character_id !== characterId || row.status !== "pending_choice") return row;
     const chosenOption =
-      choice === "attack_roll"
+      choice === "next_attack_roll"
         ? row.options.find((opt) => opt.trigger === "next_attack_roll" && opt.grant_advantage)
-        : row.options.find((opt) => opt.trigger === "next_damage_roll" && Number.isFinite(Number(opt.damage_bonus ?? NaN)));
+        : choice === "next_damage_roll"
+          ? row.options.find((opt) => opt.trigger === "next_damage_roll" && Number.isFinite(Number(opt.damage_bonus ?? NaN)))
+          : choice === "next_skill_check"
+            ? row.options.find((opt) => opt.trigger === "next_skill_check" && opt.grant_advantage)
+            : row.options.find((opt) => opt.trigger === "reroll_next_roll");
     if (!chosenOption) return row;
     found = true;
     return {
       ...row,
       status: choice,
-      damage_bonus: choice === "damage_bonus" ? Number(chosenOption.damage_bonus ?? 0) : null,
+      damage_bonus: choice === "next_damage_roll" ? Number(chosenOption.damage_bonus ?? 0) : null,
       chosen_at: nowIso,
     };
   });
@@ -991,7 +1043,7 @@ export async function consumePointSupportEffectsAction(input: {
   const next = normalizePointSupportEffects((stateRow as any)?.support_effects).map((row) => {
     if (!ids.has(row.id)) return row;
     if (row.target_character_id !== characterId) return row;
-    if (!["attack_roll", "damage_bonus"].includes(row.status)) return row;
+    if (!["next_attack_roll", "next_damage_roll", "next_skill_check", "reroll_next_roll"].includes(row.status)) return row;
     changed = true;
     return {
       ...row,

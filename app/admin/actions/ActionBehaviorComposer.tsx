@@ -85,6 +85,7 @@ export default function ActionBehaviorComposer(props: {
             disabled={behavior !== "targeted_support"}
           >
             <option value="ally">ally</option>
+            <option value="ally_or_self">ally or self</option>
           </select>
         </label>
 
@@ -161,12 +162,14 @@ export default function ActionBehaviorComposer(props: {
                         prev.map((item) => (item.id === row.id ? { ...item, trigger: e.currentTarget.value } : item))
                       )
                     }
-                    className="w-full rounded-md border px-3 py-2"
-                  >
-                    <option value="next_attack_roll">next attack roll</option>
-                    <option value="next_damage_roll">next damage roll</option>
-                  </select>
-                </label>
+                  className="w-full rounded-md border px-3 py-2"
+                >
+                  <option value="next_attack_roll">next attack roll</option>
+                  <option value="next_damage_roll">next damage roll</option>
+                  <option value="next_skill_check">next skill check</option>
+                  <option value="reroll_next_roll">reroll next roll</option>
+                </select>
+              </label>
 
                 <label className="grid gap-2">
                   <span className="text-sm font-medium">Damage Bonus</span>

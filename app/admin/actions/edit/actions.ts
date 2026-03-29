@@ -61,12 +61,20 @@ function buildActionConfig(formData: FormData) {
     const damageBonus = numberOrNull(damageBonuses[i] ?? null);
     const grantAdvantage = String(grantAdvantages[i] ?? "").trim().toLowerCase() === "on";
     const consume = String(consumeOnUse[i] ?? "").trim().toLowerCase() === "on";
-    if (!grantAdvantage && damageBonus === null) continue;
+    if (!grantAdvantage && damageBonus === null && trigger !== "reroll_next_roll") continue;
     options.push({
       id: label
         ? label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || `option_${i + 1}`
         : `option_${i + 1}`,
-      label: label || (trigger === "next_attack_roll" ? "Next attack roll bonus" : "Next damage roll bonus"),
+      label:
+        label ||
+        (trigger === "next_attack_roll"
+          ? "Next attack roll bonus"
+          : trigger === "next_damage_roll"
+            ? "Next damage roll bonus"
+            : trigger === "next_skill_check"
+              ? "Next skill check bonus"
+              : "Reroll next roll"),
       trigger,
       grant_advantage: grantAdvantage || undefined,
       damage_bonus: damageBonus,
