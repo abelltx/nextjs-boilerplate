@@ -58,6 +58,11 @@ function safeImageUrl(row: ItemRow) {
   return typeof v === "string" && v.trim().length > 0 ? v : null;
 }
 
+function canUseItem(row: ItemRow) {
+  const category = String(row.item?.category ?? "").trim().toLowerCase();
+  return !["weapon", "armor", "gear", "tool"].includes(category);
+}
+
 export default function PlayerInventoryPanel({ characterId }: { characterId: string }) {
   const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
@@ -313,6 +318,7 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
             const maxStack = safeMaxStack(r);
             const isAtMax = Boolean(stackable && maxStack && r.quantity >= maxStack);
             const busy = busyId === r.id;
+            const useable = canUseItem(r);
 
             return (
               <div
@@ -361,16 +367,18 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
                 </div>
 
                 <div className="col-span-4 flex flex-nowrap justify-end gap-1">
-                  <button
-                    className="whitespace-nowrap rounded-md border px-2 py-1 text-xs"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      useItem(r);
-                    }}
-                    disabled={busy}
-                  >
-                    Use
-                  </button>
+                  {useable ? (
+                    <button
+                      className="whitespace-nowrap rounded-md border px-2 py-1 text-xs"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        useItem(r);
+                      }}
+                      disabled={busy}
+                    >
+                      Use
+                    </button>
+                  ) : null}
 
                   {r.equipped ? (
                     <button
@@ -498,12 +506,14 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
               </div>
 
               <div className="flex gap-2">
-                <button
-                  className="rounded-md border border-gray-300 bg-gray-100 hover:bg-gray-200 px-3 py-2 text-sm font-medium text-gray-900"
-                  onClick={() => useItem(selected)}
-                >
-                  Use
-                </button>
+                {canUseItem(selected) ? (
+                  <button
+                    className="rounded-md border border-gray-300 bg-gray-100 hover:bg-gray-200 px-3 py-2 text-sm font-medium text-gray-900"
+                    onClick={() => useItem(selected)}
+                  >
+                    Use
+                  </button>
+                ) : null}
 
                 {selected.equipped ? (
                   <button
@@ -529,7 +539,11 @@ export default function PlayerInventoryPanel({ characterId }: { characterId: str
                 </button>
               </div>
 
-              <div className="text-xs opacity-60">Use item will apply any configured on-use behavior.</div>
+              <div className="text-xs opacity-60">
+                {canUseItem(selected)
+                  ? "Use item will apply any configured on-use behavior."
+                  : "Equipment is applied with Equip, not Use."}
+              </div>
             </div>
           </div>
         </div>
