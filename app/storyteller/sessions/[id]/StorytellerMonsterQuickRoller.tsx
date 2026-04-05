@@ -7,26 +7,30 @@ export default function StorytellerMonsterQuickRoller(props: {
   sessionId: string;
   combatantId: string;
   combatantName: string;
+  combatants: Array<{ id: string; name: string; defense?: number | null }>;
 }) {
   const [actionName, setActionName] = useState("Attack");
-  const [targetName, setTargetName] = useState("");
+  const [targetId, setTargetId] = useState("");
   const [attackBonus, setAttackBonus] = useState("");
   const [damageDice, setDamageDice] = useState("");
   const [damageBonus, setDamageBonus] = useState("");
+  const [lastHitSuccess, setLastHitSuccess] = useState<boolean | null>(null);
   const [pending, startTransition] = useTransition();
 
   function run(kind: "attack" | "damage" | "both") {
     startTransition(async () => {
       try {
-        await storytellerRollEncounterAction({
+        const result = await storytellerRollEncounterAction({
           sessionId: props.sessionId,
           combatantId: props.combatantId,
           actionName,
-          targetName: targetName.trim() || undefined,
+          targetCombatantId: targetId || undefined,
           attackBonus: kind === "damage" ? null : attackBonus.trim() ? Number(attackBonus) : null,
           damageDice: kind === "attack" ? null : damageDice.trim() || null,
           damageBonus: kind === "attack" ? null : damageBonus.trim() ? Number(damageBonus) : null,
         });
+        if (!result?.ok) throw new Error(result?.error ?? "Could not roll monster action.");
+        if (kind !== "damage") setLastHitSuccess(result.hit ?? null);
       } catch (error: any) {
         alert(error?.message ?? "Could not roll monster action.");
       }
@@ -42,12 +46,14 @@ export default function StorytellerMonsterQuickRoller(props: {
         className="rounded border px-2 py-1 text-xs"
         placeholder="Action name"
       />
-      <input
-        value={targetName}
-        onChange={(e) => setTargetName(e.currentTarget.value)}
-        className="rounded border px-2 py-1 text-xs"
-        placeholder="Target name"
-      />
+      <select value={targetId} onChange={(e) => setTargetId(e.currentTarget.value)} className="rounded border px-2 py-1 text-xs">
+        <option value="">Choose target</option>
+        {props.combatants.filter((row) => row.id !== props.combatantId).map((row) => (
+          <option key={row.id} value={row.id}>
+            {row.name}{row.defense != null ? ` (AC ${row.defense})` : ""}
+          </option>
+        ))}
+      </select>
       <input
         value={attackBonus}
         onChange={(e) => setAttackBonus(e.currentTarget.value)}
@@ -71,7 +77,7 @@ export default function StorytellerMonsterQuickRoller(props: {
       <button
         type="button"
         className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60"
-        disabled={pending}
+        disabled={pending || !targetId}
         onClick={() => run("attack")}
       >
         {pending ? "Rolling..." : "Roll Attack"}
@@ -79,10 +85,10 @@ export default function StorytellerMonsterQuickRoller(props: {
       <button
         type="button"
         className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60"
-        disabled={pending}
+        disabled={pending || !targetId || lastHitSuccess === false}
         onClick={() => run("damage")}
       >
-        {pending ? "Rolling..." : "Roll Damage"}
+        {pending ? "Rolling..." : lastHitSuccess === false ? "Missed" : "Roll Damage"}
       </button>
       <button
         type="button"
@@ -92,6 +98,9 @@ export default function StorytellerMonsterQuickRoller(props: {
       >
         {pending ? "Rolling..." : `Roll ${props.combatantName}`}
       </button>
+      {lastHitSuccess != null ? (
+        <div className="col-span-2 text-[11px] text-gray-600">{lastHitSuccess ? "Last attack hit." : "Last attack missed."}</div>
+      ) : null}
     </div>
   );
 }

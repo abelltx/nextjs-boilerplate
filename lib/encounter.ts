@@ -83,6 +83,15 @@ export type EncounterState = {
   objectives: string[];
   combatants: EncounterCombatant[];
   combat_log: EncounterLogEntry[];
+  turn_action:
+    | {
+        round: number;
+        combatant_id: string;
+        action_id: string | null;
+        action_name: string | null;
+        consumed_at: string;
+      }
+    | null;
   created_at: string;
   updated_at: string;
 };
@@ -243,6 +252,16 @@ export function normalizeEncounterState(input: unknown): EncounterState | null {
     objectives: def.objectives,
     combatants: sortEncounterCombatants(combatants),
     combat_log: combatLog,
+    turn_action:
+      raw.turn_action && typeof raw.turn_action === "object" && !Array.isArray(raw.turn_action)
+        ? {
+            round: Math.max(1, toInt((raw.turn_action as any)?.round, 1)),
+            combatant_id: String((raw.turn_action as any)?.combatant_id ?? "").trim(),
+            action_id: String((raw.turn_action as any)?.action_id ?? "").trim() || null,
+            action_name: String((raw.turn_action as any)?.action_name ?? "").trim() || null,
+            consumed_at: String((raw.turn_action as any)?.consumed_at ?? "").trim() || new Date(0).toISOString(),
+          }
+        : null,
     created_at: String(raw.created_at ?? "").trim() || new Date(0).toISOString(),
     updated_at: String(raw.updated_at ?? "").trim() || new Date(0).toISOString(),
   };

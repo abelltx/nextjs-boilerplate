@@ -1130,6 +1130,130 @@ export async function moveOwnEncounterTokenAction(input: {
   return { ok: true };
 }
 
+export async function consumeEncounterTurnActionAction(input: {
+  sessionId: string;
+  characterId: string;
+  actionId?: string | null;
+  actionName?: string | null;
+}): Promise<{ ok: boolean; error?: string }> {
+  "use server";
+  const { user } = await getProfile();
+  if (!user) return { ok: false, error: "Not signed in." };
+  const sessionId = String(input.sessionId ?? "").trim();
+  const characterId = String(input.characterId ?? "").trim();
+  if (!sessionId || !characterId) return { ok: false, error: "Missing turn action details." };
+
+  const supabase = await supabaseServer();
+  const owner = await requireOwnedCharacter(supabase, user.id, characterId);
+  if (!owner.ok) return { ok: false, error: owner.error };
+
+  const { data: st, error: stErr } = await supabase
+    .from("session_state")
+    .select("encounter_state")
+    .eq("session_id", sessionId)
+    .maybeSingle();
+  if (stErr) return { ok: false, error: stErr.message };
+  const encounter = normalizeEncounterState((st as any)?.encounter_state);
+  if (!encounter) return { ok: false, error: "Encounter not active." };
+  const me = encounter.combatants.find(
+    (row) => row.kind === "player" && String(row.character_id ?? "").trim() === characterId && String(row.player_id ?? "").trim() === user.id
+  );
+  if (!me) return { ok: false, error: "You are not part of this encounter." };
+  const currentTurn = encounter.combatants[encounter.turn_index] ?? null;
+  if (!currentTurn || String(currentTurn.id ?? "") !== String(me.id ?? "")) {
+    return { ok: false, error: "It is not your turn." };
+  }
+  if (encounter.turn_action && encounter.turn_action.round === encounter.round && encounter.turn_action.combatant_id === me.id) {
+    return { ok: false, error: "Your action has already been used this turn." };
+  }
+
+  const { error: upErr } = await supabase
+    .from("session_state")
+    .update({
+      encounter_state: {
+        ...encounter,
+        turn_action: {
+          round: encounter.round,
+          combatant_id: me.id,
+          action_id: String(input.actionId ?? "").trim() || null,
+          action_name: String(input.actionName ?? "").trim() || null,
+          consumed_at: new Date().toISOString(),
+        },
+        updated_at: new Date().toISOString(),
+      },
+    })
+    .eq("session_id", sessionId);
+  if (upErr) return { ok: false, error: upErr.message };
+  return { ok: true };
+}
+
+export async function applyEncounterDamageAction(input: {
+  sessionId: string;
+  characterId: string;
+  targetCombatantId: string;
+  amount: number;
+  sourceActionName?: string | null;
+}): Promise<{ ok: boolean; error?: string }> {
+  "use server";
+  const { user } = await getProfile();
+  if (!user) return { ok: false, error: "Not signed in." };
+  const sessionId = String(input.sessionId ?? "").trim();
+  const characterId = String(input.characterId ?? "").trim();
+  const targetCombatantId = String(input.targetCombatantId ?? "").trim();
+  const amount = Math.max(0, Math.floor(Number(input.amount ?? 0) || 0));
+  if (!sessionId || !characterId || !targetCombatantId || amount <= 0) {
+    return { ok: false, error: "Missing damage details." };
+  }
+
+  const supabase = await supabaseServer();
+  const owner = await requireOwnedCharacter(supabase, user.id, characterId);
+  if (!owner.ok) return { ok: false, error: owner.error };
+
+  const { data: st, error: stErr } = await supabase
+    .from("session_state")
+    .select("encounter_state")
+    .eq("session_id", sessionId)
+    .maybeSingle();
+  if (stErr) return { ok: false, error: stErr.message };
+  const encounter = normalizeEncounterState((st as any)?.encounter_state);
+  if (!encounter) return { ok: false, error: "Encounter not active." };
+  const me = encounter.combatants.find(
+    (row) => row.kind === "player" && String(row.character_id ?? "").trim() === characterId && String(row.player_id ?? "").trim() === user.id
+  );
+  if (!me) return { ok: false, error: "You are not part of this encounter." };
+  const target = encounter.combatants.find((row) => row.id === targetCombatantId);
+  if (!target) return { ok: false, error: "Target not found." };
+
+  const nextCombatants = encounter.combatants.map((row) =>
+    row.id === targetCombatantId
+      ? { ...row, hp_current: Math.max(0, Number(row.hp_current ?? 0) - amount) }
+      : row
+  );
+  const combatLog = [
+    ...(Array.isArray(encounter.combat_log) ? encounter.combat_log : []),
+    {
+      id: randomUUID(),
+      timestamp: new Date().toISOString(),
+      type: "damage" as const,
+      text: `${me.name}${String(input.sourceActionName ?? "").trim() ? ` uses ${String(input.sourceActionName).trim()}` : ""} deals ${amount} damage to ${target.name}.`,
+    },
+  ].slice(-60);
+
+  const { error: upErr } = await supabase
+    .from("session_state")
+    .update({
+      encounter_state: {
+        ...encounter,
+        combatants: nextCombatants,
+        combat_log: combatLog,
+        updated_at: new Date().toISOString(),
+      },
+    })
+    .eq("session_id", sessionId);
+  if (upErr) return { ok: false, error: upErr.message };
+  return { ok: true };
+}
+
 export async function choosePointSupportAction(input: {
   sessionId: string;
   characterId: string;

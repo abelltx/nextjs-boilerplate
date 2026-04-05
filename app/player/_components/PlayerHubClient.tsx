@@ -23,6 +23,8 @@ import {
   startNpcQuestAction,
   appendEncounterLogAction,
   moveOwnEncounterTokenAction,
+  consumeEncounterTurnActionAction,
+  applyEncounterDamageAction,
   submitEncounterInitiativeAction,
   submitRollResultAction,
   usePointSupportAction,
@@ -599,6 +601,11 @@ export default function PlayerHubClient(props: {
       encounterState.status === "active" &&
       myEncounterCombatant &&
       String(encounterState.combatants?.[encounterState.turn_index]?.id ?? "") === String(myEncounterCombatant.id ?? "")
+  );
+  const myEncounterActionUsed = Boolean(
+    encounterState?.turn_action &&
+      encounterState.turn_action.round === encounterState.round &&
+      String(encounterState.turn_action.combatant_id ?? "") === String(myEncounterCombatant?.id ?? "")
   );
 
   useEffect(() => {
@@ -1192,6 +1199,8 @@ export default function PlayerHubClient(props: {
                         sessionId={selectedSessionId}
                         sessionRoster={sessionRoster}
                         combatMode
+                        actionUsed={myEncounterActionUsed}
+                        usedActionId={encounterState?.turn_action?.action_id ?? null}
                         encounterCombatants={encounterState?.combatants ?? []}
                         targetingActionId={targetingActionId}
                         combatTargetByAction={combatTargetByAction}
@@ -2148,6 +2157,8 @@ function ActionListPanel(props: {
   sessionRoster?: SessionRosterEntry[];
   onActionPreviewChange?: (preview: EncounterActionPreview) => void;
   combatMode?: boolean;
+  actionUsed?: boolean;
+  usedActionId?: string | null;
   encounterCombatants?: any[];
   targetingActionId?: string | null;
   combatTargetByAction?: Record<string, string>;
@@ -2163,7 +2174,7 @@ function ActionListPanel(props: {
   temporaryRerollEffectIds?: string[];
   temporaryRerollSources?: string[];
 }) {
-  const [rolls, setRolls] = useState<Record<string, { hit?: string; damage?: string }>>({});
+  const [rolls, setRolls] = useState<Record<string, { hit?: string; damage?: string; hitSuccess?: boolean; targetId?: string }>>({});
   const [pointTargetByAction, setPointTargetByAction] = useState<Record<string, string>>({});
   const HEAL_TYPES = new Set(["healing", "temporary_hp"]);
   const router = useRouter();
@@ -2185,6 +2196,22 @@ function ActionListPanel(props: {
       return;
     }
     router.refresh();
+  }
+
+  async function consumeTurnAction(action: any) {
+    if (!props.sessionId || !props.characterId || !props.combatMode) return true;
+    if (props.actionUsed) return false;
+    const res = await consumeEncounterTurnActionAction({
+      sessionId: props.sessionId,
+      characterId: props.characterId,
+      actionId: String(action?.id ?? ""),
+      actionName: String(action?.name ?? ""),
+    });
+    if (!res.ok) {
+      alert(res.error ?? "Your action is already used this turn.");
+      return false;
+    }
+    return true;
   }
 
   function setActionPreview(action: any | null) {
@@ -2225,7 +2252,9 @@ function ActionListPanel(props: {
   }
 
   async function rollHit(action: any, isReroll = false) {
-    const targetLabel = selectedTargetLabel(String(action.id));
+    const targetId = String(props.combatTargetByAction?.[String(action.id)] ?? "").trim();
+    const target = (props.encounterCombatants ?? []).find((row: any) => String(row?.id ?? "") === targetId) ?? null;
+    const targetLabel = String(target?.name ?? "").trim();
     if (props.combatMode && !targetLabel) {
       alert("Choose a target on the map first.");
       return;
@@ -2240,17 +2269,21 @@ function ActionListPanel(props: {
     const d20b = hasAttackAdvantage ? rollDie(20) : null;
     const chosen = d20b == null ? d20 : Math.max(d20, d20b);
     const total = chosen + (Number.isFinite(bonus) ? bonus : 0);
+    const targetDefense = Number.isFinite(Number(target?.defense ?? NaN)) ? Number(target.defense) : null;
+    const hitSuccess = targetDefense == null ? true : total >= targetDefense;
     setRolls((prev) => ({
       ...prev,
       [action.id]: {
         ...(prev[action.id] ?? {}),
         hit: hasAttackAdvantage
-          ? `${total} (adv ${chosen} from [${d20}, ${d20b}]${bonus ? ` + ${bonus}` : ""})`
-          : `${total} (d20 ${d20}${bonus ? ` + ${bonus}` : ""})`,
+          ? `${total} (adv ${chosen} from [${d20}, ${d20b}]${bonus ? ` + ${bonus}` : ""})${targetDefense != null ? ` vs AC ${targetDefense} ${hitSuccess ? "HIT" : "MISS"}` : ""}`
+          : `${total} (d20 ${d20}${bonus ? ` + ${bonus}` : ""})${targetDefense != null ? ` vs AC ${targetDefense} ${hitSuccess ? "HIT" : "MISS"}` : ""}`,
+        hitSuccess,
+        targetId,
       },
     }));
     await appendEncounterRollNote(
-      `${String(action.name ?? "Action")}${targetLabel ? ` vs ${targetLabel}` : ""} hit roll: ${total}${hasAttackAdvantage ? ` with advantage [${d20}, ${d20b}]` : ` on d20 ${d20}`}${bonus ? ` + ${bonus}` : ""}.`,
+      `${String(action.name ?? "Action")}${targetLabel ? ` vs ${targetLabel}` : ""} hit roll: ${total}${hasAttackAdvantage ? ` with advantage [${d20}, ${d20b}]` : ` on d20 ${d20}`}${bonus ? ` + ${bonus}` : ""}${targetDefense != null ? ` against AC ${targetDefense} ${hitSuccess ? "HIT" : "MISS"}` : ""}.`,
       "note"
     );
     if (isReroll) {
@@ -2272,9 +2305,20 @@ function ActionListPanel(props: {
   }
 
   async function rollDamage(action: any, isReroll = false) {
-    const targetLabel = selectedTargetLabel(String(action.id));
+    const actionRoll = rolls[String(action.id)] ?? {};
+    const targetId = String(actionRoll.targetId ?? props.combatTargetByAction?.[String(action.id)] ?? "").trim();
+    const target = (props.encounterCombatants ?? []).find((row: any) => String(row?.id ?? "") === targetId) ?? null;
+    const targetLabel = String(target?.name ?? "").trim();
     if (props.combatMode && !targetLabel) {
       alert("Choose a target on the map first.");
+      return;
+    }
+    if (props.combatMode && actionRoll.hitSuccess === false) {
+      alert("That attack missed. You cannot roll damage for it.");
+      return;
+    }
+    if (props.combatMode && actionRoll.hitSuccess == null && !HEAL_TYPES.has(String(action.damage_type ?? "").toLowerCase())) {
+      alert("Roll to hit first.");
       return;
     }
     const formula = String(action.damage_dice ?? "").trim().toLowerCase();
@@ -2297,12 +2341,28 @@ function ActionListPanel(props: {
       [action.id]: {
         ...(prev[action.id] ?? {}),
         damage: `${total} ${outcomeLabel} ([${rollsArr.join(", ")}]${bonus ? ` ${bonus > 0 ? "+" : "-"} ${Math.abs(bonus)}` : ""})`,
+        targetId,
       },
     }));
-    await appendEncounterRollNote(
-      `${String(action.name ?? "Action")}${targetLabel ? ` vs ${targetLabel}` : ""} ${outcomeLabel} roll: ${total} from [${rollsArr.join(", ")}]${bonus ? ` ${bonus > 0 ? "+" : "-"} ${Math.abs(bonus)}` : ""}.`,
-      outcomeLabel === "heal" ? "heal" : "damage"
-    );
+    if (props.combatMode && outcomeLabel === "damage" && targetId) {
+      const res = await applyEncounterDamageAction({
+        sessionId: String(props.sessionId ?? ""),
+        characterId: props.characterId,
+        targetCombatantId: targetId,
+        amount: total,
+        sourceActionName: String(action.name ?? ""),
+      });
+      if (!res.ok) {
+        alert(res.error ?? "Could not apply damage to target.");
+        return;
+      }
+    }
+    if (!(props.combatMode && outcomeLabel === "damage" && targetId)) {
+      await appendEncounterRollNote(
+        `${String(action.name ?? "Action")}${targetLabel ? ` vs ${targetLabel}` : ""} ${outcomeLabel} roll: ${total} from [${rollsArr.join(", ")}]${bonus ? ` ${bonus > 0 ? "+" : "-"} ${Math.abs(bonus)}` : ""}.`,
+        outcomeLabel === "heal" ? "heal" : "damage"
+      );
+    }
     if (isReroll) {
       const ok = await consumeFirstRerollEffect();
       if (!ok) return;
@@ -2355,6 +2415,8 @@ function ActionListPanel(props: {
                 const hasReroll = (props.temporaryRerollEffectIds ?? []).length > 0;
                 const combatTarget = selectedTargetLabel(String(a.id));
                 const targetRequired = Boolean(props.combatMode);
+                const otherActionLocked = Boolean(props.combatMode && props.actionUsed && props.usedActionId && props.usedActionId !== a.id);
+                const thisActionAlreadyUsed = Boolean(props.combatMode && props.actionUsed && props.usedActionId === a.id);
                 return (
                   <>
               <div className="col-span-3 min-w-0">
@@ -2415,7 +2477,8 @@ function ActionListPanel(props: {
                         !props.sessionId ||
                         (!props.combatMode && (!availableTargets.length || !String(pointTargetByAction[a.id] ?? "").trim())) ||
                         (props.combatMode && !combatTarget) ||
-                        Boolean(props.pointActionBusyId)
+                        Boolean(props.pointActionBusyId) ||
+                        Boolean(props.combatMode && props.actionUsed)
                       }
                       onClick={() =>
                         props.onUsePoint?.(
@@ -2428,7 +2491,7 @@ function ActionListPanel(props: {
                         )
                       }
                     >
-                      {props.pointActionBusyId === a.id ? "Applying..." : "Use Action"}
+                      {props.actionUsed ? "Action Used" : props.pointActionBusyId === a.id ? "Applying..." : "Use Action"}
                     </button>
                   </div>
                 ) : a.uses_attack_roll !== false && a.attack_bonus_override != null ? (
@@ -2442,9 +2505,14 @@ function ActionListPanel(props: {
                           ? "border border-green-300 bg-green-500/15 shadow-[0_0_0_2px_rgba(74,222,128,0.8),0_0_24px_rgba(34,197,94,0.95),0_0_44px_rgba(34,197,94,0.55)] animate-pulse"
                           : "border border-neutral-700 hover:bg-neutral-900",
                       ].join(" ")}
-                      onClick={() => rollHit(a)}
+                      disabled={Boolean(props.combatMode && props.actionUsed)}
+                      onClick={async () => {
+                        const ok = await consumeTurnAction(a);
+                        if (!ok) return;
+                        await rollHit(a);
+                      }}
                     >
-                      Roll Hit
+                      {props.actionUsed ? "Action Used" : "Roll Hit"}
                     </button>
                     {targetRequired ? (
                       <button
@@ -2498,9 +2566,16 @@ function ActionListPanel(props: {
                           ? "border border-green-300 bg-green-500/15 shadow-[0_0_0_2px_rgba(74,222,128,0.8),0_0_24px_rgba(34,197,94,0.95),0_0_44px_rgba(34,197,94,0.55)] animate-pulse"
                           : "border border-neutral-700 hover:bg-neutral-900",
                       ].join(" ")}
-                      onClick={() => rollDamage(a)}
+                      disabled={otherActionLocked}
+                      onClick={async () => {
+                        if (!thisActionAlreadyUsed) {
+                          const ok = await consumeTurnAction(a);
+                          if (!ok) return;
+                        }
+                        await rollDamage(a);
+                      }}
                     >
-                      {HEAL_TYPES.has(String(a.damage_type ?? "").toLowerCase()) ? "Roll Heal" : "Roll Dmg"}
+                      {otherActionLocked ? "Action Used" : HEAL_TYPES.has(String(a.damage_type ?? "").toLowerCase()) ? "Roll Heal" : "Roll Dmg"}
                     </button>
                     {targetRequired ? (
                       <div className="text-[11px] text-amber-200">{combatTarget ? `Targeting ${combatTarget}` : "Choose a target on the map"}</div>

@@ -2188,6 +2188,11 @@ export default async function DmScreenPage({
                                   sessionId={session.id}
                                   combatantId={String(row.id)}
                                   combatantName={String(row.name ?? "Monster")}
+                                  combatants={(encounterState?.combatants ?? []).map((c: any) => ({
+                                    id: String(c?.id ?? ""),
+                                    name: String(c?.name ?? ""),
+                                    defense: Number.isFinite(Number(c?.defense ?? NaN)) ? Number(c.defense) : null,
+                                  }))}
                                 />
                               ) : null}
                             </div>

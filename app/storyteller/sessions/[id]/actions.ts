@@ -242,6 +242,7 @@ export async function storytellerStartEncounter(input: {
         text: `Encounter started: ${encounterDef.title}`,
       },
     ],
+    turn_action: null,
     created_at: nowIso,
     updated_at: nowIso,
   };
@@ -272,6 +273,7 @@ export async function storytellerLockEncounterInitiative(input: { sessionId: str
       round: 1,
       turn_index: 0,
       combatants: sortEncounterCombatants(encounter.combatants),
+      turn_action: null,
       combat_log: appendEncounterLog(encounter.combat_log, {
         type: "system",
         text: "Initiative locked. Round 1 begins.",
@@ -302,6 +304,7 @@ export async function storytellerAdvanceEncounterTurn(input: { sessionId: string
       status: "active",
       round: wrapped ? encounter.round + 1 : encounter.round,
       turn_index: wrapped ? 0 : nextIndex,
+      turn_action: null,
       combat_log: appendEncounterLog(encounter.combat_log, {
         type: "system",
         text: wrapped
@@ -478,15 +481,16 @@ export async function storytellerRollEncounterAction(input: {
   sessionId: string;
   combatantId: string;
   actionName: string;
+  targetCombatantId?: string | null;
   targetName?: string | null;
   attackBonus?: number | null;
   damageDice?: string | null;
   damageBonus?: number | null;
-}) {
+}): Promise<{ ok: boolean; hit?: boolean; targetName?: string | null; error?: string }> {
   const sessionId = String(input.sessionId ?? "").trim();
   const combatantId = String(input.combatantId ?? "").trim();
   const actionName = String(input.actionName ?? "").trim() || "Action";
-  if (!isUuid(sessionId) || !combatantId) throw new Error("Missing combat action details.");
+  if (!isUuid(sessionId) || !combatantId) return { ok: false, error: "Missing combat action details." };
 
   const supabase = await createClient();
   const { data: st, error: stErr } = await supabase
@@ -494,38 +498,60 @@ export async function storytellerRollEncounterAction(input: {
     .select("encounter_state")
     .eq("session_id", sessionId)
     .maybeSingle();
-  if (stErr) throw new Error(stErr.message);
+  if (stErr) return { ok: false, error: stErr.message };
   const encounter = normalizeEncounterState((st as any)?.encounter_state);
-  if (!encounter) throw new Error("Encounter not active.");
+  if (!encounter) return { ok: false, error: "Encounter not active." };
   const actor = encounter.combatants.find((row) => row.id === combatantId);
-  if (!actor) throw new Error("Combatant not found.");
+  if (!actor) return { ok: false, error: "Combatant not found." };
 
-  const targetName = String(input.targetName ?? "").trim();
+  const targetCombatantId = String(input.targetCombatantId ?? "").trim();
+  const targetCombatant = targetCombatantId
+    ? encounter.combatants.find((row) => row.id === targetCombatantId) ?? null
+    : null;
+  const targetName = String(input.targetName ?? "").trim() || String(targetCombatant?.name ?? "").trim();
   const attackBonus = Number.isFinite(Number(input.attackBonus ?? NaN)) ? Math.floor(Number(input.attackBonus)) : null;
   const damageDice = String(input.damageDice ?? "").trim().toLowerCase();
   const damageBonus = Number.isFinite(Number(input.damageBonus ?? NaN)) ? Math.floor(Number(input.damageBonus)) : 0;
   const nextLog = [...(encounter.combat_log ?? [])];
+  let didHit: boolean | undefined;
+  let nextCombatants = [...encounter.combatants];
 
   if (attackBonus != null) {
     const d20 = Math.floor(Math.random() * 20) + 1;
     const total = d20 + attackBonus;
+    const targetDefense = Number.isFinite(Number(targetCombatant?.defense ?? NaN)) ? Number(targetCombatant?.defense) : null;
+    didHit = targetDefense == null ? undefined : total >= targetDefense;
     nextLog.push({
       id: randomUUID(),
       timestamp: new Date().toISOString(),
       type: "note",
-      text: `${actor.name} uses ${actionName}${targetName ? ` vs ${targetName}` : ""}: hit roll ${total} (d20 ${d20}${attackBonus ? ` + ${attackBonus}` : ""}).`,
+      text: `${actor.name} uses ${actionName}${targetName ? ` vs ${targetName}` : ""}: hit roll ${total} (d20 ${d20}${attackBonus ? ` + ${attackBonus}` : ""})${didHit === true ? " HIT" : didHit === false ? " MISS" : ""}.`,
     });
   }
 
   if (damageDice) {
     const match = damageDice.match(/^(\d*)d(\d+)([+-]\d+)?$/i);
-    if (!match) throw new Error("Damage dice must look like 1d8 or 2d6+3.");
+    if (!match) return { ok: false, error: "Damage dice must look like 1d8 or 2d6+3." };
     const count = Math.max(1, Number(match[1] || 1));
     const sides = Math.max(2, Number(match[2] || 2));
     const inlineBonus = Number(match[3] || 0);
     const rolls = Array.from({ length: count }, () => Math.floor(Math.random() * sides) + 1);
     const total = rolls.reduce((sum, n) => sum + n, 0) + inlineBonus + damageBonus;
     const totalBonus = inlineBonus + damageBonus;
+    if (didHit === false) {
+      nextLog.push({
+        id: randomUUID(),
+        timestamp: new Date().toISOString(),
+        type: "note",
+        text: `${actor.name} cannot apply ${actionName} damage because the attack missed.`,
+      });
+    } else if (targetCombatant && Number.isFinite(Number(targetCombatant.hp_current ?? NaN))) {
+      nextCombatants = encounter.combatants.map((row) =>
+        row.id === targetCombatant.id
+          ? { ...row, hp_current: Math.max(0, Number(row.hp_current ?? 0) - total) }
+          : row
+      );
+    }
     nextLog.push({
       id: randomUUID(),
       timestamp: new Date().toISOString(),
@@ -537,10 +563,12 @@ export async function storytellerRollEncounterAction(input: {
   await updateState(sessionId, {
     encounter_state: {
       ...encounter,
+      combatants: nextCombatants,
       combat_log: nextLog.slice(-60),
       updated_at: new Date().toISOString(),
     },
   });
+  return { ok: true, hit: didHit, targetName: targetName || null };
 }
 
 function cleanIds(input: string[] | undefined) {
