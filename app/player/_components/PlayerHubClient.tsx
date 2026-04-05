@@ -21,6 +21,8 @@ import {
   leaveSessionAction,
   requestRollApprovalAction,
   startNpcQuestAction,
+  appendEncounterLogAction,
+  moveOwnEncounterTokenAction,
   submitEncounterInitiativeAction,
   submitRollResultAction,
   usePointSupportAction,
@@ -544,6 +546,7 @@ export default function PlayerHubClient(props: {
   const [requestingRoll, setRequestingRoll] = useState(false);
   const [submittingInitiative, setSubmittingInitiative] = useState(false);
   const [initiativeManualValue, setInitiativeManualValue] = useState("");
+  const [movingEncounterToken, setMovingEncounterToken] = useState(false);
   const [usingPointActionId, setUsingPointActionId] = useState<string | null>(null);
   const [resolvingPointId, setResolvingPointId] = useState<string | null>(null);
   const [requestCheckKey, setRequestCheckKey] = useState("Perception");
@@ -608,6 +611,19 @@ export default function PlayerHubClient(props: {
     if (!res.ok) {
       alert(res.error ?? "Could not submit roll.");
       return;
+    }
+    if (encounterState) {
+      const promptLabel = rollPrompt.trim() || "Roll request";
+      const logRes = await appendEncounterLogAction({
+        sessionId: selectedSessionId,
+        characterId: String(props.character?.id ?? ""),
+        type: "note",
+        text: `${String(props.character?.name ?? "Player")} rolled ${value} for ${promptLabel}.`,
+      });
+      if (!logRes.ok) {
+        alert(logRes.error ?? "Could not write roll to encounter log.");
+        return;
+      }
     }
     if (promptTarget?.kind === "skill" && temporarySkillPointEffects.length) {
       const consumeRes = await consumePointSupportEffectsAction({
@@ -754,6 +770,26 @@ export default function PlayerHubClient(props: {
       alert(e?.message ?? "Could not use support action.");
     } finally {
       setUsingPointActionId(null);
+    }
+  }
+
+  async function handleMoveMyEncounterToken(x: number, y: number) {
+    if (!selectedSessionId || !props.character?.id || movingEncounterToken) return;
+    setMovingEncounterToken(true);
+    try {
+      const res = await moveOwnEncounterTokenAction({
+        sessionId: selectedSessionId,
+        characterId: String(props.character?.id ?? ""),
+        x,
+        y,
+      });
+      if (!res.ok) {
+        alert(res.error ?? "Could not move your token.");
+        return;
+      }
+      router.refresh();
+    } finally {
+      setMovingEncounterToken(false);
     }
   }
 
@@ -1112,8 +1148,10 @@ export default function PlayerHubClient(props: {
                     manualValue={initiativeManualValue}
                     setManualValue={setInitiativeManualValue}
                     submitting={submittingInitiative}
+                    movingToken={movingEncounterToken}
                     onSubmitManual={() => handleSubmitEncounterInitiative("manual")}
                     onSubmitDigital={() => handleSubmitEncounterInitiative("digital")}
+                    onMoveToken={handleMoveMyEncounterToken}
                   />
                 ) : (
                   <StagePanel
@@ -1779,8 +1817,10 @@ function EncounterPanel(props: {
   manualValue: string;
   setManualValue: (value: string) => void;
   submitting: boolean;
+  movingToken?: boolean;
   onSubmitManual: () => void | Promise<void>;
   onSubmitDigital: () => void | Promise<void>;
+  onMoveToken?: (x: number, y: number) => void | Promise<void>;
 }) {
   const currentTurn = props.encounter.combatants[props.encounter.turn_index] ?? null;
   const needsInitiative =
@@ -1823,7 +1863,16 @@ function EncounterPanel(props: {
 
       {props.encounter.map_image_url ? (
         <div className="rounded-xl border border-neutral-800 overflow-hidden">
-          <div className="relative">
+          <div
+            className="relative"
+            onClick={(e) => {
+              if (!props.onMoveToken) return;
+              const rect = e.currentTarget.getBoundingClientRect();
+              const x = ((e.clientX - rect.left) / rect.width) * 100;
+              const y = ((e.clientY - rect.top) / rect.height) * 100;
+              void props.onMoveToken(x, y);
+            }}
+          >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={props.encounter.map_image_url} alt={props.encounter.title} className="w-full h-auto block" />
             <div
@@ -1882,6 +1931,11 @@ function EncounterPanel(props: {
             <div className="absolute bottom-2 right-2 rounded-full bg-black/70 px-3 py-1 text-[11px] text-neutral-100">
               {feetPerSquare} ft / square
             </div>
+            {props.myCombatant ? (
+              <div className="absolute bottom-2 left-2 rounded-full bg-black/70 px-3 py-1 text-[11px] text-neutral-100">
+                {props.movingToken ? "Moving..." : "Click map to move your token"}
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -1999,6 +2053,21 @@ function ActionListPanel(props: {
     return Math.floor(Math.random() * sides) + 1;
   }
 
+  async function appendEncounterRollNote(text: string, type: "note" | "damage" | "heal" = "note") {
+    if (!props.sessionId || !props.characterId) return;
+    const res = await appendEncounterLogAction({
+      sessionId: props.sessionId,
+      characterId: props.characterId,
+      type,
+      text,
+    });
+    if (!res.ok) {
+      alert(res.error ?? "Could not write to encounter log.");
+      return;
+    }
+    router.refresh();
+  }
+
   async function consumeFirstRerollEffect() {
     const effectId = String((props.temporaryRerollEffectIds ?? [])[0] ?? "").trim();
     if (!props.sessionId || !props.characterId || !effectId) return true;
@@ -2035,6 +2104,10 @@ function ActionListPanel(props: {
           : `${total} (d20 ${d20}${bonus ? ` + ${bonus}` : ""})`,
       },
     }));
+    await appendEncounterRollNote(
+      `${String(action.name ?? "Action")} hit roll: ${total}${hasAttackAdvantage ? ` with advantage [${d20}, ${d20b}]` : ` on d20 ${d20}`}${bonus ? ` + ${bonus}` : ""}.`,
+      "note"
+    );
     if (isReroll) {
       const ok = await consumeFirstRerollEffect();
       if (!ok) return;
@@ -2076,6 +2149,10 @@ function ActionListPanel(props: {
         damage: `${total} ${outcomeLabel} ([${rollsArr.join(", ")}]${bonus ? ` ${bonus > 0 ? "+" : "-"} ${Math.abs(bonus)}` : ""})`,
       },
     }));
+    await appendEncounterRollNote(
+      `${String(action.name ?? "Action")} ${outcomeLabel} roll: ${total} from [${rollsArr.join(", ")}]${bonus ? ` ${bonus > 0 ? "+" : "-"} ${Math.abs(bonus)}` : ""}.`,
+      outcomeLabel === "heal" ? "heal" : "damage"
+    );
     if (isReroll) {
       const ok = await consumeFirstRerollEffect();
       if (!ok) return;

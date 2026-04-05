@@ -1017,6 +1017,119 @@ export async function usePointSupportAction(input: {
   return { ok: true };
 }
 
+export async function appendEncounterLogAction(input: {
+  sessionId: string;
+  characterId: string;
+  type?: "note" | "damage" | "heal";
+  text: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  "use server";
+  const { user } = await getProfile();
+  if (!user) return { ok: false, error: "Not signed in." };
+  const sessionId = String(input.sessionId ?? "").trim();
+  const characterId = String(input.characterId ?? "").trim();
+  const text = String(input.text ?? "").trim();
+  if (!sessionId || !characterId || !text) return { ok: false, error: "Missing encounter log details." };
+
+  const supabase = await supabaseServer();
+  const owner = await requireOwnedCharacter(supabase, user.id, characterId);
+  if (!owner.ok) return { ok: false, error: owner.error };
+
+  const { data: st, error: stErr } = await supabase
+    .from("session_state")
+    .select("encounter_state")
+    .eq("session_id", sessionId)
+    .maybeSingle();
+  if (stErr) return { ok: false, error: stErr.message };
+  const encounter = normalizeEncounterState((st as any)?.encounter_state);
+  if (!encounter) return { ok: false, error: "Encounter not active." };
+  const me = encounter.combatants.find(
+    (row) => row.kind === "player" && String(row.character_id ?? "").trim() === characterId && String(row.player_id ?? "").trim() === user.id
+  );
+  if (!me) return { ok: false, error: "You are not part of this encounter." };
+
+  const combatLog = [
+    ...(Array.isArray(encounter.combat_log) ? encounter.combat_log : []),
+    {
+      id: randomUUID(),
+      timestamp: new Date().toISOString(),
+      type: input.type === "damage" || input.type === "heal" ? input.type : "note",
+      text,
+    },
+  ].slice(-60);
+
+  const { error: upErr } = await supabase
+    .from("session_state")
+    .update({
+      encounter_state: {
+        ...encounter,
+        combat_log: combatLog,
+        updated_at: new Date().toISOString(),
+      },
+    })
+    .eq("session_id", sessionId);
+  if (upErr) return { ok: false, error: upErr.message };
+  return { ok: true };
+}
+
+export async function moveOwnEncounterTokenAction(input: {
+  sessionId: string;
+  characterId: string;
+  x: number;
+  y: number;
+}): Promise<{ ok: boolean; error?: string }> {
+  "use server";
+  const { user } = await getProfile();
+  if (!user) return { ok: false, error: "Not signed in." };
+  const sessionId = String(input.sessionId ?? "").trim();
+  const characterId = String(input.characterId ?? "").trim();
+  if (!sessionId || !characterId) return { ok: false, error: "Missing movement details." };
+
+  const supabase = await supabaseServer();
+  const owner = await requireOwnedCharacter(supabase, user.id, characterId);
+  if (!owner.ok) return { ok: false, error: owner.error };
+
+  const { data: st, error: stErr } = await supabase
+    .from("session_state")
+    .select("encounter_state")
+    .eq("session_id", sessionId)
+    .maybeSingle();
+  if (stErr) return { ok: false, error: stErr.message };
+  const encounter = normalizeEncounterState((st as any)?.encounter_state);
+  if (!encounter) return { ok: false, error: "Encounter not active." };
+
+  const me = encounter.combatants.find(
+    (row) => row.kind === "player" && String(row.character_id ?? "").trim() === characterId && String(row.player_id ?? "").trim() === user.id
+  );
+  if (!me) return { ok: false, error: "You are not part of this encounter." };
+
+  const x = Math.max(0, Math.min(100, Number(input.x) || 0));
+  const y = Math.max(0, Math.min(100, Number(input.y) || 0));
+  const combatLog = [
+    ...(Array.isArray(encounter.combat_log) ? encounter.combat_log : []),
+    {
+      id: randomUUID(),
+      timestamp: new Date().toISOString(),
+      type: "move" as const,
+      text: `${me.name} moved to ${x.toFixed(1)}%, ${y.toFixed(1)}%.`,
+    },
+  ].slice(-60);
+
+  const { error: upErr } = await supabase
+    .from("session_state")
+    .update({
+      encounter_state: {
+        ...encounter,
+        combatants: encounter.combatants.map((row) => (row.id === me.id ? { ...row, x, y } : row)),
+        combat_log: combatLog,
+        updated_at: new Date().toISOString(),
+      },
+    })
+    .eq("session_id", sessionId);
+  if (upErr) return { ok: false, error: upErr.message };
+  return { ok: true };
+}
+
 export async function choosePointSupportAction(input: {
   sessionId: string;
   characterId: string;
