@@ -20,6 +20,9 @@ import {
   storytellerLockEncounterInitiative,
   storytellerAdvanceEncounterTurn,
   storytellerEndEncounter,
+  storytellerMoveEncounterCombatant,
+  storytellerUpdateEncounterCombatant,
+  storytellerAddEncounterLogNote,
 } from "./actions";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
@@ -66,6 +69,81 @@ function isEncounter(b: Block) {
 }
 function isPresentable(b: Block) {
   return b.audience !== "storyteller";
+}
+
+function StorytellerEncounterBoard(props: { encounter: any }) {
+  const gridCols = Math.max(1, Number(props.encounter?.grid?.cols ?? 12));
+  const gridRows = Math.max(1, Number(props.encounter?.grid?.rows ?? 12));
+  const lineOpacity = Math.max(0.05, Math.min(1, Number(props.encounter?.grid?.line_opacity ?? 0.2) || 0.2));
+  const currentTurn = props.encounter?.combatants?.[props.encounter?.turn_index ?? 0] ?? null;
+
+  return (
+    <div className="rounded border overflow-hidden bg-gray-100 relative">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={props.encounter.map_image_url} alt={props.encounter.title ?? "Encounter"} className="w-full h-auto block" />
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          backgroundImage:
+            `linear-gradient(to right, rgba(255,255,255,${lineOpacity}) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,${lineOpacity}) 1px, transparent 1px)`,
+          backgroundSize: `${100 / gridCols}% ${100 / gridRows}%`,
+          backgroundPosition: `${Number(props.encounter?.grid?.offset_x ?? 0) || 0}px ${Number(props.encounter?.grid?.offset_y ?? 0) || 0}px`,
+        }}
+      />
+      {(Array.isArray(props.encounter?.combatants) ? props.encounter.combatants : []).map((row: any) => {
+        const x = Number.isFinite(Number(row?.x ?? NaN)) ? Number(row.x) : null;
+        const y = Number.isFinite(Number(row?.y ?? NaN)) ? Number(row.y) : null;
+        if (x == null || y == null) return null;
+        const label = String(row?.name ?? row?.kind ?? "Unit").trim();
+        const hpMax = Number(row?.hp_max ?? NaN);
+        const hpCurrent = Number(row?.hp_current ?? NaN);
+        const ratio = Number.isFinite(hpCurrent) && Number.isFinite(hpMax) && hpMax > 0 ? hpCurrent / hpMax : 1;
+        const tone = ratio <= 0.25 ? "bg-red-500" : ratio <= 0.5 ? "bg-orange-500" : "bg-emerald-500";
+        const imageUrl = String(row?.image_url ?? "").trim();
+        const initials = label
+          .split(/\s+/)
+          .map((part: string) => part.slice(0, 1))
+          .join("")
+          .slice(0, 2)
+          .toUpperCase();
+        const isCurrent = currentTurn?.id === row.id && props.encounter?.status === "active";
+        return (
+          <div key={row.id} className="absolute -translate-x-1/2 -translate-y-1/2" style={{ left: `${x}%`, top: `${y}%` }}>
+            <div className="flex flex-col items-center gap-1">
+              <div
+                className={[
+                  "h-12 w-12 overflow-hidden rounded-full border-2 shadow",
+                  row.kind === "player" ? "border-cyan-400 bg-cyan-950" : "border-white bg-neutral-900",
+                  isCurrent ? "ring-2 ring-emerald-400" : "",
+                ].join(" ")}
+              >
+                {imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={imageUrl} alt={label} className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-xs font-semibold text-white">{initials || "?"}</div>
+                )}
+              </div>
+              <div className="rounded-full bg-black/70 px-2 py-1 text-[10px] text-white">{label}</div>
+              {Number.isFinite(hpCurrent) && Number.isFinite(hpMax) ? (
+                <div className="h-1.5 w-14 overflow-hidden rounded-full bg-neutral-800">
+                  <div className={`h-full ${tone}`} style={{ width: `${Math.max(0, Math.min(100, ratio * 100))}%` }} />
+                </div>
+              ) : null}
+              {Array.isArray(row?.conditions) && row.conditions.length ? (
+                <div className="max-w-[8rem] rounded bg-black/60 px-2 py-1 text-center text-[10px] text-white">
+                  {row.conditions.join(", ")}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        );
+      })}
+      <div className="absolute bottom-2 right-2 rounded-full bg-black/70 px-3 py-1 text-[11px] text-white">
+        {Math.max(1, Number(props.encounter?.grid?.feet_per_square ?? 5) || 5)} ft / square
+      </div>
+    </div>
+  );
 }
 
 function getLiveRemainingSeconds(st: any) {
@@ -1393,7 +1471,7 @@ export default async function DmScreenPage({
               <div className="mt-2">
                 {presentedBlock ? (
                   <>
-                    {presentedBlock.image_url ? (
+                    {presentedBlock.image_url && !(encounterState && encounterState.encounter_block_id === String(presentedBlock.id) && encounterState.status !== "ended") ? (
                       <div className="rounded border overflow-hidden bg-gray-100 relative">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
@@ -1412,6 +1490,9 @@ export default async function DmScreenPage({
                           </div>
                         ))}
                       </div>
+                    ) : null}
+                    {encounterState && encounterState.encounter_block_id === String(presentedBlock.id) && encounterState.status !== "ended" ? (
+                      <StorytellerEncounterBoard encounter={encounterState} />
                     ) : null}
                     {presentedBlock.body ? (
                       <div className="text-sm whitespace-pre-wrap text-gray-700">{presentedBlock.body}</div>
@@ -2042,6 +2123,83 @@ export default async function DmScreenPage({
                         </div>
                       ))}
                     </div>
+                    {encounterState.status !== "ended" ? (
+                      <div className="rounded border bg-white p-2 space-y-3">
+                        <div className="text-[11px] uppercase text-gray-500">Combat Controls</div>
+                        {encounterState.combatants.map((row) => (
+                          <details key={`ctrl-${row.id}`} className="rounded border bg-gray-50 p-2">
+                            <summary className="cursor-pointer text-xs font-semibold">
+                              {row.name} {row.hp_current != null && row.hp_max != null ? `| ${row.hp_current}/${row.hp_max} HP` : ""}
+                            </summary>
+                            <div className="mt-2 grid gap-2">
+                              <form
+                                className="grid grid-cols-2 gap-2"
+                                action={async (fd) => {
+                                  "use server";
+                                  await storytellerMoveEncounterCombatant({
+                                    sessionId: session.id,
+                                    combatantId: String(fd.get("combatant_id") ?? ""),
+                                    x: Number(fd.get("x") ?? 0),
+                                    y: Number(fd.get("y") ?? 0),
+                                  });
+                                  redirect(`/storyteller/sessions/${session.id}`);
+                                }}
+                              >
+                                <input type="hidden" name="combatant_id" value={row.id} />
+                                <input name="x" defaultValue={row.x ?? 0} className="rounded border px-2 py-1 text-xs" placeholder="X %" />
+                                <input name="y" defaultValue={row.y ?? 0} className="rounded border px-2 py-1 text-xs" placeholder="Y %" />
+                                <button className="col-span-2 rounded border px-2 py-1 text-xs">Move Token</button>
+                              </form>
+                              <form
+                                className="grid grid-cols-2 gap-2"
+                                action={async (fd) => {
+                                  "use server";
+                                  const conditions = String(fd.get("conditions") ?? "")
+                                    .split(",")
+                                    .map((v) => v.trim())
+                                    .filter(Boolean);
+                                  await storytellerUpdateEncounterCombatant({
+                                    sessionId: session.id,
+                                    combatantId: String(fd.get("combatant_id") ?? ""),
+                                    hpCurrent: Number(fd.get("hp_current") ?? 0),
+                                    defense: String(fd.get("defense") ?? "").trim() ? Number(fd.get("defense")) : null,
+                                    conditions,
+                                    note: String(fd.get("note") ?? ""),
+                                  });
+                                  redirect(`/storyteller/sessions/${session.id}`);
+                                }}
+                              >
+                                <input type="hidden" name="combatant_id" value={row.id} />
+                                <input name="hp_current" defaultValue={row.hp_current ?? ""} className="rounded border px-2 py-1 text-xs" placeholder="HP current" />
+                                <input name="defense" defaultValue={row.defense ?? ""} className="rounded border px-2 py-1 text-xs" placeholder="Defense" />
+                                <input
+                                  name="conditions"
+                                  defaultValue={Array.isArray(row.conditions) ? row.conditions.join(", ") : ""}
+                                  className="col-span-2 rounded border px-2 py-1 text-xs"
+                                  placeholder="Conditions, comma separated"
+                                />
+                                <input name="note" className="col-span-2 rounded border px-2 py-1 text-xs" placeholder="Optional combat note" />
+                                <button className="col-span-2 rounded border px-2 py-1 text-xs">Update Combatant</button>
+                              </form>
+                            </div>
+                          </details>
+                        ))}
+                        <form
+                          className="space-y-2"
+                          action={async (fd) => {
+                            "use server";
+                            await storytellerAddEncounterLogNote({
+                              sessionId: session.id,
+                              text: String(fd.get("text") ?? ""),
+                            });
+                            redirect(`/storyteller/sessions/${session.id}`);
+                          }}
+                        >
+                          <textarea name="text" className="h-16 w-full rounded border p-2 text-xs" placeholder="Combat log note, narration, monster attack result..." />
+                          <button className="rounded border px-2 py-1 text-xs">Add Log Note</button>
+                        </form>
+                      </div>
+                    ) : null}
                     {encounterState.status === "initiative_pending" ? (
                       <form
                         action={async () => {
@@ -2073,6 +2231,17 @@ export default async function DmScreenPage({
                     >
                       <button className="rounded border px-2 py-1 text-xs text-red-700">End Encounter</button>
                     </form>
+                    {encounterState.combat_log?.length ? (
+                      <div className="rounded border bg-gray-50 p-2 text-xs text-gray-700 space-y-1">
+                        <div className="text-[11px] uppercase text-gray-500">Combat Log</div>
+                        {encounterState.combat_log.slice().reverse().map((entry: any) => (
+                          <div key={entry.id} className="rounded border bg-white px-2 py-1">
+                            <div className="text-[10px] uppercase text-gray-400">{entry.type}</div>
+                            <div>{entry.text}</div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                   </>
                 ) : null}
               </>

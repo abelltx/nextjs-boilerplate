@@ -6,6 +6,7 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { randomUUID } from "crypto";
 import {
   EncounterCombatant,
+  EncounterLogEntry,
   normalizeEncounterDefinition,
   normalizeEncounterState,
   initiativeModifierFromStatBlock,
@@ -108,6 +109,19 @@ export async function updateState(sessionId: string, patch: Record<string, any>)
   if (error) throw new Error(error.message);
 }
 
+function appendEncounterLog(
+  current: EncounterLogEntry[] | undefined,
+  entry: Omit<EncounterLogEntry, "id" | "timestamp">
+) {
+  const nextEntry: EncounterLogEntry = {
+    id: randomUUID(),
+    timestamp: new Date().toISOString(),
+    type: entry.type,
+    text: entry.text,
+  };
+  return [...(Array.isArray(current) ? current : []), nextEntry].slice(-60);
+}
+
 export async function storytellerStartEncounter(input: {
   sessionId: string;
   encounterBlockId: string;
@@ -170,6 +184,7 @@ export async function storytellerStartEncounter(input: {
       character_id: target.characterId,
       npc_id: null,
       image_url: null,
+      conditions: [],
       initiative_mod: initiativeModifierFromStatBlock(statBlock),
       initiative_roll: null,
       initiative_total: null,
@@ -193,6 +208,7 @@ export async function storytellerStartEncounter(input: {
       character_id: null,
       npc_id: enemy.npc_id,
       image_url: enemy.image_url,
+      conditions: [],
       initiative_mod: enemy.initiative_mod,
       initiative_roll: roll,
       initiative_total: roll == null ? null : roll + enemy.initiative_mod,
@@ -218,6 +234,14 @@ export async function storytellerStartEncounter(input: {
     grid: encounterDef.grid,
     objectives: encounterDef.objectives,
     combatants: sortEncounterCombatants(combatants),
+    combat_log: [
+      {
+        id: randomUUID(),
+        timestamp: nowIso,
+        type: "system",
+        text: `Encounter started: ${encounterDef.title}`,
+      },
+    ],
     created_at: nowIso,
     updated_at: nowIso,
   };
@@ -248,6 +272,10 @@ export async function storytellerLockEncounterInitiative(input: { sessionId: str
       round: 1,
       turn_index: 0,
       combatants: sortEncounterCombatants(encounter.combatants),
+      combat_log: appendEncounterLog(encounter.combat_log, {
+        type: "system",
+        text: "Initiative locked. Round 1 begins.",
+      }),
       updated_at: new Date().toISOString(),
     },
   });
@@ -274,6 +302,12 @@ export async function storytellerAdvanceEncounterTurn(input: { sessionId: string
       status: "active",
       round: wrapped ? encounter.round + 1 : encounter.round,
       turn_index: wrapped ? 0 : nextIndex,
+      combat_log: appendEncounterLog(encounter.combat_log, {
+        type: "system",
+        text: wrapped
+          ? `Round ${encounter.round + 1} begins.`
+          : `Turn passes to ${String(encounter.combatants[wrapped ? 0 : nextIndex]?.name ?? "next combatant")}.`,
+      }),
       updated_at: new Date().toISOString(),
     },
   });
@@ -295,6 +329,146 @@ export async function storytellerEndEncounter(input: { sessionId: string }) {
     encounter_state: {
       ...encounter,
       status: "ended",
+      combat_log: appendEncounterLog(encounter.combat_log, {
+        type: "system",
+        text: `Encounter ended: ${encounter.title}`,
+      }),
+      updated_at: new Date().toISOString(),
+    },
+  });
+}
+
+export async function storytellerMoveEncounterCombatant(input: {
+  sessionId: string;
+  combatantId: string;
+  x: number;
+  y: number;
+}) {
+  const sessionId = String(input.sessionId ?? "").trim();
+  const combatantId = String(input.combatantId ?? "").trim();
+  if (!isUuid(sessionId) || !combatantId) throw new Error("Missing movement details.");
+  const supabase = await createClient();
+  const { data: st, error: stErr } = await supabase
+    .from("session_state")
+    .select("encounter_state")
+    .eq("session_id", sessionId)
+    .maybeSingle();
+  if (stErr) throw new Error(stErr.message);
+  const encounter = normalizeEncounterState((st as any)?.encounter_state);
+  if (!encounter) throw new Error("Encounter not active.");
+  const x = Math.max(0, Math.min(100, Number(input.x) || 0));
+  const y = Math.max(0, Math.min(100, Number(input.y) || 0));
+  const moved = encounter.combatants.find((row) => row.id === combatantId);
+  if (!moved) throw new Error("Combatant not found.");
+  await updateState(sessionId, {
+    encounter_state: {
+      ...encounter,
+      combatants: encounter.combatants.map((row) => (row.id === combatantId ? { ...row, x, y } : row)),
+      combat_log: appendEncounterLog(encounter.combat_log, {
+        type: "move",
+        text: `${moved.name} moved to ${x.toFixed(1)}%, ${y.toFixed(1)}%.`,
+      }),
+      updated_at: new Date().toISOString(),
+    },
+  });
+}
+
+export async function storytellerUpdateEncounterCombatant(input: {
+  sessionId: string;
+  combatantId: string;
+  hpCurrent?: number | null;
+  defense?: number | null;
+  conditions?: string[] | null;
+  note?: string | null;
+}) {
+  const sessionId = String(input.sessionId ?? "").trim();
+  const combatantId = String(input.combatantId ?? "").trim();
+  if (!isUuid(sessionId) || !combatantId) throw new Error("Missing combatant details.");
+  const supabase = await createClient();
+  const { data: st, error: stErr } = await supabase
+    .from("session_state")
+    .select("encounter_state")
+    .eq("session_id", sessionId)
+    .maybeSingle();
+  if (stErr) throw new Error(stErr.message);
+  const encounter = normalizeEncounterState((st as any)?.encounter_state);
+  if (!encounter) throw new Error("Encounter not active.");
+  const current = encounter.combatants.find((row) => row.id === combatantId);
+  if (!current) throw new Error("Combatant not found.");
+
+  const hpCurrent =
+    input.hpCurrent == null || !Number.isFinite(Number(input.hpCurrent))
+      ? current.hp_current
+      : Math.max(0, Math.min(Math.max(0, Number(current.hp_max ?? 0)), Math.floor(Number(input.hpCurrent))));
+  const defense =
+    input.defense == null || !Number.isFinite(Number(input.defense))
+      ? current.defense
+      : Math.max(0, Math.floor(Number(input.defense)));
+  const conditions = Array.from(
+    new Set((Array.isArray(input.conditions) ? input.conditions : []).map((v) => String(v ?? "").trim()).filter(Boolean))
+  );
+  const note = String(input.note ?? "").trim();
+  const hpDelta =
+    Number.isFinite(Number(current.hp_current ?? NaN)) && Number.isFinite(Number(hpCurrent ?? NaN))
+      ? Number(hpCurrent) - Number(current.hp_current)
+      : null;
+  const logEntries = [...(encounter.combat_log ?? [])];
+  if (hpDelta != null && hpDelta !== 0) {
+    logEntries.push({
+      id: randomUUID(),
+      timestamp: new Date().toISOString(),
+      type: hpDelta < 0 ? "damage" : "heal",
+      text: `${current.name} ${hpDelta < 0 ? `takes ${Math.abs(hpDelta)}` : `recovers ${hpDelta}`} HP (${hpCurrent}/${current.hp_max ?? "?"}).`,
+    });
+  }
+  if (conditions.join("|") !== (current.conditions ?? []).join("|")) {
+    logEntries.push({
+      id: randomUUID(),
+      timestamp: new Date().toISOString(),
+      type: "condition",
+      text: `${current.name} conditions: ${conditions.length ? conditions.join(", ") : "none"}.`,
+    });
+  }
+  if (note) {
+    logEntries.push({
+      id: randomUUID(),
+      timestamp: new Date().toISOString(),
+      type: "note",
+      text: note,
+    });
+  }
+  await updateState(sessionId, {
+    encounter_state: {
+      ...encounter,
+      combatants: encounter.combatants.map((row) =>
+        row.id === combatantId ? { ...row, hp_current: hpCurrent, defense, conditions } : row
+      ),
+      combat_log: logEntries.slice(-60),
+      updated_at: new Date().toISOString(),
+    },
+  });
+}
+
+export async function storytellerAddEncounterLogNote(input: {
+  sessionId: string;
+  text: string;
+}) {
+  const sessionId = String(input.sessionId ?? "").trim();
+  const text = String(input.text ?? "").trim();
+  if (!isUuid(sessionId) || !text) throw new Error("Missing note.");
+  const supabase = await createClient();
+  const { data: st, error: stErr } = await supabase
+    .from("session_state")
+    .select("encounter_state")
+    .eq("session_id", sessionId)
+    .maybeSingle();
+  if (stErr) throw new Error(stErr.message);
+  const encounter = normalizeEncounterState((st as any)?.encounter_state);
+  if (!encounter) throw new Error("Encounter not active.");
+  await updateState(sessionId, {
+    encounter_state: {
+      ...encounter,
+      combat_log: appendEncounterLog(encounter.combat_log, { type: "note", text }),
       updated_at: new Date().toISOString(),
     },
   });

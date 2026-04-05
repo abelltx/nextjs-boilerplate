@@ -51,6 +51,7 @@ export type EncounterCombatant = {
   character_id: string | null;
   npc_id: string | null;
   image_url: string | null;
+  conditions: string[];
   initiative_mod: number;
   initiative_roll: number | null;
   initiative_total: number | null;
@@ -61,6 +62,13 @@ export type EncounterCombatant = {
   y: number | null;
   source_id: string | null;
   submitted_at: string | null;
+};
+
+export type EncounterLogEntry = {
+  id: string;
+  timestamp: string;
+  type: "system" | "damage" | "heal" | "condition" | "note" | "move";
+  text: string;
 };
 
 export type EncounterState = {
@@ -74,6 +82,7 @@ export type EncounterState = {
   grid: EncounterGrid;
   objectives: string[];
   combatants: EncounterCombatant[];
+  combat_log: EncounterLogEntry[];
   created_at: string;
   updated_at: string;
 };
@@ -194,6 +203,7 @@ export function normalizeEncounterState(input: unknown): EncounterState | null {
       character_id: String(row?.character_id ?? "").trim() || null,
       npc_id: String(row?.npc_id ?? "").trim() || null,
       image_url: String(row?.image_url ?? "").trim() || null,
+      conditions: cleanStringArray(row?.conditions),
       initiative_mod: toInt(row?.initiative_mod, 0),
       initiative_roll: Number.isFinite(Number(row?.initiative_roll ?? NaN)) ? toInt(row?.initiative_roll, 0) : null,
       initiative_total: Number.isFinite(Number(row?.initiative_total ?? NaN)) ? toInt(row?.initiative_total, 0) : null,
@@ -206,6 +216,16 @@ export function normalizeEncounterState(input: unknown): EncounterState | null {
       submitted_at: String(row?.submitted_at ?? "").trim() || null,
     }))
     .filter((row) => row.name.length > 0);
+  const combatLog = (Array.isArray(raw.combat_log) ? raw.combat_log : [])
+    .map((row: any, index) => ({
+      id: String(row?.id ?? `log_${index + 1}`).trim() || `log_${index + 1}`,
+      timestamp: String(row?.timestamp ?? "").trim() || new Date(0).toISOString(),
+      type: (["system", "damage", "heal", "condition", "note", "move"].includes(String(row?.type ?? "").trim().toLowerCase())
+        ? String(row?.type ?? "").trim().toLowerCase()
+        : "note") as EncounterLogEntry["type"],
+      text: String(row?.text ?? "").trim(),
+    }))
+    .filter((row) => row.text.length > 0);
 
   return {
     encounter_block_id: blockId,
@@ -222,6 +242,7 @@ export function normalizeEncounterState(input: unknown): EncounterState | null {
     grid: def.grid,
     objectives: def.objectives,
     combatants: sortEncounterCombatants(combatants),
+    combat_log: combatLog,
     created_at: String(raw.created_at ?? "").trim() || new Date(0).toISOString(),
     updated_at: String(raw.updated_at ?? "").trim() || new Date(0).toISOString(),
   };
