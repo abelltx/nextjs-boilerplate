@@ -5,6 +5,7 @@ import { getProfile } from "@/lib/auth/getProfile";
 import { revalidatePath } from "next/cache";
 import { randomUUID } from "crypto";
 import { createAdminClient } from "@/utils/supabase/admin";
+import { normalizeEncounterState, sortEncounterCombatants } from "@/lib/encounter";
 
 function isUuid(value: string) {
   const v = value.trim();
@@ -831,6 +832,79 @@ export async function requestRollApprovalAction(input: {
   if (upErr) return { ok: false, error: upErr.message };
   revalidatePath("/player");
   return { ok: true };
+}
+
+export async function submitEncounterInitiativeAction(input: {
+  sessionId: string;
+  characterId: string;
+  rollValue: number;
+  source?: "manual" | "digital";
+}): Promise<{ ok: boolean; total?: number; error?: string }> {
+  "use server";
+  const { user } = await getProfile();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const sessionId = String(input.sessionId ?? "").trim();
+  const characterId = String(input.characterId ?? "").trim();
+  const rollValue = Number(input.rollValue ?? NaN);
+  const source = String(input.source ?? "digital").trim().toLowerCase() === "manual" ? "manual" : "digital";
+  if (!sessionId || !characterId || !Number.isFinite(rollValue)) {
+    return { ok: false, error: "Missing encounter initiative details." };
+  }
+
+  const supabase = await supabaseServer();
+  const owner = await requireOwnedCharacter(supabase, user.id, characterId);
+  if (!owner.ok) return { ok: false, error: owner.error };
+
+  const { data: joinRow, error: joinErr } = await supabase
+    .from("session_players")
+    .select("player_id")
+    .eq("session_id", sessionId)
+    .eq("player_id", user.id)
+    .maybeSingle();
+  if (joinErr) return { ok: false, error: joinErr.message };
+  if (!joinRow?.player_id) return { ok: false, error: "You are not in this session." };
+
+  const { data: st, error: stErr } = await supabase
+    .from("session_state")
+    .select("encounter_state")
+    .eq("session_id", sessionId)
+    .maybeSingle();
+  if (stErr) return { ok: false, error: stErr.message };
+  const encounter = normalizeEncounterState((st as any)?.encounter_state);
+  if (!encounter) return { ok: false, error: "No encounter is active." };
+  if (encounter.status !== "initiative_pending") return { ok: false, error: "Initiative is already locked." };
+
+  let found = false;
+  let total = 0;
+  const nextCombatants = encounter.combatants.map((row) => {
+    if (row.kind !== "player") return row;
+    if (row.player_id !== user.id || row.character_id !== characterId) return row;
+    found = true;
+    total = Math.floor(rollValue) + Number(row.initiative_mod ?? 0);
+    return {
+      ...row,
+      initiative_roll: Math.floor(rollValue),
+      initiative_total: total,
+      submitted_at: new Date().toISOString(),
+      source_id: source,
+    };
+  });
+  if (!found) return { ok: false, error: "Your initiative slot was not found." };
+
+  await supabase
+    .from("session_state")
+    .update({
+      encounter_state: {
+        ...encounter,
+        combatants: sortEncounterCombatants(nextCombatants),
+        updated_at: new Date().toISOString(),
+      },
+    })
+    .eq("session_id", sessionId);
+
+  revalidatePath("/player");
+  return { ok: true, total };
 }
 
 export async function usePointSupportAction(input: {

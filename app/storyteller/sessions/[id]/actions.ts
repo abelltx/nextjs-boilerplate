@@ -4,6 +4,13 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { randomUUID } from "crypto";
+import {
+  EncounterCombatant,
+  normalizeEncounterDefinition,
+  normalizeEncounterState,
+  initiativeModifierFromStatBlock,
+  sortEncounterCombatants,
+} from "@/lib/encounter";
 
 /**
  * Loads the DM session, state, and joined players
@@ -99,6 +106,194 @@ export async function updateState(sessionId: string, patch: Record<string, any>)
 
   const { error } = await supabase.from("session_state").update(patch).eq("session_id", sessionId);
   if (error) throw new Error(error.message);
+}
+
+export async function storytellerStartEncounter(input: {
+  sessionId: string;
+  encounterBlockId: string;
+}) {
+  const sessionId = String(input.sessionId ?? "").trim();
+  const encounterBlockId = String(input.encounterBlockId ?? "").trim();
+  if (!isUuid(sessionId) || !isUuid(encounterBlockId)) throw new Error("Missing encounter details.");
+
+  const supabase = await createClient();
+  const admin = createAdminClient() ?? supabase;
+  const { data: block, error: blockErr } = await supabase
+    .from("episode_blocks")
+    .select("id,title,body,image_url,meta")
+    .eq("id", encounterBlockId)
+    .maybeSingle();
+  if (blockErr) throw new Error(blockErr.message);
+  if (!block?.id) throw new Error("Encounter block not found.");
+
+  const meta = ((block as any).meta ?? {}) as Record<string, any>;
+  const encounterDef = normalizeEncounterDefinition(
+    meta?.encounter && typeof meta.encounter === "object" ? meta.encounter : meta,
+    String((block as any).title ?? "Encounter")
+  );
+
+  const targets = await getSessionCharacterTargets(sessionId);
+  const characterIds = targets.map((t) => t.characterId);
+  const { data: charRows, error: charErr } = characterIds.length
+    ? await admin
+        .from("characters")
+        .select("id,user_id,name,stat_block")
+        .in("id", characterIds)
+    : { data: [], error: null as any };
+  if (charErr) throw new Error(charErr.message);
+  const charsById = new Map<string, any>((charRows ?? []).map((row: any) => [String(row.id), row]));
+
+  const { data: currentRows, error: currentErr } = characterIds.length
+    ? await admin
+        .from("character_stats_current")
+        .select("character_id,stat_block_current")
+        .in("character_id", characterIds)
+    : { data: [], error: null as any };
+  if (currentErr && !String(currentErr.message ?? "").toLowerCase().includes("does not exist")) {
+    throw new Error(currentErr.message);
+  }
+  const currentByCharacterId = new Map<string, any>(
+    (currentRows ?? []).map((row: any) => [String(row.character_id), (row as any).stat_block_current ?? null])
+  );
+
+  const combatants: EncounterCombatant[] = [];
+  for (let i = 0; i < targets.length; i += 1) {
+    const target = targets[i];
+    const char = charsById.get(target.characterId);
+    const statBlock = currentByCharacterId.get(target.characterId) ?? char?.stat_block ?? {};
+    const slot = encounterDef.player_slots[i] ?? null;
+    combatants.push({
+      id: `player_${target.playerId}`,
+      kind: "player",
+      name: String(char?.name ?? "Adventurer").trim() || "Adventurer",
+      player_id: target.playerId,
+      character_id: target.characterId,
+      initiative_mod: initiativeModifierFromStatBlock(statBlock),
+      initiative_roll: null,
+      initiative_total: null,
+      hp_max: Number.isFinite(Number(statBlock?.derived?.hp_max ?? NaN)) ? Number(statBlock.derived.hp_max) : null,
+      hp_current: Number.isFinite(Number(statBlock?.derived?.hp_current ?? NaN)) ? Number(statBlock.derived.hp_current) : null,
+      defense: Number.isFinite(Number(statBlock?.derived?.defense ?? NaN)) ? Number(statBlock.derived.defense) : null,
+      x: slot?.x ?? null,
+      y: slot?.y ?? null,
+      source_id: target.characterId,
+      submitted_at: null,
+    });
+  }
+
+  for (const enemy of encounterDef.enemies) {
+    const roll = encounterDef.initiative.auto_roll_enemies ? Math.floor(Math.random() * 20) + 1 : null;
+    combatants.push({
+      id: enemy.id,
+      kind: "enemy",
+      name: enemy.name,
+      player_id: null,
+      character_id: null,
+      initiative_mod: enemy.initiative_mod,
+      initiative_roll: roll,
+      initiative_total: roll == null ? null : roll + enemy.initiative_mod,
+      hp_max: enemy.hp_max,
+      hp_current: enemy.hp_current,
+      defense: enemy.defense,
+      x: enemy.x,
+      y: enemy.y,
+      source_id: enemy.id,
+      submitted_at: roll == null ? null : new Date().toISOString(),
+    });
+  }
+
+  const nowIso = new Date().toISOString();
+  const encounterState = {
+    encounter_block_id: encounterBlockId,
+    title: encounterDef.title,
+    summary: encounterDef.summary,
+    status: "initiative_pending",
+    round: 1,
+    turn_index: 0,
+    map_image_url: encounterDef.map_image_url || String((block as any).image_url ?? "").trim() || null,
+    grid: encounterDef.grid,
+    objectives: encounterDef.objectives,
+    combatants: sortEncounterCombatants(combatants),
+    created_at: nowIso,
+    updated_at: nowIso,
+  };
+
+  await updateState(sessionId, { encounter_state: encounterState });
+}
+
+export async function storytellerLockEncounterInitiative(input: { sessionId: string }) {
+  const sessionId = String(input.sessionId ?? "").trim();
+  if (!isUuid(sessionId)) throw new Error("Missing session.");
+  const supabase = await createClient();
+  const { data: st, error: stErr } = await supabase
+    .from("session_state")
+    .select("encounter_state")
+    .eq("session_id", sessionId)
+    .maybeSingle();
+  if (stErr) throw new Error(stErr.message);
+  const encounter = normalizeEncounterState((st as any)?.encounter_state);
+  if (!encounter) throw new Error("Encounter not active.");
+  const pendingPlayers = encounter.combatants.filter((row) => row.kind === "player" && row.initiative_total == null);
+  if (pendingPlayers.length) {
+    throw new Error("Players still need to roll initiative.");
+  }
+  await updateState(sessionId, {
+    encounter_state: {
+      ...encounter,
+      status: "active",
+      round: 1,
+      turn_index: 0,
+      combatants: sortEncounterCombatants(encounter.combatants),
+      updated_at: new Date().toISOString(),
+    },
+  });
+}
+
+export async function storytellerAdvanceEncounterTurn(input: { sessionId: string }) {
+  const sessionId = String(input.sessionId ?? "").trim();
+  if (!isUuid(sessionId)) throw new Error("Missing session.");
+  const supabase = await createClient();
+  const { data: st, error: stErr } = await supabase
+    .from("session_state")
+    .select("encounter_state")
+    .eq("session_id", sessionId)
+    .maybeSingle();
+  if (stErr) throw new Error(stErr.message);
+  const encounter = normalizeEncounterState((st as any)?.encounter_state);
+  if (!encounter) throw new Error("Encounter not active.");
+  if (!encounter.combatants.length) throw new Error("No combatants.");
+  const nextIndex = encounter.turn_index + 1;
+  const wrapped = nextIndex >= encounter.combatants.length;
+  await updateState(sessionId, {
+    encounter_state: {
+      ...encounter,
+      status: "active",
+      round: wrapped ? encounter.round + 1 : encounter.round,
+      turn_index: wrapped ? 0 : nextIndex,
+      updated_at: new Date().toISOString(),
+    },
+  });
+}
+
+export async function storytellerEndEncounter(input: { sessionId: string }) {
+  const sessionId = String(input.sessionId ?? "").trim();
+  if (!isUuid(sessionId)) throw new Error("Missing session.");
+  const supabase = await createClient();
+  const { data: st, error: stErr } = await supabase
+    .from("session_state")
+    .select("encounter_state")
+    .eq("session_id", sessionId)
+    .maybeSingle();
+  if (stErr) throw new Error(stErr.message);
+  const encounter = normalizeEncounterState((st as any)?.encounter_state);
+  if (!encounter) return;
+  await updateState(sessionId, {
+    encounter_state: {
+      ...encounter,
+      status: "ended",
+      updated_at: new Date().toISOString(),
+    },
+  });
 }
 
 function cleanIds(input: string[] | undefined) {

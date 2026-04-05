@@ -16,6 +16,10 @@ import {
   storytellerSetHexFocus,
   storytellerClearHexFocus,
   storytellerResolveHexReward,
+  storytellerStartEncounter,
+  storytellerLockEncounterInitiative,
+  storytellerAdvanceEncounterTurn,
+  storytellerEndEncounter,
 } from "./actions";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
@@ -31,6 +35,7 @@ import SubmitGlowButton from "@/components/ui/SubmitGlowButton";
 import PlayersPassivePanel from "./PlayersPassivePanel";
 import { parsePassiveEffectNotes } from "@/lib/passiveEffectNotes";
 import QuestProgressAutoRefresh from "./QuestProgressAutoRefresh";
+import { normalizeEncounterState } from "@/lib/encounter";
 
 
 
@@ -318,6 +323,7 @@ export default async function DmScreenPage({
   const previewIsMap = previewType === "map";
   const previewIsHex = previewType === "hex_crawl";
   const previewMapMarkers = previewIsMap ? extractMapMarkers(presentedBlock?.meta) : previewIsHex ? extractHexMarkers(presentedBlock?.meta) : [];
+  const encounterState = normalizeEncounterState((state as any)?.encounter_state);
   const carouselSceneIdx = presentedSceneIdx >= 0 ? presentedSceneIdx : scenes.length ? 0 : -1;
   const carouselScene = carouselSceneIdx >= 0 ? scenes[carouselSceneIdx] : null;
   const carouselSceneSteps = (carouselScene?.children ?? []).filter((c) => isPresentable(c));
@@ -1993,6 +1999,87 @@ export default async function DmScreenPage({
         </div>
 
         <div className="col-span-12 lg:col-span-3 border rounded-xl p-4 space-y-3">
+          <div className="rounded border bg-white p-3 space-y-2">
+            <div className="text-xs uppercase text-gray-500">Encounter Runtime</div>
+            {presentedBlock && isEncounter(presentedBlock as Block) ? (
+              <>
+                <div className="text-sm font-semibold">{presentedBlock.title ?? "Encounter"}</div>
+                <div className="text-xs text-gray-600">
+                  {encounterState && encounterState.encounter_block_id === String(presentedBlock.id)
+                    ? `Status: ${encounterState.status} | Round ${encounterState.round}`
+                    : "Encounter not started"}
+                </div>
+                {!encounterState || encounterState.encounter_block_id !== String(presentedBlock.id) || encounterState.status === "ended" ? (
+                  <form
+                    action={async () => {
+                      "use server";
+                      await storytellerStartEncounter({
+                        sessionId: session.id,
+                        encounterBlockId: String(presentedBlock.id),
+                      });
+                      redirect(`/storyteller/sessions/${session.id}`);
+                    }}
+                  >
+                    <button className="rounded border px-2 py-1 text-xs">Start Encounter</button>
+                  </form>
+                ) : null}
+                {encounterState && encounterState.encounter_block_id === String(presentedBlock.id) ? (
+                  <>
+                    <div className="rounded border bg-gray-50 p-2 text-xs text-gray-700 space-y-1">
+                      <div>
+                        Pending initiative:{" "}
+                        {encounterState.combatants.filter((row) => row.kind === "player" && row.initiative_total == null).length}
+                      </div>
+                      <div>
+                        Combatants: {encounterState.combatants.length}
+                      </div>
+                      {encounterState.combatants.map((row, index) => (
+                        <div key={row.id} className="flex items-center justify-between">
+                          <span>
+                            {index + 1}. {row.name}
+                          </span>
+                          <span>{row.initiative_total ?? "—"}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {encounterState.status === "initiative_pending" ? (
+                      <form
+                        action={async () => {
+                          "use server";
+                          await storytellerLockEncounterInitiative({ sessionId: session.id });
+                          redirect(`/storyteller/sessions/${session.id}`);
+                        }}
+                      >
+                        <button className="rounded border px-2 py-1 text-xs">Lock Initiative</button>
+                      </form>
+                    ) : null}
+                    {encounterState.status === "active" ? (
+                      <form
+                        action={async () => {
+                          "use server";
+                          await storytellerAdvanceEncounterTurn({ sessionId: session.id });
+                          redirect(`/storyteller/sessions/${session.id}`);
+                        }}
+                      >
+                        <button className="rounded border px-2 py-1 text-xs">Next Turn</button>
+                      </form>
+                    ) : null}
+                    <form
+                      action={async () => {
+                        "use server";
+                        await storytellerEndEncounter({ sessionId: session.id });
+                        redirect(`/storyteller/sessions/${session.id}`);
+                      }}
+                    >
+                      <button className="rounded border px-2 py-1 text-xs text-red-700">End Encounter</button>
+                    </form>
+                  </>
+                ) : null}
+              </>
+            ) : (
+              <div className="text-xs text-gray-600">Present an encounter block to start initiative and turn order.</div>
+            )}
+          </div>
           <div className="text-xs uppercase text-gray-500 mb-2">Check Prompt</div>
           <CheckPromptCard
             sessionId={session.id}

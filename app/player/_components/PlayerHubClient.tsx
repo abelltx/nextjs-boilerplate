@@ -21,6 +21,7 @@ import {
   leaveSessionAction,
   requestRollApprovalAction,
   startNpcQuestAction,
+  submitEncounterInitiativeAction,
   submitRollResultAction,
   usePointSupportAction,
 } from "../actions";
@@ -28,6 +29,7 @@ import RevealCard from "@/components/episode-runtime/RevealCard";
 import SceneMap from "@/components/episode-runtime/SceneMap";
 import NpcTabsCard from "@/components/episode-runtime/NpcTabsCard";
 import { extractHexMarkers, extractMapMarkers } from "@/lib/episodeRuntime";
+import { normalizeEncounterState } from "@/lib/encounter";
 
 type TabKey = "inventory" | "quests" | "actions" | "talents" | "journey";
 
@@ -353,6 +355,7 @@ export default function PlayerHubClient(props: {
   }, [selectedSessionId]);
 
   const stageState = stage?.state ?? (selectedSessionId ? props.sessionStates?.[selectedSessionId] : null);
+  const encounterState = useMemo(() => normalizeEncounterState(stageState?.encounter_state), [stageState?.encounter_state]);
   const stageBlock = stage?.block ?? null;
   const sessionRoster = useMemo(
     () =>
@@ -538,6 +541,8 @@ export default function PlayerHubClient(props: {
   const [submittingRoll, setSubmittingRoll] = useState(false);
   const [pendingPromptRerollEffectId, setPendingPromptRerollEffectId] = useState<string | null>(null);
   const [requestingRoll, setRequestingRoll] = useState(false);
+  const [submittingInitiative, setSubmittingInitiative] = useState(false);
+  const [initiativeManualValue, setInitiativeManualValue] = useState("");
   const [usingPointActionId, setUsingPointActionId] = useState<string | null>(null);
   const [resolvingPointId, setResolvingPointId] = useState<string | null>(null);
   const [requestCheckKey, setRequestCheckKey] = useState("Perception");
@@ -566,6 +571,16 @@ export default function PlayerHubClient(props: {
       String(r?.status ?? "pending").trim().toLowerCase() === "pending"
   );
   const myActiveRoll = rollOpen && (String(stageState?.roll_target ?? "all").trim() === "all" || String(stageState?.roll_target ?? "").trim() === props.userId);
+  const myEncounterCombatant = useMemo(
+    () =>
+      encounterState?.combatants.find(
+        (row) =>
+          row.kind === "player" &&
+          String(row.player_id ?? "").trim() === props.userId &&
+          String(row.character_id ?? "").trim() === String(props.character?.id ?? "")
+      ) ?? null,
+    [encounterState, props.userId, props.character?.id]
+  );
 
   useEffect(() => {
     if (!rollOpen) {
@@ -684,6 +699,38 @@ export default function PlayerHubClient(props: {
       router.refresh();
     } finally {
       setRequestingRoll(false);
+    }
+  }
+
+  async function handleSubmitEncounterInitiative(source: "manual" | "digital") {
+    if (!selectedSessionId || !myEncounterCombatant || submittingInitiative) return;
+    let rollValue = 0;
+    if (source === "manual") {
+      rollValue = Number(initiativeManualValue);
+      if (!Number.isFinite(rollValue) || rollValue < 1 || rollValue > 20) {
+        alert("Enter a d20 result from 1 to 20.");
+        return;
+      }
+    } else {
+      rollValue = Math.floor(Math.random() * 20) + 1;
+    }
+
+    setSubmittingInitiative(true);
+    try {
+      const res = await submitEncounterInitiativeAction({
+        sessionId: selectedSessionId,
+        characterId: String(props.character?.id ?? ""),
+        rollValue,
+        source,
+      });
+      if (!res.ok) {
+        alert(res.error ?? "Could not submit initiative.");
+        return;
+      }
+      setInitiativeManualValue("");
+      router.refresh();
+    } finally {
+      setSubmittingInitiative(false);
     }
   }
 
@@ -1078,6 +1125,18 @@ export default function PlayerHubClient(props: {
                     onQuestClaim: handleClaimNpcQuestRewards,
                   }}
                 />
+
+                {encounterState ? (
+                  <EncounterPanel
+                    encounter={encounterState}
+                    myCombatant={myEncounterCombatant}
+                    manualValue={initiativeManualValue}
+                    setManualValue={setInitiativeManualValue}
+                    submitting={submittingInitiative}
+                    onSubmitManual={() => handleSubmitEncounterInitiative("manual")}
+                    onSubmitDigital={() => handleSubmitEncounterInitiative("digital")}
+                  />
+                ) : null}
 
                 {rollOpen ? (
                   <div ref={promptBoxRef}>
@@ -1710,6 +1769,136 @@ function StagePanel({
         When the storyteller clicks <span className="text-neutral-100">Present to Players</span>, it will appear here.
       </div>
     )
+  );
+}
+
+function EncounterPanel(props: {
+  encounter: any;
+  myCombatant: any;
+  manualValue: string;
+  setManualValue: (value: string) => void;
+  submitting: boolean;
+  onSubmitManual: () => void | Promise<void>;
+  onSubmitDigital: () => void | Promise<void>;
+}) {
+  const currentTurn = props.encounter.combatants[props.encounter.turn_index] ?? null;
+  const needsInitiative =
+    props.encounter.status === "initiative_pending" &&
+    props.myCombatant &&
+    !Number.isFinite(Number(props.myCombatant.initiative_total ?? NaN));
+
+  return (
+    <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4 space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold">Encounter</div>
+          <div className="text-xs text-neutral-400">
+            {props.encounter.title} | {props.encounter.status === "initiative_pending" ? "Initiative Pending" : `Round ${props.encounter.round}`}
+          </div>
+        </div>
+        {currentTurn && props.encounter.status === "active" ? (
+          <div className="text-xs text-emerald-300">Current Turn: {currentTurn.name}</div>
+        ) : null}
+      </div>
+
+      {props.encounter.summary ? <div className="text-sm text-neutral-300">{props.encounter.summary}</div> : null}
+
+      {props.encounter.objectives?.length ? (
+        <div className="rounded-xl border border-neutral-800 bg-neutral-900/40 p-3">
+          <div className="text-xs uppercase tracking-wide text-neutral-400">Objectives</div>
+          <div className="mt-2 space-y-1">
+            {props.encounter.objectives.map((objective: string, index: number) => (
+              <div key={`${objective}-${index}`} className="text-sm text-neutral-200">
+                {index + 1}. {objective}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {props.encounter.map_image_url ? (
+        <div className="rounded-xl border border-neutral-800 overflow-hidden">
+          <div className="relative">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={props.encounter.map_image_url} alt={props.encounter.title} className="w-full h-auto block" />
+            <div
+              className="pointer-events-none absolute inset-0"
+              style={{
+                backgroundImage:
+                  `linear-gradient(to right, rgba(255,255,255,0.2) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.2) 1px, transparent 1px)`,
+                backgroundSize: `${100 / Math.max(1, Number(props.encounter.grid?.cols ?? 12))}% ${100 / Math.max(1, Number(props.encounter.grid?.rows ?? 12))}%`,
+              }}
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {needsInitiative ? (
+        <div className="rounded-xl border border-amber-300/50 bg-amber-500/10 p-3 space-y-3">
+          <div className="text-sm font-semibold text-amber-100">Roll Initiative</div>
+          <div className="text-xs text-amber-50/90">
+            Initiative modifier: {props.myCombatant.initiative_mod >= 0 ? "+" : ""}
+            {props.myCombatant.initiative_mod}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={props.onSubmitDigital}
+              disabled={props.submitting}
+              className="rounded border border-neutral-700 px-3 py-1.5 text-sm hover:bg-neutral-900 disabled:opacity-60"
+            >
+              {props.submitting ? "Rolling..." : "Roll d20"}
+            </button>
+            <input
+              value={props.manualValue}
+              onChange={(e) => props.setManualValue(e.currentTarget.value)}
+              className="w-28 rounded border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-sm"
+              placeholder="Manual d20"
+              inputMode="numeric"
+            />
+            <button
+              type="button"
+              onClick={props.onSubmitManual}
+              disabled={props.submitting}
+              className="rounded border border-neutral-700 px-3 py-1.5 text-sm hover:bg-neutral-900 disabled:opacity-60"
+            >
+              Submit Manual
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="rounded-xl border border-neutral-800 bg-neutral-900/40 p-3">
+        <div className="text-xs uppercase tracking-wide text-neutral-400">Initiative Order</div>
+        <div className="mt-2 space-y-1">
+          {props.encounter.combatants.map((row: any, index: number) => {
+            const isCurrent = props.encounter.status === "active" && index === props.encounter.turn_index;
+            const total = Number.isFinite(Number(row.initiative_total ?? NaN)) ? row.initiative_total : "—";
+            return (
+              <div
+                key={row.id}
+                className={[
+                  "flex items-center justify-between rounded px-2 py-1 text-sm",
+                  isCurrent ? "bg-emerald-500/15 text-emerald-100" : "text-neutral-200",
+                ].join(" ")}
+              >
+                <div>
+                  {index + 1}. {row.name}
+                  <span className="ml-2 text-xs text-neutral-500">{row.kind}</span>
+                </div>
+                <div className="text-xs">
+                  {total}
+                  <span className="ml-2 text-neutral-500">
+                    ({row.initiative_mod >= 0 ? "+" : ""}
+                    {row.initiative_mod})
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
   );
 }
 

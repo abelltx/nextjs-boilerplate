@@ -11,6 +11,7 @@ import {
 import MapMarkerEditorClient from "./MapMarkerEditorClient";
 import NpcTabsEditorClient from "./NpcTabsEditorClient";
 import SceneAudioUploaderClient from "./SceneAudioUploaderClient";
+import EncounterEditorClient from "./EncounterEditorClient";
 
 async function requireAdminServer() {
   const supabase = await createClient();
@@ -1432,6 +1433,12 @@ export default async function AdminEpisodeEditPage({
                             <div className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800">
                               Save an image URL or upload an image for this block first, then reopen to place markers.
                             </div>
+                          ) : String(b.block_type).toLowerCase() === "encounter" ? (
+                            <EncounterEditorClient
+                              blockTitle={b.title ?? "Encounter"}
+                              imageUrl={b.image_url ?? null}
+                              initialMeta={b.meta ?? {}}
+                            />
                           ) : String(b.block_type).toLowerCase() === "npc" ? (
                             <NpcTabsEditorClient
                               initialMeta={b.meta ?? {}}
