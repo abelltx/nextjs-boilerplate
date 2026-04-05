@@ -18,9 +18,12 @@ export default function StorytellerMonsterQuickRoller(props: {
     damage_bonus?: number | null;
   }>;
 }) {
-  const initialAction = props.actionOptions?.[0] ?? null;
+  const normalizedActions = props.actionOptions?.length
+    ? props.actionOptions
+    : [{ id: "", name: props.combatantName ? `${props.combatantName} Attack` : "Attack" }];
+  const initialAction = normalizedActions[0] ?? null;
   const [selectedActionId, setSelectedActionId] = useState(initialAction?.id ?? "");
-  const selectedAction = props.actionOptions?.find((row) => row.id === selectedActionId) ?? initialAction ?? null;
+  const selectedAction = normalizedActions.find((row) => row.id === selectedActionId) ?? initialAction ?? null;
   const [actionName, setActionName] = useState(selectedAction?.name ?? "Attack");
   const [targetId, setTargetId] = useState("");
   const [attackBonus, setAttackBonus] = useState(selectedAction?.attack_bonus_override != null ? String(selectedAction.attack_bonus_override) : "");
@@ -53,31 +56,33 @@ export default function StorytellerMonsterQuickRoller(props: {
 
   return (
     <div className="grid grid-cols-2 gap-2 rounded border bg-white p-2">
-      <div className="col-span-2 text-[11px] uppercase text-gray-500">Monster Action Roller</div>
-      <select
-        value={selectedActionId}
-        onChange={(e) => {
-          const nextId = e.currentTarget.value;
-          setSelectedActionId(nextId);
-          const next = props.actionOptions?.find((row) => row.id === nextId) ?? null;
-          setActionName(next?.name ?? "Attack");
-          setAttackBonus(next?.attack_bonus_override != null ? String(next.attack_bonus_override) : "");
-          setDamageDice(next?.damage_dice ?? "");
-          setDamageBonus(next?.damage_bonus != null ? String(next.damage_bonus) : "");
-          setLastHitSuccess(null);
-        }}
-        className="rounded border px-2 py-1 text-xs"
-      >
-        {props.actionOptions?.length ? (
-          props.actionOptions.map((row) => (
-            <option key={row.id} value={row.id}>
+      <div className="col-span-2 text-[11px] uppercase text-gray-500">Monster Ability</div>
+      <div className="col-span-2 flex flex-wrap gap-2">
+        {normalizedActions.map((row) => {
+          const active = selectedActionId === row.id;
+          return (
+            <button
+              key={row.id || row.name}
+              type="button"
+              onClick={() => {
+                setSelectedActionId(row.id);
+                setActionName(row.name ?? "Attack");
+                setAttackBonus(row.attack_bonus_override != null ? String(row.attack_bonus_override) : "");
+                setDamageDice(row.damage_dice ?? "");
+                setDamageBonus(row.damage_bonus != null ? String(row.damage_bonus) : "");
+                setLastHitSuccess(null);
+                setLastResult("");
+              }}
+              className={[
+                "rounded border px-3 py-1.5 text-xs font-semibold",
+                active ? "border-blue-400 bg-blue-50 text-blue-900" : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50",
+              ].join(" ")}
+            >
               {row.name}
-            </option>
-          ))
-        ) : (
-          <option value="">{actionName}</option>
-        )}
-      </select>
+            </button>
+          );
+        })}
+      </div>
       <select value={targetId} onChange={(e) => setTargetId(e.currentTarget.value)} className="rounded border px-2 py-1 text-xs">
         <option value="">Choose target</option>
         {props.combatants.filter((row) => row.id !== props.combatantId).map((row) => (
@@ -109,7 +114,20 @@ export default function StorytellerMonsterQuickRoller(props: {
         className="col-span-2 rounded border px-2 py-1 text-xs read-only:bg-gray-100"
         placeholder="Damage dice, e.g. 1d8 or 2d6+2"
       />
-      {selectedAction?.summary ? (
+      {selectedAction?.name ? (
+        <div className="col-span-2 rounded border bg-slate-50 px-2 py-2">
+          <div className="text-sm font-semibold text-slate-900">{selectedAction.name}</div>
+          {selectedAction?.summary ? (
+            <div className="mt-1 text-[11px] text-gray-600">{selectedAction.summary}</div>
+          ) : null}
+          <div className="mt-1 text-[11px] text-gray-600">
+            {attackBonus ? `Hit +${attackBonus}` : "No hit bonus"}
+            {damageDice ? ` | Damage ${damageDice}${damageBonus ? ` + ${damageBonus}` : ""}` : ""}
+            {selectedAction?.range_normal ? ` | Range ${selectedAction.range_normal} ft` : ""}
+          </div>
+        </div>
+      ) : null}
+      {selectedAction?.summary && !selectedAction?.name ? (
         <div className="col-span-2 text-[11px] text-gray-600">{selectedAction.summary}</div>
       ) : null}
       <button

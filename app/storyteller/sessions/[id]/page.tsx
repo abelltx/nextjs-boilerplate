@@ -463,6 +463,12 @@ export default async function DmScreenPage({
   const carouselNextScene = carouselSceneIdx >= 0 ? scenes[carouselSceneIdx + 1] ?? null : null;
   const carouselNextSceneFirst =
     carouselNextScene?.children?.find((c) => isPresentable(c)) ?? null;
+  const activeEncounterForPresentedBlock = Boolean(
+    encounterState && presentedBlock && encounterState.encounter_block_id === String(presentedBlock.id) && encounterState.status !== "ended"
+  );
+  const encounterCurrentTurnId = String(encounterState?.combatants?.[encounterState?.turn_index ?? 0]?.id ?? "");
+  const encounterEnemies = (encounterState?.combatants ?? []).filter((row: any) => row.kind === "enemy");
+  const encounterPlayersOrdered = (encounterState?.combatants ?? []).filter((row: any) => row.kind === "player");
   const storytellerGuidance = (() => {
     if (!presentedBlock) return { script: "", notes: "" };
     const meta = (presentedBlock.meta ?? {}) as Record<string, any>;
@@ -1519,6 +1525,199 @@ export default async function DmScreenPage({
                 ) : null}
               </div>
             ) : null}
+            {activeEncounterForPresentedBlock ? (
+              <div className="rounded border bg-white p-3 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-[11px] uppercase text-gray-500">Encounter Director</div>
+                    <div className="text-sm font-semibold">{encounterState?.title ?? presentedBlock?.title ?? "Encounter"}</div>
+                    <div className="text-xs text-gray-600">
+                      {encounterState?.status === "initiative_pending"
+                        ? "Initiative pending"
+                        : `Round ${encounterState?.round ?? 1} | Current turn: ${String(encounterState?.combatants?.[encounterState?.turn_index ?? 0]?.name ?? "n/a")}`}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {encounterState?.status === "initiative_pending" ? (
+                      <form
+                        action={async () => {
+                          "use server";
+                          await storytellerLockEncounterInitiative({ sessionId: session.id });
+                          redirect(`/storyteller/sessions/${session.id}`);
+                        }}
+                      >
+                        <button className="rounded border px-2 py-1 text-xs">Lock Initiative</button>
+                      </form>
+                    ) : null}
+                    {encounterState?.status === "active" ? (
+                      <form
+                        action={async () => {
+                          "use server";
+                          await storytellerAdvanceEncounterTurn({ sessionId: session.id });
+                          redirect(`/storyteller/sessions/${session.id}`);
+                        }}
+                      >
+                        <button className="rounded border px-2 py-1 text-xs">Next Turn</button>
+                      </form>
+                    ) : null}
+                    <form
+                      action={async () => {
+                        "use server";
+                        await storytellerEndEncounter({ sessionId: session.id });
+                        redirect(`/storyteller/sessions/${session.id}`);
+                      }}
+                    >
+                      <button className="rounded border px-2 py-1 text-xs text-red-700">End Encounter</button>
+                    </form>
+                  </div>
+                </div>
+
+                <div className="rounded border bg-slate-50 p-3">
+                  <div className="text-[11px] uppercase text-gray-500">NPCs In Initiative Order</div>
+                  <div className="mt-2 grid gap-3 md:grid-cols-2">
+                    {encounterEnemies.map((row: any) => (
+                      <div
+                        key={`enemy-card-${row.id}`}
+                        className={[
+                          "rounded border bg-white p-3 space-y-2",
+                          encounterCurrentTurnId === String(row.id) ? "border-blue-400 shadow-[0_0_0_2px_rgba(59,130,246,0.25),0_0_20px_rgba(59,130,246,0.2)]" : "",
+                        ].join(" ")}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="text-sm font-semibold">{row.name}</div>
+                            <div className="text-xs text-gray-600">
+                              HP {row.hp_current ?? "?"}/{row.hp_max ?? "?"} | AC {row.defense ?? "?"}
+                            </div>
+                            {Array.isArray(row.conditions) && row.conditions.length ? (
+                              <div className="mt-1 text-[11px] text-gray-600">{row.conditions.join(", ")}</div>
+                            ) : null}
+                          </div>
+                          {encounterCurrentTurnId === String(row.id) ? (
+                            <div className="rounded-full bg-blue-100 px-2 py-1 text-[10px] font-semibold text-blue-800">Current Turn</div>
+                          ) : null}
+                        </div>
+
+                        <StorytellerMonsterQuickRoller
+                          sessionId={session.id}
+                          combatantId={String(row.id)}
+                          combatantName={String(row.name ?? "Monster")}
+                          combatants={(encounterState?.combatants ?? []).map((c: any) => ({
+                            id: String(c?.id ?? ""),
+                            name: String(c?.name ?? ""),
+                            defense: Number.isFinite(Number(c?.defense ?? NaN)) ? Number(c.defense) : null,
+                          }))}
+                          actionOptions={npcActionsByNpcId.get(String(row.npc_id ?? "").trim()) ?? []}
+                        />
+
+                        <div className="grid gap-2 md:grid-cols-2">
+                          <form
+                            className="grid grid-cols-2 gap-2 rounded border bg-gray-50 p-2"
+                            action={async (fd) => {
+                              "use server";
+                              await storytellerMoveEncounterCombatant({
+                                sessionId: session.id,
+                                combatantId: String(fd.get("combatant_id") ?? ""),
+                                x: Number(fd.get("x") ?? 0),
+                                y: Number(fd.get("y") ?? 0),
+                              });
+                              redirect(`/storyteller/sessions/${session.id}`);
+                            }}
+                          >
+                            <input type="hidden" name="combatant_id" value={row.id} />
+                            <div className="col-span-2 text-[11px] uppercase text-gray-500">Move</div>
+                            <input name="x" defaultValue={row.x ?? 0} className="rounded border px-2 py-1 text-xs" placeholder="X %" />
+                            <input name="y" defaultValue={row.y ?? 0} className="rounded border px-2 py-1 text-xs" placeholder="Y %" />
+                            <button className="col-span-2 rounded border px-2 py-1 text-xs">Move Token</button>
+                          </form>
+
+                          <form
+                            className="grid grid-cols-2 gap-2 rounded border bg-gray-50 p-2"
+                            action={async (fd) => {
+                              "use server";
+                              const conditions = String(fd.get("conditions") ?? "")
+                                .split(",")
+                                .map((v) => v.trim())
+                                .filter(Boolean);
+                              await storytellerUpdateEncounterCombatant({
+                                sessionId: session.id,
+                                combatantId: String(fd.get("combatant_id") ?? ""),
+                                hpCurrent: Number(fd.get("hp_current") ?? 0),
+                                defense: String(fd.get("defense") ?? "").trim() ? Number(fd.get("defense")) : null,
+                                conditions,
+                                note: String(fd.get("note") ?? ""),
+                              });
+                              redirect(`/storyteller/sessions/${session.id}`);
+                            }}
+                          >
+                            <input type="hidden" name="combatant_id" value={row.id} />
+                            <div className="col-span-2 text-[11px] uppercase text-gray-500">Stats</div>
+                            <input name="hp_current" defaultValue={row.hp_current ?? ""} className="rounded border px-2 py-1 text-xs" placeholder="HP current" />
+                            <input name="defense" defaultValue={row.defense ?? ""} className="rounded border px-2 py-1 text-xs" placeholder="Defense" />
+                            <input
+                              name="conditions"
+                              defaultValue={Array.isArray(row.conditions) ? row.conditions.join(", ") : ""}
+                              className="col-span-2 rounded border px-2 py-1 text-xs"
+                              placeholder="Conditions, comma separated"
+                            />
+                            <input name="note" className="col-span-2 rounded border px-2 py-1 text-xs" placeholder="Optional combat note" />
+                            <button className="col-span-2 rounded border px-2 py-1 text-xs">Update NPC</button>
+                          </form>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded border bg-white p-2">
+                  <StorytellerEncounterBoard encounter={encounterState} />
+                </div>
+
+                <div className="rounded border bg-cyan-50 p-3">
+                  <div className="text-[11px] uppercase text-gray-500">Players In Initiative Order</div>
+                  <div className="mt-2 grid gap-3 md:grid-cols-2">
+                    {encounterPlayersOrdered.map((row: any) => (
+                      <div
+                        key={`player-card-${row.id}`}
+                        className={[
+                          "rounded border bg-white p-3",
+                          encounterCurrentTurnId === String(row.id) ? "border-blue-400 shadow-[0_0_0_2px_rgba(59,130,246,0.25),0_0_20px_rgba(59,130,246,0.2)]" : "",
+                        ].join(" ")}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="text-sm font-semibold">{row.name}</div>
+                            <div className="text-xs text-gray-600">
+                              HP {row.hp_current ?? "?"}/{row.hp_max ?? "?"} | AC {row.defense ?? "?"} | Init {row.initiative_total ?? "—"}
+                            </div>
+                            {Array.isArray(row.conditions) && row.conditions.length ? (
+                              <div className="mt-1 text-[11px] text-gray-600">{row.conditions.join(", ")}</div>
+                            ) : null}
+                          </div>
+                          {encounterCurrentTurnId === String(row.id) ? (
+                            <div className="rounded-full bg-blue-100 px-2 py-1 text-[10px] font-semibold text-blue-800">Current Turn</div>
+                          ) : null}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {encounterState?.combat_log?.length ? (
+                  <div className="rounded border bg-gray-50 p-2 text-xs text-gray-700 space-y-1">
+                    <div className="text-[11px] uppercase text-gray-500">Combat Log</div>
+                    {encounterState.combat_log.slice().reverse().map((entry: any) => (
+                      <div key={entry.id} className="rounded border bg-white px-2 py-1">
+                        <div className="text-[10px] uppercase text-gray-400">{entry.type}</div>
+                        <div>{entry.text}</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            {!activeEncounterForPresentedBlock ? (
             <details className="rounded border bg-white p-2 space-y-2" open>
               <summary className="cursor-pointer text-[11px] uppercase text-gray-500">Player View Preview</summary>
               <div className="mt-2">
@@ -1558,6 +1757,7 @@ export default async function DmScreenPage({
                 )}
               </div>
             </details>
+            ) : null}
             <div className="rounded border bg-white p-2 space-y-1">
               <div className="text-[11px] uppercase text-gray-500">Storyteller Direction</div>
               {presentedBlock ? (
@@ -2129,6 +2329,34 @@ export default async function DmScreenPage({
                 )}
               </div>
             ) : null}
+            {activeEncounterForPresentedBlock ? (
+              <details className="rounded border bg-white p-2 space-y-2">
+                <summary className="cursor-pointer text-[11px] uppercase text-gray-500">Player View Preview</summary>
+                <div className="mt-2">
+                  {presentedBlock ? (
+                    <>
+                      {presentedBlock.image_url ? (
+                        <div className="rounded border overflow-hidden bg-gray-100 relative">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={presentedBlock.image_url}
+                            alt={presentedBlock.title ?? "Presented"}
+                            className="w-full h-auto block"
+                          />
+                        </div>
+                      ) : null}
+                      {presentedBlock.body ? (
+                        <div className="text-sm whitespace-pre-wrap text-gray-700">{presentedBlock.body}</div>
+                      ) : (
+                        <div className="text-sm text-gray-500">No body text on this presented block.</div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="text-sm text-gray-500">Nothing presented to players yet.</div>
+                  )}
+                </div>
+              </details>
+            ) : null}
           </div>
         </div>
 
@@ -2143,6 +2371,11 @@ export default async function DmScreenPage({
                     ? `Status: ${encounterState.status} | Round ${encounterState.round}`
                     : "Encounter not started"}
                 </div>
+                {activeEncounterForPresentedBlock ? (
+                  <div className="rounded border bg-blue-50 px-2 py-2 text-xs text-blue-900">
+                    Encounter battle controls are in the main stage column. Use this panel only for quick status.
+                  </div>
+                ) : null}
                 {!encounterState || encounterState.encounter_block_id !== String(presentedBlock.id) || encounterState.status === "ended" ? (
                   <form
                     action={async () => {
@@ -2157,7 +2390,7 @@ export default async function DmScreenPage({
                     <button className="rounded border px-2 py-1 text-xs">Start Encounter</button>
                   </form>
                 ) : null}
-                {encounterState && encounterState.encounter_block_id === String(presentedBlock.id) ? (
+                {encounterState && encounterState.encounter_block_id === String(presentedBlock.id) && !activeEncounterForPresentedBlock ? (
                   <>
                     <div className="rounded border bg-gray-50 p-2 text-xs text-gray-700 space-y-1">
                       <div>
