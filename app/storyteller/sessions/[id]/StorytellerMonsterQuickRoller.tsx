@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { storytellerRollEncounterAction } from "./actions";
 
 export default function StorytellerMonsterQuickRoller(props: {
@@ -29,6 +30,7 @@ export default function StorytellerMonsterQuickRoller(props: {
   const [lastHitSuccess, setLastHitSuccess] = useState<boolean | null>(null);
   const [lastResult, setLastResult] = useState("");
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   function run(kind: "attack" | "damage" | "both") {
     startTransition(async () => {
@@ -44,7 +46,8 @@ export default function StorytellerMonsterQuickRoller(props: {
         });
         if (!result?.ok) throw new Error(result?.error ?? "Could not roll monster action.");
         if (kind !== "damage") setLastHitSuccess(result.hit ?? null);
-        setLastResult(result.attackText || result.damageText || "");
+        setLastResult([result.attackText, result.damageText].filter(Boolean).join(" "));
+        router.refresh();
       } catch (error: any) {
         alert(error?.message ?? "Could not roll monster action.");
       }
@@ -140,7 +143,9 @@ export default function StorytellerMonsterQuickRoller(props: {
         <div className="col-span-2 text-[11px] text-gray-600">{lastHitSuccess ? "Last attack hit." : "Last attack missed."}</div>
       ) : null}
       {lastResult ? (
-        <div className="col-span-2 rounded border bg-gray-50 px-2 py-1 text-xs text-gray-700">{lastResult}</div>
+        <div className="col-span-2 rounded border border-emerald-200 bg-emerald-50 px-2 py-2 text-sm text-emerald-900">
+          {lastResult}
+        </div>
       ) : null}
     </div>
   );
