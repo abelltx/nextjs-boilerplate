@@ -250,6 +250,7 @@ export default async function DmScreenPage({
 
   // --- Load blocks for episode on this session ---
   let blocks: Block[] = [];
+  const runtimeByNpcId = new Map<string, any>();
   if (episodeId) {
     const { data, error: blkErr } = await supabase
       .from("episode_blocks")
@@ -284,7 +285,6 @@ export default async function DmScreenPage({
       }
     }
     const npcIds = Array.from(new Set(Array.from(npcIdByBlockId.values()).filter(Boolean)));
-    const runtimeByNpcId = new Map<string, any>();
     if (npcIds.length) {
       const { data: runtimeRows } = await supabase
         .from("npc_runtime_configs")
@@ -404,6 +404,58 @@ export default async function DmScreenPage({
   const previewIsHex = previewType === "hex_crawl";
   const previewMapMarkers = previewIsMap ? extractMapMarkers(presentedBlock?.meta) : previewIsHex ? extractHexMarkers(presentedBlock?.meta) : [];
   const encounterState = normalizeEncounterState((state as any)?.encounter_state);
+  const admin = createAdminClient() ?? supabase;
+  const npcActionIdsForEncounter = Array.from(
+    new Set(
+      (encounterState?.combatants ?? [])
+        .filter((row: any) => row.kind === "enemy")
+        .flatMap((row: any) => {
+          const npcId = String(row?.npc_id ?? "").trim();
+          if (!npcId) return [];
+          const runtimeMeta = runtimeByNpcId.get(npcId) ?? {};
+          const runtimeTabs =
+            episodeId &&
+            runtimeMeta?.npc_tabs_by_episode &&
+            typeof runtimeMeta.npc_tabs_by_episode === "object" &&
+            runtimeMeta.npc_tabs_by_episode[episodeId]
+              ? (runtimeMeta.npc_tabs_by_episode[episodeId] as Record<string, any>)
+              : (runtimeMeta?.npc_tabs ?? {}) as Record<string, any>;
+          const actionIds = Array.isArray(runtimeTabs?.training?.action_ids) ? runtimeTabs.training.action_ids : [];
+          return actionIds.map((id: any) => String(id ?? "").trim()).filter(Boolean);
+        })
+    )
+  );
+  const npcActionsById = new Map<string, any>();
+  if (npcActionIdsForEncounter.length) {
+    const { data: npcActionRows } = await admin
+      .from("actions")
+      .select("id,name,summary,range_normal,range_max,uses_attack_roll,attack_bonus_override,damage_dice,damage_bonus,damage_type,save_ability,save_dc_override")
+      .in("id", npcActionIdsForEncounter);
+    for (const row of npcActionRows ?? []) {
+      const id = String((row as any)?.id ?? "").trim();
+      if (id) npcActionsById.set(id, row);
+    }
+  }
+  const npcActionsByNpcId = new Map<string, any[]>();
+  for (const row of encounterState?.combatants ?? []) {
+    const npcId = String((row as any)?.npc_id ?? "").trim();
+    if (!npcId || npcActionsByNpcId.has(npcId)) continue;
+    const runtimeMeta = runtimeByNpcId.get(npcId) ?? {};
+    const runtimeTabs =
+      episodeId &&
+      runtimeMeta?.npc_tabs_by_episode &&
+      typeof runtimeMeta.npc_tabs_by_episode === "object" &&
+      runtimeMeta.npc_tabs_by_episode[episodeId]
+        ? (runtimeMeta.npc_tabs_by_episode[episodeId] as Record<string, any>)
+        : (runtimeMeta?.npc_tabs ?? {}) as Record<string, any>;
+    const actionIds = Array.isArray(runtimeTabs?.training?.action_ids) ? runtimeTabs.training.action_ids : [];
+    npcActionsByNpcId.set(
+      npcId,
+      actionIds
+        .map((id: any) => npcActionsById.get(String(id ?? "").trim()))
+        .filter(Boolean)
+    );
+  }
   const carouselSceneIdx = presentedSceneIdx >= 0 ? presentedSceneIdx : scenes.length ? 0 : -1;
   const carouselScene = carouselSceneIdx >= 0 ? scenes[carouselSceneIdx] : null;
   const carouselSceneSteps = (carouselScene?.children ?? []).filter((c) => isPresentable(c));
@@ -454,7 +506,6 @@ export default async function DmScreenPage({
   const sessionPlayerIds = Array.from(
     new Set((joins ?? []).map((j: any) => String(j?.player_id ?? "").trim()).filter(Boolean))
   );
-  const admin = createAdminClient() ?? supabase;
   let sessionCharacterIds: string[] = [];
   const firstCharacterByUser = new Map<string, { id: string; name: string }>();
   if (sessionPlayerIds.length) {
@@ -2193,6 +2244,7 @@ export default async function DmScreenPage({
                                     name: String(c?.name ?? ""),
                                     defense: Number.isFinite(Number(c?.defense ?? NaN)) ? Number(c.defense) : null,
                                   }))}
+                                  actionOptions={npcActionsByNpcId.get(String(row.npc_id ?? "").trim()) ?? []}
                                 />
                               ) : null}
                             </div>

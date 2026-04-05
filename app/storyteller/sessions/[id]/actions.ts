@@ -486,7 +486,7 @@ export async function storytellerRollEncounterAction(input: {
   attackBonus?: number | null;
   damageDice?: string | null;
   damageBonus?: number | null;
-}): Promise<{ ok: boolean; hit?: boolean; targetName?: string | null; error?: string }> {
+}): Promise<{ ok: boolean; hit?: boolean; targetName?: string | null; attackText?: string | null; damageText?: string | null; error?: string }> {
   const sessionId = String(input.sessionId ?? "").trim();
   const combatantId = String(input.combatantId ?? "").trim();
   const actionName = String(input.actionName ?? "").trim() || "Action";
@@ -515,17 +515,20 @@ export async function storytellerRollEncounterAction(input: {
   const nextLog = [...(encounter.combat_log ?? [])];
   let didHit: boolean | undefined;
   let nextCombatants = [...encounter.combatants];
+  let attackText: string | null = null;
+  let damageText: string | null = null;
 
   if (attackBonus != null) {
     const d20 = Math.floor(Math.random() * 20) + 1;
     const total = d20 + attackBonus;
     const targetDefense = Number.isFinite(Number(targetCombatant?.defense ?? NaN)) ? Number(targetCombatant?.defense) : null;
     didHit = targetDefense == null ? undefined : total >= targetDefense;
+    attackText = `${actor.name} uses ${actionName}${targetName ? ` vs ${targetName}` : ""}: hit roll ${total} (d20 ${d20}${attackBonus ? ` + ${attackBonus}` : ""})${didHit === true ? " HIT" : didHit === false ? " MISS" : ""}.`;
     nextLog.push({
       id: randomUUID(),
       timestamp: new Date().toISOString(),
       type: "note",
-      text: `${actor.name} uses ${actionName}${targetName ? ` vs ${targetName}` : ""}: hit roll ${total} (d20 ${d20}${attackBonus ? ` + ${attackBonus}` : ""})${didHit === true ? " HIT" : didHit === false ? " MISS" : ""}.`,
+      text: attackText,
     });
   }
 
@@ -552,11 +555,12 @@ export async function storytellerRollEncounterAction(input: {
           : row
       );
     }
+    damageText = `${actor.name} uses ${actionName}${targetName ? ` vs ${targetName}` : ""}: damage ${total} from [${rolls.join(", ")}]${totalBonus ? ` ${totalBonus > 0 ? "+" : "-"} ${Math.abs(totalBonus)}` : ""}.`;
     nextLog.push({
       id: randomUUID(),
       timestamp: new Date().toISOString(),
       type: "damage",
-      text: `${actor.name} uses ${actionName}${targetName ? ` vs ${targetName}` : ""}: damage ${total} from [${rolls.join(", ")}]${totalBonus ? ` ${totalBonus > 0 ? "+" : "-"} ${Math.abs(totalBonus)}` : ""}.`,
+      text: damageText,
     });
   }
 
@@ -568,7 +572,7 @@ export async function storytellerRollEncounterAction(input: {
       updated_at: new Date().toISOString(),
     },
   });
-  return { ok: true, hit: didHit, targetName: targetName || null };
+  return { ok: true, hit: didHit, targetName: targetName || null, attackText, damageText };
 }
 
 function cleanIds(input: string[] | undefined) {
