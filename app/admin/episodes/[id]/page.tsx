@@ -1438,6 +1438,7 @@ export default async function AdminEpisodeEditPage({
                               blockTitle={b.title ?? "Encounter"}
                               imageUrl={b.image_url ?? null}
                               initialMeta={b.meta ?? {}}
+                              npcOptions={npcOptions as any[]}
                             />
                           ) : String(b.block_type).toLowerCase() === "npc" ? (
                             <NpcTabsEditorClient

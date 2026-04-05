@@ -4,11 +4,15 @@ export type EncounterGrid = {
   cell_size: number;
   offset_x: number;
   offset_y: number;
+  line_opacity: number;
+  feet_per_square: number;
 };
 
 export type EncounterEnemyDef = {
   id: string;
   name: string;
+  npc_id: string | null;
+  image_url: string | null;
   initiative_mod: number;
   hp_max: number;
   hp_current: number;
@@ -45,6 +49,8 @@ export type EncounterCombatant = {
   name: string;
   player_id: string | null;
   character_id: string | null;
+  npc_id: string | null;
+  image_url: string | null;
   initiative_mod: number;
   initiative_roll: number | null;
   initiative_total: number | null;
@@ -121,6 +127,8 @@ export function normalizeEncounterDefinition(input: unknown, fallbackTitle = "En
     .map((row: any, index) => ({
       id: String(row?.id ?? `enemy_${index + 1}`).trim() || `enemy_${index + 1}`,
       name: String(row?.name ?? `Enemy ${index + 1}`).trim() || `Enemy ${index + 1}`,
+      npc_id: String(row?.npc_id ?? "").trim() || null,
+      image_url: String(row?.image_url ?? "").trim() || null,
       initiative_mod: toInt(row?.initiative_mod, 0),
       hp_max: Math.max(1, toInt(row?.hp_max, 1)),
       hp_current: Math.max(0, toInt(row?.hp_current, toInt(row?.hp_max, 1))),
@@ -149,6 +157,8 @@ export function normalizeEncounterDefinition(input: unknown, fallbackTitle = "En
       cell_size: clamp(toInt(rawGrid.cell_size, 48), 16, 256),
       offset_x: toInt(rawGrid.offset_x, 0),
       offset_y: toInt(rawGrid.offset_y, 0),
+      line_opacity: clamp(Number(rawGrid.line_opacity ?? 0.35) || 0.35, 0.05, 1),
+      feet_per_square: clamp(toInt(rawGrid.feet_per_square, 5), 1, 100),
     },
     objectives: cleanStringArray(raw.objectives),
     player_slots: playerSlots,
@@ -182,6 +192,8 @@ export function normalizeEncounterState(input: unknown): EncounterState | null {
       name: String(row?.name ?? `Combatant ${index + 1}`).trim() || `Combatant ${index + 1}`,
       player_id: String(row?.player_id ?? "").trim() || null,
       character_id: String(row?.character_id ?? "").trim() || null,
+      npc_id: String(row?.npc_id ?? "").trim() || null,
+      image_url: String(row?.image_url ?? "").trim() || null,
       initiative_mod: toInt(row?.initiative_mod, 0),
       initiative_roll: Number.isFinite(Number(row?.initiative_roll ?? NaN)) ? toInt(row?.initiative_roll, 0) : null,
       initiative_total: Number.isFinite(Number(row?.initiative_total ?? NaN)) ? toInt(row?.initiative_total, 0) : null,
