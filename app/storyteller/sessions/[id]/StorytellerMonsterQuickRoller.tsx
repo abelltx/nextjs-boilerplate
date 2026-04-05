@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { storytellerRollEncounterAction } from "./actions";
 
 export default function StorytellerMonsterQuickRoller(props: {
@@ -18,13 +18,16 @@ export default function StorytellerMonsterQuickRoller(props: {
     damage_bonus?: number | null;
   }>;
 }) {
-  const normalizedActions = props.actionOptions?.length
-    ? props.actionOptions
-    : [{ id: "", name: props.combatantName ? `${props.combatantName} Attack` : "Attack" }];
+  const normalizedActions = useMemo(
+    () =>
+      props.actionOptions?.length
+        ? props.actionOptions
+        : [{ id: "", name: props.combatantName ? `${props.combatantName} Attack` : "Attack" }],
+    [props.actionOptions, props.combatantName]
+  );
   const initialAction = normalizedActions[0] ?? null;
   const [selectedActionId, setSelectedActionId] = useState(initialAction?.id ?? "");
   const selectedAction = normalizedActions.find((row) => row.id === selectedActionId) ?? initialAction ?? null;
-  const [actionName, setActionName] = useState(selectedAction?.name ?? "Attack");
   const [targetId, setTargetId] = useState("");
   const [attackBonus, setAttackBonus] = useState(selectedAction?.attack_bonus_override != null ? String(selectedAction.attack_bonus_override) : "");
   const [damageDice, setDamageDice] = useState(selectedAction?.damage_dice ?? "");
@@ -33,13 +36,21 @@ export default function StorytellerMonsterQuickRoller(props: {
   const [lastResult, setLastResult] = useState("");
   const [pending, startTransition] = useTransition();
 
+  useEffect(() => {
+    const nextAction = normalizedActions.find((row) => row.id === selectedActionId) ?? normalizedActions[0] ?? null;
+    setSelectedActionId(nextAction?.id ?? "");
+    setAttackBonus(nextAction?.attack_bonus_override != null ? String(nextAction.attack_bonus_override) : "");
+    setDamageDice(nextAction?.damage_dice ?? "");
+    setDamageBonus(nextAction?.damage_bonus != null ? String(nextAction.damage_bonus) : "");
+  }, [normalizedActions, selectedActionId]);
+
   function run(kind: "attack" | "damage" | "both") {
     startTransition(async () => {
       try {
         const result = await storytellerRollEncounterAction({
           sessionId: props.sessionId,
           combatantId: props.combatantId,
-          actionName,
+          actionName: selectedAction?.name ?? props.combatantName ?? "Attack",
           targetCombatantId: targetId || undefined,
           attackBonus: kind === "damage" ? null : attackBonus.trim() ? Number(attackBonus) : null,
           damageDice: kind === "attack" ? null : damageDice.trim() || null,
@@ -49,15 +60,16 @@ export default function StorytellerMonsterQuickRoller(props: {
         if (kind !== "damage") setLastHitSuccess(result.hit ?? null);
         setLastResult([result.attackText, result.damageText].filter(Boolean).join(" "));
       } catch (error: any) {
+        setLastResult("");
         alert(error?.message ?? "Could not roll monster action.");
       }
     });
   }
 
   return (
-    <div className="grid grid-cols-2 gap-2 rounded border bg-white p-2">
-      <div className="col-span-2 text-[11px] uppercase text-gray-500">Monster Ability</div>
-      <div className="col-span-2 flex flex-wrap gap-2">
+    <div className="space-y-2 rounded border bg-white p-2">
+      <div className="text-[11px] uppercase text-gray-500">Monster Ability</div>
+      <div className="flex flex-wrap gap-2">
         {normalizedActions.map((row) => {
           const active = selectedActionId === row.id;
           return (
@@ -66,7 +78,6 @@ export default function StorytellerMonsterQuickRoller(props: {
               type="button"
               onClick={() => {
                 setSelectedActionId(row.id);
-                setActionName(row.name ?? "Attack");
                 setAttackBonus(row.attack_bonus_override != null ? String(row.attack_bonus_override) : "");
                 setDamageDice(row.damage_dice ?? "");
                 setDamageBonus(row.damage_bonus != null ? String(row.damage_bonus) : "");
@@ -83,39 +94,19 @@ export default function StorytellerMonsterQuickRoller(props: {
           );
         })}
       </div>
-      <select value={targetId} onChange={(e) => setTargetId(e.currentTarget.value)} className="rounded border px-2 py-1 text-xs">
-        <option value="">Choose target</option>
-        {props.combatants.filter((row) => row.id !== props.combatantId).map((row) => (
+      <label className="block text-[11px] uppercase text-gray-500">
+        Target
+        <select value={targetId} onChange={(e) => setTargetId(e.currentTarget.value)} className="mt-1 w-full rounded border px-2 py-1 text-xs">
+          <option value="">Choose target</option>
+          {props.combatants.map((row) => (
           <option key={row.id} value={row.id}>
-            {row.name}{row.defense != null ? ` (AC ${row.defense})` : ""}
+            {row.name}{row.defense != null ? ` (AC ${row.defense})` : " (AC missing)"}
           </option>
-        ))}
-      </select>
-      <input
-        value={attackBonus}
-        readOnly={Boolean(selectedAction)}
-        onChange={(e) => setAttackBonus(e.currentTarget.value)}
-        className="rounded border px-2 py-1 text-xs read-only:bg-gray-100"
-        placeholder="Attack bonus"
-        inputMode="numeric"
-      />
-      <input
-        value={damageBonus}
-        readOnly={Boolean(selectedAction)}
-        onChange={(e) => setDamageBonus(e.currentTarget.value)}
-        className="rounded border px-2 py-1 text-xs read-only:bg-gray-100"
-        placeholder="Damage bonus"
-        inputMode="numeric"
-      />
-      <input
-        value={damageDice}
-        readOnly={Boolean(selectedAction)}
-        onChange={(e) => setDamageDice(e.currentTarget.value)}
-        className="col-span-2 rounded border px-2 py-1 text-xs read-only:bg-gray-100"
-        placeholder="Damage dice, e.g. 1d8 or 2d6+2"
-      />
+          ))}
+        </select>
+      </label>
       {selectedAction?.name ? (
-        <div className="col-span-2 rounded border bg-slate-50 px-2 py-2">
+        <div className="rounded border bg-slate-50 px-2 py-2">
           <div className="text-sm font-semibold text-slate-900">{selectedAction.name}</div>
           {selectedAction?.summary ? (
             <div className="mt-1 text-[11px] text-gray-600">{selectedAction.summary}</div>
@@ -127,38 +118,34 @@ export default function StorytellerMonsterQuickRoller(props: {
           </div>
         </div>
       ) : null}
-      {selectedAction?.summary && !selectedAction?.name ? (
-        <div className="col-span-2 text-[11px] text-gray-600">{selectedAction.summary}</div>
+      {!props.actionOptions?.length ? (
+        <div className="rounded border border-amber-200 bg-amber-50 px-2 py-2 text-[11px] text-amber-900">
+          No NPC abilities were resolved for this combatant yet. The encounter enemy may be missing its NPC link or action ids.
+        </div>
       ) : null}
-      <button
-        type="button"
-        className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60"
-        disabled={pending || !targetId}
-        onClick={() => run("attack")}
-      >
-        {pending ? "Rolling..." : "Roll Attack"}
-      </button>
-      <button
-        type="button"
-        className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60"
-        disabled={pending || !targetId || lastHitSuccess === false}
-        onClick={() => run("damage")}
-      >
-        {pending ? "Rolling..." : lastHitSuccess === false ? "Missed" : "Roll Damage"}
-      </button>
-      <button
-        type="button"
-        className="col-span-2 rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60"
-        disabled={pending}
-        onClick={() => run("both")}
-      >
-        {pending ? "Rolling..." : `Roll ${props.combatantName}`}
-      </button>
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60"
+          disabled={pending || !targetId || !attackBonus.trim()}
+          onClick={() => run("attack")}
+        >
+          {pending ? "Rolling..." : "Roll Attack"}
+        </button>
+        <button
+          type="button"
+          className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60"
+          disabled={pending || !targetId || !damageDice.trim() || lastHitSuccess !== true}
+          onClick={() => run("damage")}
+        >
+          {pending ? "Rolling..." : lastHitSuccess === false ? "Missed" : "Roll Damage"}
+        </button>
+      </div>
       {lastHitSuccess != null ? (
-        <div className="col-span-2 text-[11px] text-gray-600">{lastHitSuccess ? "Last attack hit." : "Last attack missed."}</div>
+        <div className="text-[11px] text-gray-600">{lastHitSuccess ? "Last attack hit." : "Last attack missed."}</div>
       ) : null}
       {lastResult ? (
-        <div className="col-span-2 rounded border border-emerald-200 bg-emerald-50 px-2 py-2 text-sm text-emerald-900">
+        <div className="rounded border border-emerald-200 bg-emerald-50 px-2 py-2 text-sm text-emerald-900">
           {lastResult}
         </div>
       ) : null}

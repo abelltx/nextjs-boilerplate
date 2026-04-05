@@ -211,6 +211,29 @@ function toBool(value: unknown, fallback = false) {
   return fallback;
 }
 
+function resolveRuntimeNpcTabs(runtimeMeta: any, episodeId: string | null, baseTabs?: Record<string, any> | null) {
+  const globalTabs =
+    runtimeMeta?.npc_tabs && typeof runtimeMeta.npc_tabs === "object"
+      ? (runtimeMeta.npc_tabs as Record<string, any>)
+      : {};
+  const scopedTabs =
+    episodeId &&
+    runtimeMeta?.npc_tabs_by_episode &&
+    typeof runtimeMeta.npc_tabs_by_episode === "object" &&
+    runtimeMeta.npc_tabs_by_episode[episodeId] &&
+    typeof runtimeMeta.npc_tabs_by_episode[episodeId] === "object"
+      ? (runtimeMeta.npc_tabs_by_episode[episodeId] as Record<string, any>)
+      : {};
+  return { ...((baseTabs && typeof baseTabs === "object" ? baseTabs : {}) as Record<string, any>), ...globalTabs, ...scopedTabs };
+}
+
+function resolveNpcTrainingActionIds(npcTabs: Record<string, any> | null | undefined) {
+  const training = npcTabs?.training ?? {};
+  const actionIds = Array.isArray(training?.action_ids) ? training.action_ids : [];
+  const trainingIds = Array.isArray(training?.training_ids) ? training.training_ids : [];
+  return Array.from(new Set([...actionIds, ...trainingIds].map((id: any) => String(id ?? "").trim()).filter(Boolean)));
+}
+
 export default async function DmScreenPage({
   params,
 }: {
@@ -301,13 +324,7 @@ export default async function DmScreenPage({
       const npcId = npcIdByBlockId.get(String(b.id)) ?? "";
       if (!npcId) return b;
       const runtimeMeta = runtimeByNpcId.get(npcId) ?? {};
-      const runtimeTabs =
-        episodeId &&
-        runtimeMeta?.npc_tabs_by_episode &&
-        typeof runtimeMeta.npc_tabs_by_episode === "object" &&
-        runtimeMeta.npc_tabs_by_episode[episodeId]
-          ? (runtimeMeta.npc_tabs_by_episode[episodeId] as Record<string, any>)
-          : (runtimeMeta?.npc_tabs ?? {}) as Record<string, any>;
+      const runtimeTabs = resolveRuntimeNpcTabs(runtimeMeta, episodeId, ((b.meta ?? {}) as Record<string, any>)?.npc_tabs ?? {});
       const nextMeta = { ...((b.meta ?? {}) as Record<string, any>), npc_tabs: runtimeTabs };
       return { ...b, meta: nextMeta };
     });
@@ -413,15 +430,9 @@ export default async function DmScreenPage({
           const npcId = String(row?.npc_id ?? "").trim();
           if (!npcId) return [];
           const runtimeMeta = runtimeByNpcId.get(npcId) ?? {};
-          const runtimeTabs =
-            episodeId &&
-            runtimeMeta?.npc_tabs_by_episode &&
-            typeof runtimeMeta.npc_tabs_by_episode === "object" &&
-            runtimeMeta.npc_tabs_by_episode[episodeId]
-              ? (runtimeMeta.npc_tabs_by_episode[episodeId] as Record<string, any>)
-              : (runtimeMeta?.npc_tabs ?? {}) as Record<string, any>;
-          const actionIds = Array.isArray(runtimeTabs?.training?.action_ids) ? runtimeTabs.training.action_ids : [];
-          return actionIds.map((id: any) => String(id ?? "").trim()).filter(Boolean);
+          const blockTabs =
+            blocks.find((b) => String((b.meta as any)?.npc_binding?.npc_id ?? (b.meta as any)?.npc_library?.npc_id ?? "").trim() === npcId)?.meta?.npc_tabs ?? {};
+          return resolveNpcTrainingActionIds(resolveRuntimeNpcTabs(runtimeMeta, episodeId, blockTabs)).map((id) => String(id ?? "").trim()).filter(Boolean);
         })
     )
   );
@@ -441,14 +452,9 @@ export default async function DmScreenPage({
     const npcId = String((row as any)?.npc_id ?? "").trim();
     if (!npcId || npcActionsByNpcId.has(npcId)) continue;
     const runtimeMeta = runtimeByNpcId.get(npcId) ?? {};
-    const runtimeTabs =
-      episodeId &&
-      runtimeMeta?.npc_tabs_by_episode &&
-      typeof runtimeMeta.npc_tabs_by_episode === "object" &&
-      runtimeMeta.npc_tabs_by_episode[episodeId]
-        ? (runtimeMeta.npc_tabs_by_episode[episodeId] as Record<string, any>)
-        : (runtimeMeta?.npc_tabs ?? {}) as Record<string, any>;
-    const actionIds = Array.isArray(runtimeTabs?.training?.action_ids) ? runtimeTabs.training.action_ids : [];
+    const blockTabs =
+      blocks.find((b) => String((b.meta as any)?.npc_binding?.npc_id ?? (b.meta as any)?.npc_library?.npc_id ?? "").trim() === npcId)?.meta?.npc_tabs ?? {};
+    const actionIds = resolveNpcTrainingActionIds(resolveRuntimeNpcTabs(runtimeMeta, episodeId, blockTabs));
     npcActionsByNpcId.set(
       npcId,
       actionIds
@@ -1589,6 +1595,9 @@ export default async function DmScreenPage({
                             <div className="text-xs text-gray-600">
                               HP {row.hp_current ?? "?"}/{row.hp_max ?? "?"} | AC {row.defense ?? "?"}
                             </div>
+                            {row.defense == null ? (
+                              <div className="mt-1 text-[11px] font-medium text-red-700">Set this NPC AC before rolling attacks against it.</div>
+                            ) : null}
                             {Array.isArray(row.conditions) && row.conditions.length ? (
                               <div className="mt-1 text-[11px] text-gray-600">{row.conditions.join(", ")}</div>
                             ) : null}
@@ -1610,60 +1619,63 @@ export default async function DmScreenPage({
                           actionOptions={npcActionsByNpcId.get(String(row.npc_id ?? "").trim()) ?? []}
                         />
 
-                        <div className="grid gap-2 md:grid-cols-2">
-                          <form
-                            className="grid grid-cols-2 gap-2 rounded border bg-gray-50 p-2"
-                            action={async (fd) => {
-                              "use server";
-                              await storytellerMoveEncounterCombatant({
-                                sessionId: session.id,
-                                combatantId: String(fd.get("combatant_id") ?? ""),
-                                x: Number(fd.get("x") ?? 0),
-                                y: Number(fd.get("y") ?? 0),
-                              });
-                              redirect(`/storyteller/sessions/${session.id}`);
-                            }}
-                          >
-                            <input type="hidden" name="combatant_id" value={row.id} />
-                            <div className="col-span-2 text-[11px] uppercase text-gray-500">Move</div>
-                            <input name="x" defaultValue={row.x ?? 0} className="rounded border px-2 py-1 text-xs" placeholder="X %" />
-                            <input name="y" defaultValue={row.y ?? 0} className="rounded border px-2 py-1 text-xs" placeholder="Y %" />
-                            <button className="col-span-2 rounded border px-2 py-1 text-xs">Move Token</button>
-                          </form>
+                        <details className="rounded border bg-gray-50 p-2">
+                          <summary className="cursor-pointer text-[11px] uppercase text-gray-500">Adjust NPC</summary>
+                          <div className="mt-2 grid gap-2 md:grid-cols-2">
+                            <form
+                              className="grid grid-cols-2 gap-2 rounded border bg-white p-2"
+                              action={async (fd) => {
+                                "use server";
+                                await storytellerMoveEncounterCombatant({
+                                  sessionId: session.id,
+                                  combatantId: String(fd.get("combatant_id") ?? ""),
+                                  x: Number(fd.get("x") ?? 0),
+                                  y: Number(fd.get("y") ?? 0),
+                                });
+                                redirect(`/storyteller/sessions/${session.id}`);
+                              }}
+                            >
+                              <input type="hidden" name="combatant_id" value={row.id} />
+                              <div className="col-span-2 text-[11px] uppercase text-gray-500">Move</div>
+                              <input name="x" defaultValue={row.x ?? 0} className="rounded border px-2 py-1 text-xs" placeholder="X %" />
+                              <input name="y" defaultValue={row.y ?? 0} className="rounded border px-2 py-1 text-xs" placeholder="Y %" />
+                              <button className="col-span-2 rounded border px-2 py-1 text-xs">Move Token</button>
+                            </form>
 
-                          <form
-                            className="grid grid-cols-2 gap-2 rounded border bg-gray-50 p-2"
-                            action={async (fd) => {
-                              "use server";
-                              const conditions = String(fd.get("conditions") ?? "")
-                                .split(",")
-                                .map((v) => v.trim())
-                                .filter(Boolean);
-                              await storytellerUpdateEncounterCombatant({
-                                sessionId: session.id,
-                                combatantId: String(fd.get("combatant_id") ?? ""),
-                                hpCurrent: Number(fd.get("hp_current") ?? 0),
-                                defense: String(fd.get("defense") ?? "").trim() ? Number(fd.get("defense")) : null,
-                                conditions,
-                                note: String(fd.get("note") ?? ""),
-                              });
-                              redirect(`/storyteller/sessions/${session.id}`);
-                            }}
-                          >
-                            <input type="hidden" name="combatant_id" value={row.id} />
-                            <div className="col-span-2 text-[11px] uppercase text-gray-500">Stats</div>
-                            <input name="hp_current" defaultValue={row.hp_current ?? ""} className="rounded border px-2 py-1 text-xs" placeholder="HP current" />
-                            <input name="defense" defaultValue={row.defense ?? ""} className="rounded border px-2 py-1 text-xs" placeholder="Defense" />
-                            <input
-                              name="conditions"
-                              defaultValue={Array.isArray(row.conditions) ? row.conditions.join(", ") : ""}
-                              className="col-span-2 rounded border px-2 py-1 text-xs"
-                              placeholder="Conditions, comma separated"
-                            />
-                            <input name="note" className="col-span-2 rounded border px-2 py-1 text-xs" placeholder="Optional combat note" />
-                            <button className="col-span-2 rounded border px-2 py-1 text-xs">Update NPC</button>
-                          </form>
-                        </div>
+                            <form
+                              className="grid grid-cols-2 gap-2 rounded border bg-white p-2"
+                              action={async (fd) => {
+                                "use server";
+                                const conditions = String(fd.get("conditions") ?? "")
+                                  .split(",")
+                                  .map((v) => v.trim())
+                                  .filter(Boolean);
+                                await storytellerUpdateEncounterCombatant({
+                                  sessionId: session.id,
+                                  combatantId: String(fd.get("combatant_id") ?? ""),
+                                  hpCurrent: Number(fd.get("hp_current") ?? 0),
+                                  defense: String(fd.get("defense") ?? "").trim() ? Number(fd.get("defense")) : null,
+                                  conditions,
+                                  note: String(fd.get("note") ?? ""),
+                                });
+                                redirect(`/storyteller/sessions/${session.id}`);
+                              }}
+                            >
+                              <input type="hidden" name="combatant_id" value={row.id} />
+                              <div className="col-span-2 text-[11px] uppercase text-gray-500">Stats</div>
+                              <input name="hp_current" defaultValue={row.hp_current ?? ""} className="rounded border px-2 py-1 text-xs" placeholder="HP current" />
+                              <input name="defense" defaultValue={row.defense ?? ""} className="rounded border px-2 py-1 text-xs" placeholder="Defense" />
+                              <input
+                                name="conditions"
+                                defaultValue={Array.isArray(row.conditions) ? row.conditions.join(", ") : ""}
+                                className="col-span-2 rounded border px-2 py-1 text-xs"
+                                placeholder="Conditions, comma separated"
+                              />
+                              <input name="note" className="col-span-2 rounded border px-2 py-1 text-xs" placeholder="Optional combat note" />
+                              <button className="col-span-2 rounded border px-2 py-1 text-xs">Update NPC</button>
+                            </form>
+                          </div>
+                        </details>
                       </div>
                     ))}
                   </div>

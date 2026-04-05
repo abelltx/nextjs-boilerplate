@@ -512,6 +512,7 @@ export async function storytellerRollEncounterAction(input: {
   const attackBonus = Number.isFinite(Number(input.attackBonus ?? NaN)) ? Math.floor(Number(input.attackBonus)) : null;
   const damageDice = String(input.damageDice ?? "").trim().toLowerCase();
   const damageBonus = Number.isFinite(Number(input.damageBonus ?? NaN)) ? Math.floor(Number(input.damageBonus)) : 0;
+  if (!targetCombatant && !targetName) return { ok: false, error: "Choose a target first." };
   const nextLog = [...(encounter.combat_log ?? [])];
   let didHit: boolean | undefined;
   let nextCombatants = [...encounter.combatants];
@@ -522,6 +523,9 @@ export async function storytellerRollEncounterAction(input: {
     const d20 = Math.floor(Math.random() * 20) + 1;
     const total = d20 + attackBonus;
     const targetDefense = Number.isFinite(Number(targetCombatant?.defense ?? NaN)) ? Number(targetCombatant?.defense) : null;
+    if (targetCombatant && targetDefense == null) {
+      return { ok: false, error: `${targetCombatant.name} has no defense/AC set yet.` };
+    }
     didHit = targetDefense == null ? undefined : total >= targetDefense;
     attackText = `${actor.name} uses ${actionName}${targetName ? ` vs ${targetName}` : ""}: hit roll ${total} (d20 ${d20}${attackBonus ? ` + ${attackBonus}` : ""})${didHit === true ? " HIT" : didHit === false ? " MISS" : ""}.`;
     nextLog.push({
@@ -533,6 +537,9 @@ export async function storytellerRollEncounterAction(input: {
   }
 
   if (damageDice) {
+    if (attackBonus == null && targetCombatant && !Number.isFinite(Number(targetCombatant?.defense ?? NaN)) && !String(input.targetName ?? "").trim()) {
+      return { ok: false, error: `${targetCombatant.name} has no defense/AC set yet.` };
+    }
     const match = damageDice.match(/^(\d*)d(\d+)([+-]\d+)?$/i);
     if (!match) return { ok: false, error: "Damage dice must look like 1d8 or 2d6+3." };
     const count = Math.max(1, Number(match[1] || 1));
@@ -548,20 +555,31 @@ export async function storytellerRollEncounterAction(input: {
         type: "note",
         text: `${actor.name} cannot apply ${actionName} damage because the attack missed.`,
       });
+      damageText = `${actor.name} cannot apply ${actionName} damage because the attack missed.`;
+    } else if (attackBonus != null && didHit == null) {
+      return { ok: false, error: "Roll attack first." };
     } else if (targetCombatant && Number.isFinite(Number(targetCombatant.hp_current ?? NaN))) {
       nextCombatants = encounter.combatants.map((row) =>
         row.id === targetCombatant.id
           ? { ...row, hp_current: Math.max(0, Number(row.hp_current ?? 0) - total) }
           : row
       );
+      damageText = `${actor.name} uses ${actionName}${targetName ? ` vs ${targetName}` : ""}: damage ${total} from [${rolls.join(", ")}]${totalBonus ? ` ${totalBonus > 0 ? "+" : "-"} ${Math.abs(totalBonus)}` : ""}.`;
+      nextLog.push({
+        id: randomUUID(),
+        timestamp: new Date().toISOString(),
+        type: "damage",
+        text: damageText,
+      });
+    } else {
+      damageText = `${actor.name} uses ${actionName}${targetName ? ` on ${targetName}` : ""}: damage ${total}.`;
+      nextLog.push({
+        id: randomUUID(),
+        timestamp: new Date().toISOString(),
+        type: "damage",
+        text: damageText,
+      });
     }
-    damageText = `${actor.name} uses ${actionName}${targetName ? ` vs ${targetName}` : ""}: damage ${total} from [${rolls.join(", ")}]${totalBonus ? ` ${totalBonus > 0 ? "+" : "-"} ${Math.abs(totalBonus)}` : ""}.`;
-    nextLog.push({
-      id: randomUUID(),
-      timestamp: new Date().toISOString(),
-      type: "damage",
-      text: damageText,
-    });
   }
 
   await updateState(sessionId, {

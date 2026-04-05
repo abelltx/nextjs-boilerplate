@@ -2270,7 +2270,20 @@ function ActionListPanel(props: {
     const chosen = d20b == null ? d20 : Math.max(d20, d20b);
     const total = chosen + (Number.isFinite(bonus) ? bonus : 0);
     const targetDefense = Number.isFinite(Number(target?.defense ?? NaN)) ? Number(target.defense) : null;
-    const hitSuccess = targetDefense == null ? true : total >= targetDefense;
+    if (props.combatMode && targetDefense == null) {
+      alert(`${targetLabel || "That target"} has no defense/AC set yet.`);
+      setRolls((prev) => ({
+        ...prev,
+        [action.id]: {
+          ...(prev[action.id] ?? {}),
+          hit: `${targetLabel || "Target"} has no defense/AC set yet.`,
+          hitSuccess: null,
+          targetId,
+        },
+      }));
+      return;
+    }
+    const hitSuccess = targetDefense == null ? null : total >= targetDefense;
     setRolls((prev) => ({
       ...prev,
       [action.id]: {
@@ -2317,7 +2330,7 @@ function ActionListPanel(props: {
       alert("That attack missed. You cannot roll damage for it.");
       return;
     }
-    if (props.combatMode && actionRoll.hitSuccess == null && !HEAL_TYPES.has(String(action.damage_type ?? "").toLowerCase())) {
+    if (props.combatMode && actionRoll.hitSuccess !== true && !HEAL_TYPES.has(String(action.damage_type ?? "").toLowerCase())) {
       alert("Roll to hit first.");
       return;
     }
@@ -2568,7 +2581,8 @@ function ActionListPanel(props: {
                       ].join(" ")}
                       disabled={otherActionLocked}
                       onClick={async () => {
-                        if (!thisActionAlreadyUsed) {
+                        const needsOwnActionSpend = a.uses_attack_roll === false;
+                        if (needsOwnActionSpend && !thisActionAlreadyUsed) {
                           const ok = await consumeTurnAction(a);
                           if (!ok) return;
                         }
