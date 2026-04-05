@@ -474,6 +474,75 @@ export async function storytellerAddEncounterLogNote(input: {
   });
 }
 
+export async function storytellerRollEncounterAction(input: {
+  sessionId: string;
+  combatantId: string;
+  actionName: string;
+  targetName?: string | null;
+  attackBonus?: number | null;
+  damageDice?: string | null;
+  damageBonus?: number | null;
+}) {
+  const sessionId = String(input.sessionId ?? "").trim();
+  const combatantId = String(input.combatantId ?? "").trim();
+  const actionName = String(input.actionName ?? "").trim() || "Action";
+  if (!isUuid(sessionId) || !combatantId) throw new Error("Missing combat action details.");
+
+  const supabase = await createClient();
+  const { data: st, error: stErr } = await supabase
+    .from("session_state")
+    .select("encounter_state")
+    .eq("session_id", sessionId)
+    .maybeSingle();
+  if (stErr) throw new Error(stErr.message);
+  const encounter = normalizeEncounterState((st as any)?.encounter_state);
+  if (!encounter) throw new Error("Encounter not active.");
+  const actor = encounter.combatants.find((row) => row.id === combatantId);
+  if (!actor) throw new Error("Combatant not found.");
+
+  const targetName = String(input.targetName ?? "").trim();
+  const attackBonus = Number.isFinite(Number(input.attackBonus ?? NaN)) ? Math.floor(Number(input.attackBonus)) : null;
+  const damageDice = String(input.damageDice ?? "").trim().toLowerCase();
+  const damageBonus = Number.isFinite(Number(input.damageBonus ?? NaN)) ? Math.floor(Number(input.damageBonus)) : 0;
+  const nextLog = [...(encounter.combat_log ?? [])];
+
+  if (attackBonus != null) {
+    const d20 = Math.floor(Math.random() * 20) + 1;
+    const total = d20 + attackBonus;
+    nextLog.push({
+      id: randomUUID(),
+      timestamp: new Date().toISOString(),
+      type: "note",
+      text: `${actor.name} uses ${actionName}${targetName ? ` vs ${targetName}` : ""}: hit roll ${total} (d20 ${d20}${attackBonus ? ` + ${attackBonus}` : ""}).`,
+    });
+  }
+
+  if (damageDice) {
+    const match = damageDice.match(/^(\d*)d(\d+)([+-]\d+)?$/i);
+    if (!match) throw new Error("Damage dice must look like 1d8 or 2d6+3.");
+    const count = Math.max(1, Number(match[1] || 1));
+    const sides = Math.max(2, Number(match[2] || 2));
+    const inlineBonus = Number(match[3] || 0);
+    const rolls = Array.from({ length: count }, () => Math.floor(Math.random() * sides) + 1);
+    const total = rolls.reduce((sum, n) => sum + n, 0) + inlineBonus + damageBonus;
+    const totalBonus = inlineBonus + damageBonus;
+    nextLog.push({
+      id: randomUUID(),
+      timestamp: new Date().toISOString(),
+      type: "damage",
+      text: `${actor.name} uses ${actionName}${targetName ? ` vs ${targetName}` : ""}: damage ${total} from [${rolls.join(", ")}]${totalBonus ? ` ${totalBonus > 0 ? "+" : "-"} ${Math.abs(totalBonus)}` : ""}.`,
+    });
+  }
+
+  await updateState(sessionId, {
+    encounter_state: {
+      ...encounter,
+      combat_log: nextLog.slice(-60),
+      updated_at: new Date().toISOString(),
+    },
+  });
+}
+
 function cleanIds(input: string[] | undefined) {
   return Array.from(
     new Set(

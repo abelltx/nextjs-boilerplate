@@ -23,6 +23,7 @@ import {
   storytellerMoveEncounterCombatant,
   storytellerUpdateEncounterCombatant,
   storytellerAddEncounterLogNote,
+  storytellerRollEncounterAction,
 } from "./actions";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
@@ -39,6 +40,7 @@ import PlayersPassivePanel from "./PlayersPassivePanel";
 import { parsePassiveEffectNotes } from "@/lib/passiveEffectNotes";
 import QuestProgressAutoRefresh from "./QuestProgressAutoRefresh";
 import { normalizeEncounterState } from "@/lib/encounter";
+import StorytellerMonsterQuickRoller from "./StorytellerMonsterQuickRoller";
 
 
 
@@ -2127,9 +2129,9 @@ export default async function DmScreenPage({
                       <div className="rounded border bg-white p-2 space-y-3">
                         <div className="text-[11px] uppercase text-gray-500">Combat Controls</div>
                         {encounterState.combatants.map((row) => (
-                          <details key={`ctrl-${row.id}`} className="rounded border bg-gray-50 p-2">
+                          <details key={`ctrl-${row.id}`} className="rounded border bg-gray-50 p-2" open={row.kind === "enemy"}>
                             <summary className="cursor-pointer text-xs font-semibold">
-                              {row.name} {row.hp_current != null && row.hp_max != null ? `| ${row.hp_current}/${row.hp_max} HP` : ""}
+                              {row.name} {row.kind === "enemy" ? "(NPC)" : "(Player)"} {row.hp_current != null && row.hp_max != null ? `| ${row.hp_current}/${row.hp_max} HP` : ""}
                             </summary>
                             <div className="mt-2 grid gap-2">
                               <form
@@ -2181,6 +2183,13 @@ export default async function DmScreenPage({
                                 <input name="note" className="col-span-2 rounded border px-2 py-1 text-xs" placeholder="Optional combat note" />
                                 <button className="col-span-2 rounded border px-2 py-1 text-xs">Update Combatant</button>
                               </form>
+                              {row.kind === "enemy" ? (
+                                <StorytellerMonsterQuickRoller
+                                  sessionId={session.id}
+                                  combatantId={String(row.id)}
+                                  combatantName={String(row.name ?? "Monster")}
+                                />
+                              ) : null}
                             </div>
                           </details>
                         ))}
