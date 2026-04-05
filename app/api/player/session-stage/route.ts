@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getProfile } from "@/lib/auth/getProfile";
 import { supabaseServer } from "@/lib/supabase/server";
 import { extractMapMarkers } from "@/lib/episodeRuntime";
+import { normalizeEncounterState } from "@/lib/encounter";
 
 function isUuid(value: string) {
   const v = value.trim();
@@ -24,6 +25,17 @@ function isMissingRelationError(err: any, relation: string) {
     msg.includes(`relation "public.${relation}" does not exist`) ||
     msg.includes("does not exist")
   );
+}
+
+function getNpcEncounterFallbacks(npc: any) {
+  const sb = (npc?.stat_block ?? {}) as Record<string, any>;
+  const hp = Number(sb?.hp ?? sb?.derived?.hp_max ?? NaN);
+  const defense = Number(sb?.ac ?? sb?.defense ?? sb?.derived?.defense ?? NaN);
+  return {
+    hp_max: Number.isFinite(hp) ? hp : null,
+    hp_current: Number.isFinite(hp) ? hp : null,
+    defense: Number.isFinite(defense) ? defense : null,
+  };
 }
 
 async function resolveNpcBlock(
@@ -184,6 +196,51 @@ export async function GET(req: Request) {
     .single();
 
   if (stErr) return NextResponse.json({ ok: false, error: stErr.message }, { status: 500 });
+  const encounterState = normalizeEncounterState((state as any)?.encounter_state);
+  if (encounterState?.combatants?.length) {
+    const npcIds = Array.from(
+      new Set(
+        encounterState.combatants
+          .map((row) => String(row?.npc_id ?? "").trim())
+          .filter(Boolean)
+      )
+    );
+    if (npcIds.length) {
+      const { data: npcRows } = await supabase
+        .from("npcs")
+        .select("id,stat_block,image_base_path,image_updated_at")
+        .in("id", npcIds);
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+      const npcById = new Map<string, any>(
+        (npcRows ?? []).map((row: any) => [
+          String(row?.id ?? "").trim(),
+          {
+            ...row,
+            portrait_url:
+              row?.image_base_path && supabaseUrl
+                ? buildNpcImageUrl(supabaseUrl, String(row.id), "portrait.webp", row.image_updated_at ?? null)
+                : null,
+          },
+        ])
+      );
+      (state as any).encounter_state = {
+        ...encounterState,
+        combatants: encounterState.combatants.map((row) => {
+          const npcId = String(row?.npc_id ?? "").trim();
+          if (!npcId) return row;
+          const npc = npcById.get(npcId);
+          const fallback = getNpcEncounterFallbacks(npc);
+          return {
+            ...row,
+            image_url: row.image_url ?? npc?.portrait_url ?? null,
+            hp_max: row.hp_max ?? fallback.hp_max,
+            hp_current: row.hp_current ?? fallback.hp_current,
+            defense: row.defense ?? fallback.defense,
+          };
+        }),
+      };
+    }
+  }
 
   // Players list (for DM roll-entry UI)
   const { data: players } = await supabase

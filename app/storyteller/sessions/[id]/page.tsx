@@ -211,6 +211,17 @@ function toBool(value: unknown, fallback = false) {
   return fallback;
 }
 
+function buildNpcImageUrl(
+  supabaseUrl: string,
+  npcId: string,
+  file: "thumb.webp" | "small.webp" | "medium.webp" | "portrait.webp" | "full.webp",
+  imageUpdatedAt?: string | null
+) {
+  if (!supabaseUrl || !npcId) return null;
+  const version = imageUpdatedAt ? `?v=${encodeURIComponent(imageUpdatedAt)}` : "";
+  return `${supabaseUrl}/storage/v1/object/public/npc-images/${npcId}/${file}${version}`;
+}
+
 function resolveRuntimeNpcTabs(runtimeMeta: any, episodeId: string | null, baseTabs?: Record<string, any> | null) {
   const globalTabs =
     runtimeMeta?.npc_tabs && typeof runtimeMeta.npc_tabs === "object"
@@ -232,6 +243,17 @@ function resolveNpcTrainingActionIds(npcTabs: Record<string, any> | null | undef
   const actionIds = Array.isArray(training?.action_ids) ? training.action_ids : [];
   const trainingIds = Array.isArray(training?.training_ids) ? training.training_ids : [];
   return Array.from(new Set([...actionIds, ...trainingIds].map((id: any) => String(id ?? "").trim()).filter(Boolean)));
+}
+
+function getNpcEncounterFallbacks(npc: any) {
+  const sb = (npc?.stat_block ?? {}) as Record<string, any>;
+  const hp = Number(sb?.hp ?? sb?.derived?.hp_max ?? NaN);
+  const defense = Number(sb?.ac ?? sb?.defense ?? sb?.derived?.defense ?? NaN);
+  return {
+    hp_max: Number.isFinite(hp) ? hp : null,
+    hp_current: Number.isFinite(hp) ? hp : null,
+    defense: Number.isFinite(defense) ? defense : null,
+  };
 }
 
 export default async function DmScreenPage({
@@ -422,9 +444,53 @@ export default async function DmScreenPage({
   const previewMapMarkers = previewIsMap ? extractMapMarkers(presentedBlock?.meta) : previewIsHex ? extractHexMarkers(presentedBlock?.meta) : [];
   const encounterState = normalizeEncounterState((state as any)?.encounter_state);
   const admin = createAdminClient() ?? supabase;
-  const npcActionIdsForEncounter = Array.from(
+  const encounterNpcIds = Array.from(
     new Set(
       (encounterState?.combatants ?? [])
+        .map((row: any) => String(row?.npc_id ?? "").trim())
+        .filter(Boolean)
+    )
+  );
+  const npcRowsById = new Map<string, any>();
+  if (encounterNpcIds.length) {
+    const { data: npcRows } = await admin
+      .from("npcs")
+      .select("id,name,stat_block,image_base_path,image_updated_at")
+      .in("id", encounterNpcIds);
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+    for (const row of npcRows ?? []) {
+      const npcId = String((row as any)?.id ?? "").trim();
+      if (!npcId) continue;
+      npcRowsById.set(npcId, {
+        ...row,
+        portrait_url:
+          (row as any)?.image_base_path && supabaseUrl
+            ? buildNpcImageUrl(supabaseUrl, npcId, "portrait.webp", (row as any)?.image_updated_at ?? null)
+            : null,
+      });
+    }
+  }
+  const hydratedEncounterState = encounterState
+    ? {
+        ...encounterState,
+        combatants: (encounterState.combatants ?? []).map((row: any) => {
+          const npcId = String(row?.npc_id ?? "").trim();
+          if (!npcId) return row;
+          const npc = npcRowsById.get(npcId);
+          const fallback = getNpcEncounterFallbacks(npc);
+          return {
+            ...row,
+            image_url: row.image_url ?? npc?.portrait_url ?? null,
+            hp_max: row.hp_max ?? fallback.hp_max,
+            hp_current: row.hp_current ?? fallback.hp_current,
+            defense: row.defense ?? fallback.defense,
+          };
+        }),
+      }
+    : null;
+  const npcActionIdsForEncounter = Array.from(
+    new Set(
+      (hydratedEncounterState?.combatants ?? [])
         .filter((row: any) => row.kind === "enemy")
         .flatMap((row: any) => {
           const npcId = String(row?.npc_id ?? "").trim();
@@ -448,7 +514,7 @@ export default async function DmScreenPage({
     }
   }
   const npcActionsByNpcId = new Map<string, any[]>();
-  for (const row of encounterState?.combatants ?? []) {
+  for (const row of hydratedEncounterState?.combatants ?? []) {
     const npcId = String((row as any)?.npc_id ?? "").trim();
     if (!npcId || npcActionsByNpcId.has(npcId)) continue;
     const runtimeMeta = runtimeByNpcId.get(npcId) ?? {};
@@ -470,11 +536,11 @@ export default async function DmScreenPage({
   const carouselNextSceneFirst =
     carouselNextScene?.children?.find((c) => isPresentable(c)) ?? null;
   const activeEncounterForPresentedBlock = Boolean(
-    encounterState && presentedBlock && encounterState.encounter_block_id === String(presentedBlock.id) && encounterState.status !== "ended"
+    hydratedEncounterState && presentedBlock && hydratedEncounterState.encounter_block_id === String(presentedBlock.id) && hydratedEncounterState.status !== "ended"
   );
-  const encounterCurrentTurnId = String(encounterState?.combatants?.[encounterState?.turn_index ?? 0]?.id ?? "");
-  const encounterEnemies = (encounterState?.combatants ?? []).filter((row: any) => row.kind === "enemy");
-  const encounterPlayersOrdered = (encounterState?.combatants ?? []).filter((row: any) => row.kind === "player");
+  const encounterCurrentTurnId = String(hydratedEncounterState?.combatants?.[hydratedEncounterState?.turn_index ?? 0]?.id ?? "");
+  const encounterEnemies = (hydratedEncounterState?.combatants ?? []).filter((row: any) => row.kind === "enemy");
+  const encounterPlayersOrdered = (hydratedEncounterState?.combatants ?? []).filter((row: any) => row.kind === "player");
   const storytellerGuidance = (() => {
     if (!presentedBlock) return { script: "", notes: "" };
     const meta = (presentedBlock.meta ?? {}) as Record<string, any>;
@@ -1536,15 +1602,15 @@ export default async function DmScreenPage({
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <div className="text-[11px] uppercase text-gray-500">Encounter Director</div>
-                    <div className="text-sm font-semibold">{encounterState?.title ?? presentedBlock?.title ?? "Encounter"}</div>
+                    <div className="text-sm font-semibold">{hydratedEncounterState?.title ?? presentedBlock?.title ?? "Encounter"}</div>
                     <div className="text-xs text-gray-600">
-                      {encounterState?.status === "initiative_pending"
+                      {hydratedEncounterState?.status === "initiative_pending"
                         ? "Initiative pending"
-                        : `Round ${encounterState?.round ?? 1} | Current turn: ${String(encounterState?.combatants?.[encounterState?.turn_index ?? 0]?.name ?? "n/a")}`}
+                        : `Round ${hydratedEncounterState?.round ?? 1} | Current turn: ${String(hydratedEncounterState?.combatants?.[hydratedEncounterState?.turn_index ?? 0]?.name ?? "n/a")}`}
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {encounterState?.status === "initiative_pending" ? (
+                    {hydratedEncounterState?.status === "initiative_pending" ? (
                       <form
                         action={async () => {
                           "use server";
@@ -1555,7 +1621,7 @@ export default async function DmScreenPage({
                         <button className="rounded border px-2 py-1 text-xs">Lock Initiative</button>
                       </form>
                     ) : null}
-                    {encounterState?.status === "active" ? (
+                    {hydratedEncounterState?.status === "active" ? (
                       <form
                         action={async () => {
                           "use server";
@@ -1611,7 +1677,7 @@ export default async function DmScreenPage({
                           sessionId={session.id}
                           combatantId={String(row.id)}
                           combatantName={String(row.name ?? "Monster")}
-                          combatants={(encounterState?.combatants ?? []).map((c: any) => ({
+                          combatants={(hydratedEncounterState?.combatants ?? []).map((c: any) => ({
                             id: String(c?.id ?? ""),
                             name: String(c?.name ?? ""),
                             defense: Number.isFinite(Number(c?.defense ?? NaN)) ? Number(c.defense) : null,
@@ -1621,27 +1687,7 @@ export default async function DmScreenPage({
 
                         <details className="rounded border bg-gray-50 p-2">
                           <summary className="cursor-pointer text-[11px] uppercase text-gray-500">Adjust NPC</summary>
-                          <div className="mt-2 grid gap-2 md:grid-cols-2">
-                            <form
-                              className="grid grid-cols-2 gap-2 rounded border bg-white p-2"
-                              action={async (fd) => {
-                                "use server";
-                                await storytellerMoveEncounterCombatant({
-                                  sessionId: session.id,
-                                  combatantId: String(fd.get("combatant_id") ?? ""),
-                                  x: Number(fd.get("x") ?? 0),
-                                  y: Number(fd.get("y") ?? 0),
-                                });
-                                redirect(`/storyteller/sessions/${session.id}`);
-                              }}
-                            >
-                              <input type="hidden" name="combatant_id" value={row.id} />
-                              <div className="col-span-2 text-[11px] uppercase text-gray-500">Move</div>
-                              <input name="x" defaultValue={row.x ?? 0} className="rounded border px-2 py-1 text-xs" placeholder="X %" />
-                              <input name="y" defaultValue={row.y ?? 0} className="rounded border px-2 py-1 text-xs" placeholder="Y %" />
-                              <button className="col-span-2 rounded border px-2 py-1 text-xs">Move Token</button>
-                            </form>
-
+                          <div className="mt-2">
                             <form
                               className="grid grid-cols-2 gap-2 rounded border bg-white p-2"
                               action={async (fd) => {
@@ -1682,7 +1728,7 @@ export default async function DmScreenPage({
                 </div>
 
                 <div className="rounded border bg-white p-2">
-                  <StorytellerEncounterBoard encounter={encounterState} />
+                  <StorytellerEncounterBoard encounter={hydratedEncounterState} />
                 </div>
 
                 <div className="rounded border bg-cyan-50 p-3">
@@ -1715,10 +1761,10 @@ export default async function DmScreenPage({
                   </div>
                 </div>
 
-                {encounterState?.combat_log?.length ? (
+                {hydratedEncounterState?.combat_log?.length ? (
                   <div className="rounded border bg-gray-50 p-2 text-xs text-gray-700 space-y-1">
                     <div className="text-[11px] uppercase text-gray-500">Combat Log</div>
-                    {encounterState.combat_log.slice().reverse().map((entry: any) => (
+                    {hydratedEncounterState.combat_log.slice().reverse().map((entry: any) => (
                       <div key={entry.id} className="rounded border bg-white px-2 py-1">
                         <div className="text-[10px] uppercase text-gray-400">{entry.type}</div>
                         <div>{entry.text}</div>
@@ -1735,7 +1781,7 @@ export default async function DmScreenPage({
               <div className="mt-2">
                 {presentedBlock ? (
                   <>
-                    {presentedBlock.image_url && !(encounterState && encounterState.encounter_block_id === String(presentedBlock.id) && encounterState.status !== "ended") ? (
+                    {presentedBlock.image_url && !(hydratedEncounterState && hydratedEncounterState.encounter_block_id === String(presentedBlock.id) && hydratedEncounterState.status !== "ended") ? (
                       <div className="rounded border overflow-hidden bg-gray-100 relative">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
@@ -1755,8 +1801,8 @@ export default async function DmScreenPage({
                         ))}
                       </div>
                     ) : null}
-                    {encounterState && encounterState.encounter_block_id === String(presentedBlock.id) && encounterState.status !== "ended" ? (
-                      <StorytellerEncounterBoard encounter={encounterState} />
+                    {hydratedEncounterState && hydratedEncounterState.encounter_block_id === String(presentedBlock.id) && hydratedEncounterState.status !== "ended" ? (
+                      <StorytellerEncounterBoard encounter={hydratedEncounterState} />
                     ) : null}
                     {presentedBlock.body ? (
                       <div className="text-sm whitespace-pre-wrap text-gray-700">{presentedBlock.body}</div>
