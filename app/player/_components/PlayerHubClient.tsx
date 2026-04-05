@@ -46,6 +46,12 @@ type GuidedRoll = {
   total: number;
   breakdown: string;
 };
+type EncounterActionPreview = {
+  actionId: string;
+  label: string;
+  rangeFeet: number | null;
+  meleeFeet: number;
+} | null;
 type SupportChoice = "next_attack_roll" | "next_damage_roll" | "next_skill_check" | "reroll_next_roll";
 type SessionRosterEntry = {
   playerId: string;
@@ -547,6 +553,9 @@ export default function PlayerHubClient(props: {
   const [submittingInitiative, setSubmittingInitiative] = useState(false);
   const [initiativeManualValue, setInitiativeManualValue] = useState("");
   const [movingEncounterToken, setMovingEncounterToken] = useState(false);
+  const [encounterActionPreview, setEncounterActionPreview] = useState<EncounterActionPreview>(null);
+  const [targetingActionId, setTargetingActionId] = useState<string | null>(null);
+  const [combatTargetByAction, setCombatTargetByAction] = useState<Record<string, string>>({});
   const [usingPointActionId, setUsingPointActionId] = useState<string | null>(null);
   const [resolvingPointId, setResolvingPointId] = useState<string | null>(null);
   const [requestCheckKey, setRequestCheckKey] = useState("Perception");
@@ -585,6 +594,12 @@ export default function PlayerHubClient(props: {
       ) ?? null,
     [encounterState, props.userId, props.character?.id]
   );
+  const isMyEncounterTurn = Boolean(
+    encounterState &&
+      encounterState.status === "active" &&
+      myEncounterCombatant &&
+      String(encounterState.combatants?.[encounterState.turn_index]?.id ?? "") === String(myEncounterCombatant.id ?? "")
+  );
 
   useEffect(() => {
     if (!rollOpen) {
@@ -596,6 +611,12 @@ export default function PlayerHubClient(props: {
       setPendingPromptRerollEffectId(null);
     }
   }, [rollOpen, rollPrompt]);
+
+  useEffect(() => {
+    if (tab !== "actions" && encounterActionPreview) {
+      setEncounterActionPreview(null);
+    }
+  }, [tab, encounterActionPreview]);
 
   async function submitRoll(value: number, source: "manual" | "digital", rerollEffectId?: string | null) {
     if (!selectedSessionId) return;
@@ -791,6 +812,12 @@ export default function PlayerHubClient(props: {
     } finally {
       setMovingEncounterToken(false);
     }
+  }
+
+  function handlePickEncounterTarget(combatantId: string) {
+    if (!targetingActionId) return;
+    setCombatTargetByAction((prev) => ({ ...prev, [targetingActionId]: combatantId }));
+    setTargetingActionId(null);
   }
 
   async function handleChoosePoint(effectId: string, choice: SupportChoice) {
@@ -1142,17 +1169,47 @@ export default function PlayerHubClient(props: {
 
               <div className="mt-4 space-y-4">
                 {encounterOwnsStage ? (
-                  <EncounterPanel
-                    encounter={encounterState}
-                    myCombatant={myEncounterCombatant}
-                    manualValue={initiativeManualValue}
-                    setManualValue={setInitiativeManualValue}
-                    submitting={submittingInitiative}
-                    movingToken={movingEncounterToken}
-                    onSubmitManual={() => handleSubmitEncounterInitiative("manual")}
-                    onSubmitDigital={() => handleSubmitEncounterInitiative("digital")}
-                    onMoveToken={handleMoveMyEncounterToken}
-                  />
+                  <div className="space-y-4">
+                    <EncounterPanel
+                      encounter={encounterState}
+                      myCombatant={myEncounterCombatant}
+                      actionPreview={encounterActionPreview}
+                      targetingActionId={targetingActionId}
+                      selectedTargetId={targetingActionId ? combatTargetByAction[targetingActionId] ?? null : null}
+                      manualValue={initiativeManualValue}
+                      setManualValue={setInitiativeManualValue}
+                      submitting={submittingInitiative}
+                      movingToken={movingEncounterToken}
+                      onSubmitManual={() => handleSubmitEncounterInitiative("manual")}
+                      onSubmitDigital={() => handleSubmitEncounterInitiative("digital")}
+                      onMoveToken={handleMoveMyEncounterToken}
+                      onCombatantClick={handlePickEncounterTarget}
+                    />
+                    {isMyEncounterTurn ? (
+                      <ActionListPanel
+                        characterId={String(props.character?.id ?? "")}
+                        actions={props.playerActions ?? []}
+                        sessionId={selectedSessionId}
+                        sessionRoster={sessionRoster}
+                        combatMode
+                        encounterCombatants={encounterState?.combatants ?? []}
+                        targetingActionId={targetingActionId}
+                        combatTargetByAction={combatTargetByAction}
+                        onBeginTargeting={(actionId) => setTargetingActionId(actionId)}
+                        onActionPreviewChange={setEncounterActionPreview}
+                        onUsePoint={handleUsePoint}
+                        pointActionBusyId={usingPointActionId}
+                        attackAdvantageSources={advantageMap.attack_roll ?? []}
+                        temporaryAttackAdvantageEffectIds={temporaryAttackPointEffects.map((row) => row.id)}
+                        temporaryAttackAdvantageSources={temporaryAttackAdvantageSources}
+                        temporaryDamageBonus={temporaryDamageBonus}
+                        temporaryDamageBonusEffectIds={temporaryDamagePointEffects.map((row) => row.id)}
+                        temporaryDamageBonusSources={temporaryDamageBonusSources}
+                        temporaryRerollEffectIds={temporaryRerollPointEffects.map((row) => row.id)}
+                        temporaryRerollSources={temporaryRerollSources}
+                      />
+                    ) : null}
+                  </div>
                 ) : (
                   <StagePanel
                     block={stageBlock}
@@ -1379,6 +1436,7 @@ export default function PlayerHubClient(props: {
                     actions={props.playerActions ?? []}
                     sessionId={selectedSessionId}
                     sessionRoster={sessionRoster}
+                    onActionPreviewChange={setEncounterActionPreview}
                     onUsePoint={handleUsePoint}
                     pointActionBusyId={usingPointActionId}
                     attackAdvantageSources={advantageMap[normalizeAdvantageKey("attack_roll")] ?? []}
@@ -1814,6 +1872,9 @@ function StagePanel({
 function EncounterPanel(props: {
   encounter: any;
   myCombatant: any;
+  actionPreview?: EncounterActionPreview;
+  targetingActionId?: string | null;
+  selectedTargetId?: string | null;
   manualValue: string;
   setManualValue: (value: string) => void;
   submitting: boolean;
@@ -1821,6 +1882,7 @@ function EncounterPanel(props: {
   onSubmitManual: () => void | Promise<void>;
   onSubmitDigital: () => void | Promise<void>;
   onMoveToken?: (x: number, y: number) => void | Promise<void>;
+  onCombatantClick?: (combatantId: string) => void;
 }) {
   const currentTurn = props.encounter.combatants[props.encounter.turn_index] ?? null;
   const needsInitiative =
@@ -1831,6 +1893,10 @@ function EncounterPanel(props: {
   const gridRows = Math.max(1, Number(props.encounter.grid?.rows ?? 12));
   const lineOpacity = Math.max(0.05, Math.min(1, Number(props.encounter.grid?.line_opacity ?? 0.2) || 0.2));
   const feetPerSquare = Math.max(1, Number(props.encounter.grid?.feet_per_square ?? 5) || 5);
+  const meleeCells = Math.max(1, 5 / feetPerSquare);
+  const meleeDiameterPct = (meleeCells * 2 * 100) / gridCols;
+  const actionCells = props.actionPreview?.rangeFeet ? Math.max(0, props.actionPreview.rangeFeet / feetPerSquare) : 0;
+  const actionDiameterPct = actionCells > 0 ? (actionCells * 2 * 100) / gridCols : 0;
 
   return (
     <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4 space-y-4">
@@ -1866,6 +1932,7 @@ function EncounterPanel(props: {
           <div
             className="relative"
             onClick={(e) => {
+              if (props.targetingActionId) return;
               if (!props.onMoveToken) return;
               const rect = e.currentTarget.getBoundingClientRect();
               const x = ((e.clientX - rect.left) / rect.width) * 100;
@@ -1902,13 +1969,34 @@ function EncounterPanel(props: {
                 .slice(0, 2)
                 .toUpperCase();
               return (
-                <div key={row.id} className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2" style={{ left: `${x}%`, top: `${y}%` }}>
+                <div key={row.id}>
+                  <div
+                    className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-red-300/35 bg-red-400/10"
+                    style={{ left: `${x}%`, top: `${y}%`, width: `${meleeDiameterPct}%`, aspectRatio: "1 / 1" }}
+                  />
+                  {props.myCombatant && row.id === props.myCombatant.id && actionDiameterPct > 0 ? (
+                    <div
+                      className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-300/70 bg-cyan-400/10 shadow-[0_0_28px_rgba(34,211,238,0.35)]"
+                      style={{ left: `${x}%`, top: `${y}%`, width: `${actionDiameterPct}%`, aspectRatio: "1 / 1" }}
+                    />
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      props.onCombatantClick?.(String(row.id));
+                    }}
+                    className="absolute -translate-x-1/2 -translate-y-1/2"
+                    style={{ left: `${x}%`, top: `${y}%` }}
+                  >
                   <div className="flex flex-col items-center gap-1">
                     <div
                       className={[
                         "h-12 w-12 overflow-hidden rounded-full border-2 shadow-lg",
                         row.kind === "player" ? "border-cyan-300 bg-cyan-950" : "border-neutral-100/80 bg-neutral-900",
                         isCurrent ? "ring-2 ring-emerald-400" : "",
+                        props.selectedTargetId === row.id ? "ring-2 ring-amber-300" : "",
+                        props.targetingActionId ? "shadow-[0_0_22px_rgba(251,191,36,0.35)]" : "",
                       ].join(" ")}
                     >
                       {imageUrl ? (
@@ -1925,6 +2013,7 @@ function EncounterPanel(props: {
                       </div>
                     ) : null}
                   </div>
+                </button>
                 </div>
               );
             })}
@@ -1934,6 +2023,16 @@ function EncounterPanel(props: {
             {props.myCombatant ? (
               <div className="absolute bottom-2 left-2 rounded-full bg-black/70 px-3 py-1 text-[11px] text-neutral-100">
                 {props.movingToken ? "Moving..." : "Click map to move your token"}
+              </div>
+            ) : null}
+            {props.actionPreview ? (
+              <div className="absolute left-2 top-2 rounded-full bg-cyan-500/20 px-3 py-1 text-[11px] text-cyan-100">
+                {props.actionPreview.label}: {props.actionPreview.rangeFeet ?? 0} ft range
+              </div>
+            ) : null}
+            {props.targetingActionId ? (
+              <div className="absolute left-2 top-10 rounded-full bg-amber-500/20 px-3 py-1 text-[11px] text-amber-100">
+                Select a target on the map
               </div>
             ) : null}
           </div>
@@ -2005,6 +2104,20 @@ function EncounterPanel(props: {
           })}
         </div>
       </div>
+
+      {props.encounter.combat_log?.length ? (
+        <div className="rounded-xl border border-neutral-800 bg-neutral-900/40 p-3">
+          <div className="text-xs uppercase tracking-wide text-neutral-400">Combat Log</div>
+          <div className="mt-2 space-y-1">
+            {props.encounter.combat_log.slice().reverse().slice(0, 8).map((entry: any) => (
+              <div key={entry.id} className="rounded border border-neutral-800 bg-neutral-950/50 px-2 py-1">
+                <div className="text-[10px] uppercase text-neutral-500">{entry.type}</div>
+                <div className="text-sm text-neutral-200">{entry.text}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -2033,6 +2146,12 @@ function ActionListPanel(props: {
   }>;
   sessionId?: string | null;
   sessionRoster?: SessionRosterEntry[];
+  onActionPreviewChange?: (preview: EncounterActionPreview) => void;
+  combatMode?: boolean;
+  encounterCombatants?: any[];
+  targetingActionId?: string | null;
+  combatTargetByAction?: Record<string, string>;
+  onBeginTargeting?: (actionId: string) => void;
   onUsePoint?: (actionId: string, targetCharacterId: string) => void | Promise<void>;
   pointActionBusyId?: string | null;
   attackAdvantageSources?: string[];
@@ -2068,6 +2187,27 @@ function ActionListPanel(props: {
     router.refresh();
   }
 
+  function setActionPreview(action: any | null) {
+    if (!props.onActionPreviewChange) return;
+    if (!action) {
+      props.onActionPreviewChange(null);
+      return;
+    }
+    const rangeFeet = Number.isFinite(Number(action?.range_normal ?? NaN)) ? Math.max(0, Number(action.range_normal)) : null;
+    props.onActionPreviewChange({
+      actionId: String(action?.id ?? ""),
+      label: String(action?.name ?? "Action"),
+      rangeFeet,
+      meleeFeet: 5,
+    });
+  }
+
+  function selectedTargetLabel(actionId: string) {
+    const targetId = String(props.combatTargetByAction?.[actionId] ?? "").trim();
+    if (!targetId) return "";
+    return String((props.encounterCombatants ?? []).find((row: any) => String(row?.id ?? "") === targetId)?.name ?? "").trim();
+  }
+
   async function consumeFirstRerollEffect() {
     const effectId = String((props.temporaryRerollEffectIds ?? [])[0] ?? "").trim();
     if (!props.sessionId || !props.characterId || !effectId) return true;
@@ -2085,6 +2225,11 @@ function ActionListPanel(props: {
   }
 
   async function rollHit(action: any, isReroll = false) {
+    const targetLabel = selectedTargetLabel(String(action.id));
+    if (props.combatMode && !targetLabel) {
+      alert("Choose a target on the map first.");
+      return;
+    }
     const bonus = Number(action.attack_bonus_override ?? 0);
     const attackAdvantageSources = [
       ...(props.attackAdvantageSources ?? []),
@@ -2105,7 +2250,7 @@ function ActionListPanel(props: {
       },
     }));
     await appendEncounterRollNote(
-      `${String(action.name ?? "Action")} hit roll: ${total}${hasAttackAdvantage ? ` with advantage [${d20}, ${d20b}]` : ` on d20 ${d20}`}${bonus ? ` + ${bonus}` : ""}.`,
+      `${String(action.name ?? "Action")}${targetLabel ? ` vs ${targetLabel}` : ""} hit roll: ${total}${hasAttackAdvantage ? ` with advantage [${d20}, ${d20b}]` : ` on d20 ${d20}`}${bonus ? ` + ${bonus}` : ""}.`,
       "note"
     );
     if (isReroll) {
@@ -2127,6 +2272,11 @@ function ActionListPanel(props: {
   }
 
   async function rollDamage(action: any, isReroll = false) {
+    const targetLabel = selectedTargetLabel(String(action.id));
+    if (props.combatMode && !targetLabel) {
+      alert("Choose a target on the map first.");
+      return;
+    }
     const formula = String(action.damage_dice ?? "").trim().toLowerCase();
     const bonusFromField = Number(action.damage_bonus ?? 0);
     const m = formula.match(/^(\d*)d(\d+)([+-]\d+)?$/i);
@@ -2150,7 +2300,7 @@ function ActionListPanel(props: {
       },
     }));
     await appendEncounterRollNote(
-      `${String(action.name ?? "Action")} ${outcomeLabel} roll: ${total} from [${rollsArr.join(", ")}]${bonus ? ` ${bonus > 0 ? "+" : "-"} ${Math.abs(bonus)}` : ""}.`,
+      `${String(action.name ?? "Action")}${targetLabel ? ` vs ${targetLabel}` : ""} ${outcomeLabel} roll: ${total} from [${rollsArr.join(", ")}]${bonus ? ` ${bonus > 0 ? "+" : "-"} ${Math.abs(bonus)}` : ""}.`,
       outcomeLabel === "heal" ? "heal" : "damage"
     );
     if (isReroll) {
@@ -2184,7 +2334,14 @@ function ActionListPanel(props: {
             <div className="col-span-3">Notes</div>
           </div>
           {props.actions.map((a) => (
-            <div key={a.id} className="grid grid-cols-12 gap-2 border-b border-neutral-800 px-3 py-2 text-sm last:border-b-0">
+            <div
+              key={a.id}
+              className="grid grid-cols-12 gap-2 border-b border-neutral-800 px-3 py-2 text-sm last:border-b-0"
+              onMouseEnter={() => setActionPreview(a)}
+              onMouseLeave={() => setActionPreview(null)}
+              onFocus={() => setActionPreview(a)}
+              onBlur={() => setActionPreview(null)}
+            >
               {(() => {
                 const actionConfig = normalizeActionConfig(a.action_config);
                 const availableTargets =
@@ -2196,6 +2353,8 @@ function ActionListPanel(props: {
                       )
                     : [];
                 const hasReroll = (props.temporaryRerollEffectIds ?? []).length > 0;
+                const combatTarget = selectedTargetLabel(String(a.id));
+                const targetRequired = Boolean(props.combatMode);
                 return (
                   <>
               <div className="col-span-3 min-w-0">
@@ -2209,34 +2368,65 @@ function ActionListPanel(props: {
               <div className="col-span-2 text-xs text-neutral-300">
                 {actionConfig?.kind === "targeted_support" ? (
                   <div className="space-y-1">
-                    <select
-                      value={pointTargetByAction[a.id] ?? ""}
-                      onChange={(e) =>
-                        setPointTargetByAction((prev) => ({
-                          ...prev,
-                          [a.id]: e.currentTarget.value,
-                        }))
-                      }
-                      className="w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-[11px]"
-                      disabled={!props.sessionId || Boolean(props.pointActionBusyId)}
-                    >
-                      <option value="">{actionConfig.target_scope === "ally_or_self" ? "Choose ally or self" : "Choose ally"}</option>
-                      {availableTargets.map((row) => (
-                        <option key={row.characterId} value={row.characterId}>
-                          {row.name}
-                        </option>
-                      ))}
-                    </select>
+                    {props.combatMode ? (
+                      <>
+                        <button
+                          type="button"
+                          className={[
+                            "rounded border px-2 py-1 text-[11px]",
+                            props.targetingActionId === a.id
+                              ? "border-amber-400 bg-amber-500/20 text-amber-200 shadow-[0_0_0_2px_rgba(251,191,36,0.25),0_0_14px_rgba(245,158,11,0.35)] animate-pulse"
+                              : "border-neutral-700 hover:bg-neutral-900",
+                          ].join(" ")}
+                          onClick={() => props.onBeginTargeting?.(String(a.id))}
+                        >
+                          {combatTarget ? `Target: ${combatTarget}` : "Choose Target"}
+                        </button>
+                      </>
+                    ) : (
+                      <select
+                        value={pointTargetByAction[a.id] ?? ""}
+                        onChange={(e) =>
+                          setPointTargetByAction((prev) => ({
+                            ...prev,
+                            [a.id]: e.currentTarget.value,
+                          }))
+                        }
+                        className="w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-[11px]"
+                        disabled={!props.sessionId || Boolean(props.pointActionBusyId)}
+                      >
+                        <option value="">{actionConfig.target_scope === "ally_or_self" ? "Choose ally or self" : "Choose ally"}</option>
+                        {availableTargets.map((row) => (
+                          <option key={row.characterId} value={row.characterId}>
+                            {row.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                     <button
                       type="button"
-                      className="rounded border border-neutral-700 px-2 py-0.5 text-[11px] hover:bg-neutral-900 disabled:opacity-60"
+                      className={[
+                        "rounded px-2 py-0.5 text-[11px] disabled:opacity-60",
+                        props.combatMode
+                          ? "border border-green-300 bg-green-500/15 shadow-[0_0_0_2px_rgba(74,222,128,0.8),0_0_24px_rgba(34,197,94,0.95),0_0_44px_rgba(34,197,94,0.55)] animate-pulse"
+                          : "border border-neutral-700 hover:bg-neutral-900",
+                      ].join(" ")}
                       disabled={
                         !props.sessionId ||
-                        !availableTargets.length ||
-                        !String(pointTargetByAction[a.id] ?? "").trim() ||
+                        (!props.combatMode && (!availableTargets.length || !String(pointTargetByAction[a.id] ?? "").trim())) ||
+                        (props.combatMode && !combatTarget) ||
                         Boolean(props.pointActionBusyId)
                       }
-                      onClick={() => props.onUsePoint?.(a.id, String(pointTargetByAction[a.id] ?? "").trim())}
+                      onClick={() =>
+                        props.onUsePoint?.(
+                          a.id,
+                          props.combatMode
+                            ? String(
+                                (props.encounterCombatants ?? []).find((row: any) => String(row?.id ?? "") === String(props.combatTargetByAction?.[a.id] ?? ""))?.character_id ?? ""
+                              ).trim()
+                            : String(pointTargetByAction[a.id] ?? "").trim()
+                        )
+                      }
                     >
                       {props.pointActionBusyId === a.id ? "Applying..." : "Use Action"}
                     </button>
@@ -2246,11 +2436,30 @@ function ActionListPanel(props: {
                     <div>+{a.attack_bonus_override}</div>
                     <button
                       type="button"
-                      className="rounded border border-neutral-700 px-2 py-0.5 text-[11px] hover:bg-neutral-900"
+                      className={[
+                        "rounded px-2 py-0.5 text-[11px]",
+                        props.combatMode
+                          ? "border border-green-300 bg-green-500/15 shadow-[0_0_0_2px_rgba(74,222,128,0.8),0_0_24px_rgba(34,197,94,0.95),0_0_44px_rgba(34,197,94,0.55)] animate-pulse"
+                          : "border border-neutral-700 hover:bg-neutral-900",
+                      ].join(" ")}
                       onClick={() => rollHit(a)}
                     >
                       Roll Hit
                     </button>
+                    {targetRequired ? (
+                      <button
+                        type="button"
+                        className={[
+                          "rounded px-2 py-0.5 text-[11px]",
+                          props.targetingActionId === a.id
+                            ? "border border-amber-400 bg-amber-500/20 text-amber-200 shadow-[0_0_0_2px_rgba(251,191,36,0.25),0_0_14px_rgba(245,158,11,0.35)] animate-pulse"
+                            : "border border-neutral-700 hover:bg-neutral-900",
+                        ].join(" ")}
+                        onClick={() => props.onBeginTargeting?.(String(a.id))}
+                      >
+                        {combatTarget ? `Target: ${combatTarget}` : "Choose Target"}
+                      </button>
+                    ) : null}
                     {Array.isArray([...((props.attackAdvantageSources ?? []) as string[]), ...((props.temporaryAttackAdvantageSources ?? []) as string[])]) &&
                     [...(props.attackAdvantageSources ?? []), ...(props.temporaryAttackAdvantageSources ?? [])].length ? (
                       <div className="text-[11px] text-emerald-300">
@@ -2283,11 +2492,19 @@ function ActionListPanel(props: {
                     ) : null}
                     <button
                       type="button"
-                      className="mt-1 rounded border border-neutral-700 px-2 py-0.5 text-[11px] hover:bg-neutral-900"
+                      className={[
+                        "mt-1 rounded px-2 py-0.5 text-[11px]",
+                        props.combatMode
+                          ? "border border-green-300 bg-green-500/15 shadow-[0_0_0_2px_rgba(74,222,128,0.8),0_0_24px_rgba(34,197,94,0.95),0_0_44px_rgba(34,197,94,0.55)] animate-pulse"
+                          : "border border-neutral-700 hover:bg-neutral-900",
+                      ].join(" ")}
                       onClick={() => rollDamage(a)}
                     >
                       {HEAL_TYPES.has(String(a.damage_type ?? "").toLowerCase()) ? "Roll Heal" : "Roll Dmg"}
                     </button>
+                    {targetRequired ? (
+                      <div className="text-[11px] text-amber-200">{combatTarget ? `Targeting ${combatTarget}` : "Choose a target on the map"}</div>
+                    ) : null}
                     {rolls[a.id]?.damage ? <div className="text-emerald-300">{rolls[a.id]?.damage}</div> : null}
                     {hasReroll && rolls[a.id]?.damage ? (
                       <button
