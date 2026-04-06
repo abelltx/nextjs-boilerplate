@@ -4,6 +4,7 @@ import { supabaseServer } from "@/lib/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import PlayerHubClient from "./_components/PlayerHubClient";
 import { parsePassiveEffectNotes } from "@/lib/passiveEffectNotes";
+import { normalizeEncounterState } from "@/lib/encounter";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -81,6 +82,16 @@ function toBool(value: unknown, fallback = false) {
     if (["false", "0", "no", "off", "null", "undefined"].includes(v)) return false;
   }
   return fallback;
+}
+
+function isLiveState(state: any) {
+  if (!state) return false;
+  if (state.player_view === true) return true;
+  if (state.is_live === true) return true;
+  if (state.live === true) return true;
+  if (state.roll_open === true) return true;
+  if (typeof state.presented_block_id === "string" && state.presented_block_id.trim().length > 0) return true;
+  return false;
 }
 
 function extractQuestTaskItemId(task: any): string | null {
@@ -756,6 +767,20 @@ export default async function PlayerPage() {
     itemNameById,
     new Set(equippedItemIds)
   );
+
+  const activeEncounterCombatant = Object.values(sessionStates ?? {})
+    .filter((st: any) => isLiveState(st))
+    .map((st: any) => normalizeEncounterState(st?.encounter_state))
+    .filter((encounter: any) => encounter && encounter.status !== "ended")
+    .flatMap((encounter: any) => encounter.combatants ?? [])
+    .find((row: any) => String(row?.character_id ?? "").trim() === String(character.id ?? "").trim());
+
+  if (activeEncounterCombatant) {
+    mergedStatBlock.derived = { ...(mergedStatBlock.derived ?? {}) };
+    if (activeEncounterCombatant.hp_current != null) mergedStatBlock.derived.hp_current = activeEncounterCombatant.hp_current;
+    if (activeEncounterCombatant.hp_max != null) mergedStatBlock.derived.hp_max = activeEncounterCombatant.hp_max;
+    if (activeEncounterCombatant.defense != null) mergedStatBlock.derived.defense = activeEncounterCombatant.defense;
+  }
 
   character = { ...character, stat_block: mergedStatBlock };
 

@@ -122,6 +122,46 @@ function appendEncounterLog(
   return [...(Array.isArray(current) ? current : []), nextEntry].slice(-60);
 }
 
+async function persistEncounterCombatantHp(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  characterId: string,
+  hpCurrent: number
+) {
+  const { data: charRow, error: charErr } = await supabase
+    .from("characters")
+    .select("id,stat_block")
+    .eq("id", characterId)
+    .maybeSingle();
+  if (charErr) throw new Error(charErr.message);
+  if (!charRow?.id) throw new Error("Character not found.");
+
+  const statBlock = ((charRow as any).stat_block ?? {}) as Record<string, any>;
+  const nextStatBlock = {
+    ...statBlock,
+    derived: {
+      ...((statBlock.derived ?? {}) as Record<string, any>),
+      hp_current: hpCurrent,
+    },
+  };
+
+  const { error: upCharErr } = await supabase
+    .from("characters")
+    .update({ stat_block: nextStatBlock })
+    .eq("id", characterId);
+  if (upCharErr) throw new Error(upCharErr.message);
+
+  const { error: upCurErr } = await supabase
+    .from("character_stats_current")
+    .update({ stat_block_current: nextStatBlock })
+    .eq("character_id", characterId);
+  if (upCurErr) {
+    const msg = String(upCurErr.message ?? "").toLowerCase();
+    if (!msg.includes("cannot update view") && !msg.includes("not automatically updatable")) {
+      throw new Error(upCurErr.message);
+    }
+  }
+}
+
 export async function storytellerStartEncounter(input: {
   sessionId: string;
   encounterBlockId: string;
@@ -523,6 +563,9 @@ export async function storytellerApplyEncounterDamageAction(input: {
       updated_at: new Date().toISOString(),
     },
   });
+  if (target.character_id && targetHp?.hp_current != null) {
+    await persistEncounterCombatantHp(supabase, String(target.character_id), Number(targetHp.hp_current));
+  }
 }
 
 export async function storytellerRollEncounterAction(input: {

@@ -125,6 +125,39 @@ async function syncCharacterStatsCurrent(
   return { ok: true as const };
 }
 
+async function persistEncounterCombatantHp(
+  supabase: Awaited<ReturnType<typeof supabaseServer>>,
+  characterId: string,
+  hpCurrent: number
+) {
+  const { data: charRow, error: charErr } = await supabase
+    .from("characters")
+    .select("id,stat_block")
+    .eq("id", characterId)
+    .maybeSingle();
+  if (charErr) return { ok: false as const, error: charErr.message };
+  if (!charRow?.id) return { ok: false as const, error: "Character not found." };
+
+  const baseStatBlock = normalizeStatBlockShape((charRow as any).stat_block ?? {});
+  const nextStatBlock = normalizeStatBlockShape({
+    ...baseStatBlock,
+    derived: {
+      ...(baseStatBlock.derived ?? {}),
+      hp_current: hpCurrent,
+    },
+  });
+
+  const { error: upCharErr } = await supabase
+    .from("characters")
+    .update({ stat_block: nextStatBlock })
+    .eq("id", characterId);
+  if (upCharErr) return { ok: false as const, error: upCharErr.message };
+
+  const syncRes = await syncCharacterStatsCurrent(supabase, characterId, nextStatBlock);
+  if (!syncRes.ok) return syncRes;
+  return { ok: true as const };
+}
+
 function buildClassPackageStatBlock(
   baseStatBlock: Record<string, any>,
   replaceStatBlock: Record<string, any> | null,
@@ -1229,6 +1262,7 @@ export async function applyEncounterDamageAction(input: {
       ? { ...row, hp_current: Math.max(0, Number(row.hp_current ?? 0) - amount) }
       : row
   );
+  const nextTarget = nextCombatants.find((row) => row.id === targetCombatantId);
   const combatLog = [
     ...(Array.isArray(encounter.combat_log) ? encounter.combat_log : []),
     {
@@ -1251,6 +1285,10 @@ export async function applyEncounterDamageAction(input: {
     })
     .eq("session_id", sessionId);
   if (upErr) return { ok: false, error: upErr.message };
+  if (target.kind === "player" && target.character_id && nextTarget?.hp_current != null) {
+    const persistRes = await persistEncounterCombatantHp(supabase, String(target.character_id), Number(nextTarget.hp_current));
+    if (!persistRes.ok) return { ok: false, error: persistRes.error };
+  }
   return { ok: true };
 }
 
