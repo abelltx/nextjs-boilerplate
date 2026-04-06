@@ -1292,6 +1292,84 @@ export async function applyEncounterDamageAction(input: {
   return { ok: true };
 }
 
+export async function applyEncounterHealingAction(input: {
+  sessionId: string;
+  characterId: string;
+  targetCombatantId: string;
+  amount: number;
+  sourceActionName?: string | null;
+}): Promise<{ ok: boolean; error?: string }> {
+  "use server";
+  const { user } = await getProfile();
+  if (!user) return { ok: false, error: "Not signed in." };
+  const sessionId = String(input.sessionId ?? "").trim();
+  const characterId = String(input.characterId ?? "").trim();
+  const targetCombatantId = String(input.targetCombatantId ?? "").trim();
+  const amount = Math.max(0, Math.floor(Number(input.amount ?? 0) || 0));
+  if (!sessionId || !characterId || !targetCombatantId || amount <= 0) {
+    return { ok: false, error: "Missing healing details." };
+  }
+
+  const supabase = await supabaseServer();
+  const owner = await requireOwnedCharacter(supabase, user.id, characterId);
+  if (!owner.ok) return { ok: false, error: owner.error };
+
+  const { data: st, error: stErr } = await supabase
+    .from("session_state")
+    .select("encounter_state")
+    .eq("session_id", sessionId)
+    .maybeSingle();
+  if (stErr) return { ok: false, error: stErr.message };
+  const encounter = normalizeEncounterState((st as any)?.encounter_state);
+  if (!encounter) return { ok: false, error: "Encounter not active." };
+  const me = encounter.combatants.find(
+    (row) => row.kind === "player" && String(row.character_id ?? "").trim() === characterId && String(row.player_id ?? "").trim() === user.id
+  );
+  if (!me) return { ok: false, error: "You are not part of this encounter." };
+  const target = encounter.combatants.find((row) => row.id === targetCombatantId);
+  if (!target) return { ok: false, error: "Target not found." };
+
+  const nextCombatants = encounter.combatants.map((row) =>
+    row.id === targetCombatantId
+      ? {
+          ...row,
+          hp_current: Math.min(
+            Number.isFinite(Number(row.hp_max ?? NaN)) ? Number(row.hp_max) : Number.MAX_SAFE_INTEGER,
+            Math.max(0, Number(row.hp_current ?? 0) + amount)
+          ),
+        }
+      : row
+  );
+  const nextTarget = nextCombatants.find((row) => row.id === targetCombatantId);
+  const combatLog = [
+    ...(Array.isArray(encounter.combat_log) ? encounter.combat_log : []),
+    {
+      id: randomUUID(),
+      timestamp: new Date().toISOString(),
+      type: "heal" as const,
+      text: `${me.name}${String(input.sourceActionName ?? "").trim() ? ` uses ${String(input.sourceActionName).trim()}` : ""} restores ${amount} HP to ${target.name}.`,
+    },
+  ].slice(-60);
+
+  const { error: upErr } = await supabase
+    .from("session_state")
+    .update({
+      encounter_state: {
+        ...encounter,
+        combatants: nextCombatants,
+        combat_log: combatLog,
+        updated_at: new Date().toISOString(),
+      },
+    })
+    .eq("session_id", sessionId);
+  if (upErr) return { ok: false, error: upErr.message };
+  if (target.kind === "player" && target.character_id && nextTarget?.hp_current != null) {
+    const persistRes = await persistEncounterCombatantHp(supabase, String(target.character_id), Number(nextTarget.hp_current));
+    if (!persistRes.ok) return { ok: false, error: persistRes.error };
+  }
+  return { ok: true };
+}
+
 export async function choosePointSupportAction(input: {
   sessionId: string;
   characterId: string;

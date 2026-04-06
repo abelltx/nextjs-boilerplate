@@ -25,6 +25,7 @@ import {
   moveOwnEncounterTokenAction,
   consumeEncounterTurnActionAction,
   applyEncounterDamageAction,
+  applyEncounterHealingAction,
   submitEncounterInitiativeAction,
   submitRollResultAction,
   usePointSupportAction,
@@ -2357,20 +2358,34 @@ function ActionListPanel(props: {
         targetId,
       },
     }));
-    if (props.combatMode && outcomeLabel === "damage" && targetId) {
-      const res = await applyEncounterDamageAction({
-        sessionId: String(props.sessionId ?? ""),
-        characterId: props.characterId,
-        targetCombatantId: targetId,
-        amount: total,
-        sourceActionName: String(action.name ?? ""),
-      });
-      if (!res.ok) {
-        alert(res.error ?? "Could not apply damage to target.");
-        return;
+    if (props.combatMode && targetId) {
+      if (outcomeLabel === "damage") {
+        const res = await applyEncounterDamageAction({
+          sessionId: String(props.sessionId ?? ""),
+          characterId: props.characterId,
+          targetCombatantId: targetId,
+          amount: total,
+          sourceActionName: String(action.name ?? ""),
+        });
+        if (!res.ok) {
+          alert(res.error ?? "Could not apply damage to target.");
+          return;
+        }
+      } else if (outcomeLabel === "heal") {
+        const res = await applyEncounterHealingAction({
+          sessionId: String(props.sessionId ?? ""),
+          characterId: props.characterId,
+          targetCombatantId: targetId,
+          amount: total,
+          sourceActionName: String(action.name ?? ""),
+        });
+        if (!res.ok) {
+          alert(res.error ?? "Could not apply healing to target.");
+          return;
+        }
       }
     }
-    if (!(props.combatMode && outcomeLabel === "damage" && targetId)) {
+    if (!(props.combatMode && targetId)) {
       await appendEncounterRollNote(
         `${String(action.name ?? "Action")}${targetLabel ? ` vs ${targetLabel}` : ""} ${outcomeLabel} roll: ${total} from [${rollsArr.join(", ")}]${bonus ? ` ${bonus > 0 ? "+" : "-"} ${Math.abs(bonus)}` : ""}.`,
         outcomeLabel === "heal" ? "heal" : "damage"
