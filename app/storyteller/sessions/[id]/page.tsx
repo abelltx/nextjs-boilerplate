@@ -342,6 +342,10 @@ export default async function DmScreenPage({
   const hexFocus = ((state as any)?.hex_focus ?? null) as Record<string, any> | null;
   const stageHexFocus =
     hexFocus && String(hexFocus?.block_id ?? "").trim() === String(stageHexBlock?.id ?? "").trim() ? hexFocus : null;
+  const stageHexFocusedMarker =
+    stageHexFocus && stageHexMarkers.length
+      ? stageHexMarkers.find((m: any) => String(m?.id ?? "").trim() === String(stageHexFocus?.marker_id ?? "").trim()) ?? null
+      : null;
   const sceneAudioTracks = (() => {
     const meta = ((activeScene?.scene as any)?.meta ?? {}) as Record<string, any>;
     const fromSceneAudio = Array.isArray(meta.scene_audio)
@@ -746,25 +750,48 @@ export default async function DmScreenPage({
     set.add(qid);
     activeQuestIdsByCharacter.set(cid, set);
   }
-  const focusedRequiredQuestIds = Array.from(
+  const focusedRequiredQuestIds: string[] = Array.from(
     new Set(
-      (Array.isArray(stageHexFocus?.required_quest_ids) ? (stageHexFocus?.required_quest_ids as any[]) : [])
+      (
+        Array.isArray((stageHexFocusedMarker as any)?.requiredQuestIds)
+          ? (stageHexFocusedMarker as any).requiredQuestIds
+          : Array.isArray(stageHexFocus?.required_quest_ids)
+            ? (stageHexFocus?.required_quest_ids as any[])
+            : []
+      )
         .map((v: any) => String(v ?? "").trim())
         .filter(Boolean)
     )
   );
-  const focusedRewardItemIds = Array.from(
+  const focusedRewardItemIds: string[] = Array.from(
     new Set(
-      (Array.isArray(stageHexFocus?.reward_item_ids) ? (stageHexFocus?.reward_item_ids as any[]) : [])
+      (
+        Array.isArray((stageHexFocusedMarker as any)?.rewardItemIds)
+          ? (stageHexFocusedMarker as any).rewardItemIds
+          : Array.isArray(stageHexFocus?.reward_item_ids)
+            ? (stageHexFocus?.reward_item_ids as any[])
+            : []
+      )
         .map((v: any) => String(v ?? "").trim())
         .filter(Boolean)
     )
   );
-  const focusedPromptRewardItemIds = Array.from(
+  const focusedCheckPrompts = Array.isArray((stageHexFocusedMarker as any)?.checkPrompts)
+    ? ((stageHexFocusedMarker as any).checkPrompts as any[])
+    : Array.isArray(stageHexFocus?.check_prompts)
+      ? ((stageHexFocus?.check_prompts as any[]) as any[])
+      : [];
+  const focusedPromptRewardItemIds: string[] = Array.from(
     new Set(
-      (Array.isArray(stageHexFocus?.check_prompts) ? (stageHexFocus?.check_prompts as any[]) : [])
+      focusedCheckPrompts
         .flatMap((p: any) =>
-          (Array.isArray(p?.reward_item_ids) ? p.reward_item_ids : [])
+          (
+            Array.isArray(p?.rewardItemIds)
+              ? p.rewardItemIds
+              : Array.isArray(p?.reward_item_ids)
+                ? p.reward_item_ids
+                : []
+          )
             .map((v: any) => String(v ?? "").trim())
             .filter(Boolean)
         )
@@ -2139,13 +2166,19 @@ export default async function DmScreenPage({
                       Reward status: {String(stageHexFocus.reward_status ?? "pending")}
                     </div>
                     {(() => {
-                      const prompts = Array.isArray(stageHexFocus.check_prompts) ? (stageHexFocus.check_prompts as any[]) : [];
+                      const prompts = focusedCheckPrompts;
                       const promptsWithRewards = prompts
                         .map((p: any, i: number) => {
                           const checkPromptId = String(p?.id ?? `prompt-${i + 1}`).trim();
                           const promptRewardItemIds = Array.from(
                             new Set(
-                              (Array.isArray(p?.reward_item_ids) ? p.reward_item_ids : [])
+                              (
+                                Array.isArray(p?.rewardItemIds)
+                                  ? p.rewardItemIds
+                                  : Array.isArray(p?.reward_item_ids)
+                                    ? p.reward_item_ids
+                                    : []
+                              )
                                 .map((id: any) => String(id ?? "").trim())
                                 .filter(Boolean)
                             )
@@ -2154,7 +2187,7 @@ export default async function DmScreenPage({
                             checkPromptId,
                             promptRewardItemIds,
                             promptLabel: String(p?.label ?? p?.title ?? p?.prompt ?? `Check Prompt ${i + 1}`).trim() || `Check Prompt ${i + 1}`,
-                            promptKey: String(p?.check_key ?? "").trim(),
+                            promptKey: String(p?.checkKey ?? p?.check_key ?? "").trim(),
                             promptDc: Number(p?.dc ?? p?.check_dc ?? NaN),
                           };
                         })
