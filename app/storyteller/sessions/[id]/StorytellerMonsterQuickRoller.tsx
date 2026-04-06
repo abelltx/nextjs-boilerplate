@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { storytellerRollEncounterAction } from "./actions";
+import { storytellerAddEncounterLogNote, storytellerApplyEncounterDamageAction } from "./actions";
 
 export default function StorytellerMonsterQuickRoller(props: {
   sessionId: string;
@@ -45,6 +45,10 @@ export default function StorytellerMonsterQuickRoller(props: {
   const [lastResult, setLastResult] = useState("");
   const [pending, startTransition] = useTransition();
 
+  function rollDie(sides: number) {
+    return Math.floor(Math.random() * Math.max(2, sides)) + 1;
+  }
+
   useEffect(() => {
     const nextAction = normalizedActions.find((row) => row.id === selectedActionId) ?? normalizedActions[0] ?? null;
     setSelectedActionId(nextAction?.id ?? "");
@@ -59,23 +63,51 @@ export default function StorytellerMonsterQuickRoller(props: {
     }
   }, [targetId, defaultTargetId]);
 
-  function run(kind: "attack" | "damage" | "both") {
+  function run(kind: "attack" | "damage") {
     startTransition(async () => {
       try {
-        const result = await storytellerRollEncounterAction({
+        const target = props.combatants.find((row) => String(row.id) === String(targetId)) ?? null;
+        const actionName = selectedAction?.name ?? props.combatantName ?? "Attack";
+        const targetLabel = String(target?.name ?? "").trim();
+        if (!targetLabel) throw new Error("Choose a target first.");
+
+        if (kind === "attack") {
+          const bonus = Number(attackBonus.trim() || 0);
+          const d20 = rollDie(20);
+          const total = d20 + bonus;
+          const targetDefense = Number.isFinite(Number(target?.defense ?? NaN)) ? Number(target?.defense) : null;
+          if (targetDefense == null) throw new Error(`${targetLabel} has no defense/AC set yet.`);
+          const hitSuccess = total >= targetDefense;
+          const attackText = `${props.combatantName} uses ${actionName} vs ${targetLabel}: hit roll ${total} (d20 ${d20}${bonus ? ` + ${bonus}` : ""}) against AC ${targetDefense} ${hitSuccess ? "HIT" : "MISS"}.`;
+          setLastHitSuccess(hitSuccess);
+          setLastResult(attackText);
+          await storytellerAddEncounterLogNote({
+            sessionId: props.sessionId,
+            text: attackText,
+          });
+          return;
+        }
+
+        if (lastHitSuccess !== true) throw new Error("Roll attack first, and only roll damage after a hit.");
+        const formula = String(damageDice ?? "").trim().toLowerCase();
+        const match = formula.match(/^(\d*)d(\d+)([+-]\d+)?$/i);
+        if (!match) throw new Error("Damage dice must look like 1d8 or 2d6+3.");
+        const count = Math.max(1, Number(match[1] || 1));
+        const sides = Math.max(2, Number(match[2] || 2));
+        const inlineBonus = Number(match[3] || 0);
+        const flatBonus = Number(damageBonus.trim() || 0);
+        const rolls = Array.from({ length: count }, () => rollDie(sides));
+        const total = rolls.reduce((sum, n) => sum + n, 0) + inlineBonus + flatBonus;
+        const totalBonus = inlineBonus + flatBonus;
+        const damageText = `${props.combatantName} uses ${actionName} vs ${targetLabel}: damage ${total} from [${rolls.join(", ")}]${totalBonus ? ` ${totalBonus > 0 ? "+" : "-"} ${Math.abs(totalBonus)}` : ""}.`;
+        setLastResult(damageText);
+        await storytellerApplyEncounterDamageAction({
           sessionId: props.sessionId,
-          combatantId: props.combatantId,
-          actionName: selectedAction?.name ?? props.combatantName ?? "Attack",
-          targetCombatantId: targetId || undefined,
-          attackBonus: kind === "damage" ? null : attackBonus.trim() ? Number(attackBonus) : null,
-          damageDice: kind === "attack" ? null : damageDice.trim() || null,
-          damageBonus: kind === "attack" ? null : damageBonus.trim() ? Number(damageBonus) : null,
+          targetCombatantId: targetId,
+          amount: total,
+          sourceText: damageText,
         });
-        if (!result?.ok) throw new Error(result?.error ?? "Could not roll monster action.");
-        if (kind !== "damage") setLastHitSuccess(result.hit ?? null);
-        setLastResult([result.attackText, result.damageText].filter(Boolean).join(" "));
       } catch (error: any) {
-        setLastResult("");
         alert(error?.message ?? "Could not roll monster action.");
       }
     });

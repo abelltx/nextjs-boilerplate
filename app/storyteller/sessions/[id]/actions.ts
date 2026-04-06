@@ -477,6 +477,54 @@ export async function storytellerAddEncounterLogNote(input: {
   });
 }
 
+export async function storytellerApplyEncounterDamageAction(input: {
+  sessionId: string;
+  targetCombatantId: string;
+  amount: number;
+  sourceText: string;
+}) {
+  const sessionId = String(input.sessionId ?? "").trim();
+  const targetCombatantId = String(input.targetCombatantId ?? "").trim();
+  const amount = Math.max(0, Math.floor(Number(input.amount ?? 0) || 0));
+  const sourceText = String(input.sourceText ?? "").trim();
+  if (!isUuid(sessionId) || !targetCombatantId || amount <= 0) throw new Error("Missing damage details.");
+
+  const supabase = await createClient();
+  const { data: st, error: stErr } = await supabase
+    .from("session_state")
+    .select("encounter_state")
+    .eq("session_id", sessionId)
+    .maybeSingle();
+  if (stErr) throw new Error(stErr.message);
+  const encounter = normalizeEncounterState((st as any)?.encounter_state);
+  if (!encounter) throw new Error("Encounter not active.");
+  const target = encounter.combatants.find((row) => row.id === targetCombatantId);
+  if (!target) throw new Error("Target not found.");
+
+  const nextCombatants = encounter.combatants.map((row) =>
+    row.id === targetCombatantId
+      ? { ...row, hp_current: Math.max(0, Number(row.hp_current ?? 0) - amount) }
+      : row
+  );
+  const targetHp = nextCombatants.find((row) => row.id === targetCombatantId);
+  const combatLog = appendEncounterLog(
+    appendEncounterLog(encounter.combat_log, { type: "damage", text: sourceText }),
+    {
+      type: "damage",
+      text: `${target.name} takes ${amount} damage (${targetHp?.hp_current ?? "?"}/${target.hp_max ?? "?"} HP).`,
+    }
+  );
+
+  await updateState(sessionId, {
+    encounter_state: {
+      ...encounter,
+      combatants: nextCombatants,
+      combat_log: combatLog,
+      updated_at: new Date().toISOString(),
+    },
+  });
+}
+
 export async function storytellerRollEncounterAction(input: {
   sessionId: string;
   combatantId: string;
