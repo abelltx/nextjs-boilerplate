@@ -752,6 +752,25 @@ export default async function DmScreenPage({
         .filter(Boolean)
     )
   );
+  const focusedRewardItemIds = Array.from(
+    new Set(
+      (Array.isArray(stageHexFocus?.reward_item_ids) ? (stageHexFocus?.reward_item_ids as any[]) : [])
+        .map((v: any) => String(v ?? "").trim())
+        .filter(Boolean)
+    )
+  );
+  const rewardItemNameById = new Map<string, string>();
+  if (focusedRewardItemIds.length) {
+    const { data: rewardItemRows } = await admin
+      .from("items")
+      .select("id,name")
+      .in("id", focusedRewardItemIds);
+    for (const row of rewardItemRows ?? []) {
+      const id = String((row as any)?.id ?? "").trim();
+      const name = String((row as any)?.name ?? "").trim();
+      if (id) rewardItemNameById.set(id, name || id);
+    }
+  }
   const questGlowPlayerIds = focusedRequiredQuestIds.length
     ? storytellerPlayers
         .filter((p: any) => {
@@ -2060,7 +2079,7 @@ export default async function DmScreenPage({
                     {Array.isArray(stageHexFocus.reward_item_ids) && stageHexFocus.reward_item_ids.length ? (
                       <div className="space-y-1">
                         <div className="text-[11px] text-gray-700">
-                          Reward item IDs: {stageHexFocus.reward_item_ids.join(", ")}
+                          Reward items: {focusedRewardItemIds.map((id) => rewardItemNameById.get(id) ?? id).join(", ")}
                         </div>
                         <div className="flex flex-wrap gap-2">
                           <form

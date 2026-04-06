@@ -1555,6 +1555,7 @@ export async function storytellerResolveHexReward(input: {
       ...focus,
       reward_status: "granted_multi",
       reward_target_player_ids: eligibleTargets.map((t) => t.playerId),
+      reward_item_ids_granted: rewardItemIds,
       reward_granted_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -1588,6 +1589,7 @@ export async function storytellerResolveHexReward(input: {
     ...focus,
     reward_status: "granted",
     reward_target_player_id: winnerPlayerId,
+    reward_item_ids_granted: rewardItemIds,
     reward_granted_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
