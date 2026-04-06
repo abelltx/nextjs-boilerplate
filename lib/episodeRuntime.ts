@@ -19,6 +19,7 @@ export type HexMarker = MapMarker & {
     label?: string | null;
     checkKey: string;
     dc: number | null;
+    rewardItemIds?: string[];
     storytellerScript?: string | null;
     notes?: string | null;
   }>;
@@ -91,11 +92,20 @@ export function extractHexMarkers(meta: any): HexMarker[] {
       const checkPrompts = checkPromptsRaw
         .map((p: any, pi: number) => {
           const dcRaw = Number(p?.dc ?? NaN);
+          const rawPromptRewards = Array.isArray(p?.reward_item_ids)
+            ? p.reward_item_ids
+            : typeof p?.reward_item_ids === "string"
+              ? p.reward_item_ids.split(",")
+              : [];
+          const rewardItemIds = Array.from(
+            new Set(rawPromptRewards.map((v: any) => String(v ?? "").trim()).filter(Boolean))
+          );
           return {
             id: String(p?.id ?? `check-${pi + 1}`),
             label: String(p?.label ?? "").trim() || null,
             checkKey: String(p?.check_key ?? "").trim(),
             dc: Number.isFinite(dcRaw) ? Math.max(0, Math.floor(dcRaw)) : null,
+            rewardItemIds,
             storytellerScript: String(p?.storyteller_script ?? "").trim() || null,
             notes: String(p?.notes ?? "").trim() || null,
           };
