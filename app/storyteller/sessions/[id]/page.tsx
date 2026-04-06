@@ -2138,6 +2138,82 @@ export default async function DmScreenPage({
                     <div className="text-[11px] text-gray-700">
                       Reward status: {String(stageHexFocus.reward_status ?? "pending")}
                     </div>
+                    {(() => {
+                      const prompts = Array.isArray(stageHexFocus.check_prompts) ? (stageHexFocus.check_prompts as any[]) : [];
+                      const promptsWithRewards = prompts
+                        .map((p: any, i: number) => {
+                          const checkPromptId = String(p?.id ?? `prompt-${i + 1}`).trim();
+                          const promptRewardItemIds = Array.from(
+                            new Set(
+                              (Array.isArray(p?.reward_item_ids) ? p.reward_item_ids : [])
+                                .map((id: any) => String(id ?? "").trim())
+                                .filter(Boolean)
+                            )
+                          );
+                          return {
+                            checkPromptId,
+                            promptRewardItemIds,
+                            promptLabel: String(p?.label ?? p?.title ?? p?.prompt ?? `Check Prompt ${i + 1}`).trim() || `Check Prompt ${i + 1}`,
+                            promptKey: String(p?.check_key ?? "").trim(),
+                            promptDc: Number(p?.dc ?? p?.check_dc ?? NaN),
+                          };
+                        })
+                        .filter((p) => p.promptRewardItemIds.length);
+                      if (!promptsWithRewards.length) return null;
+                      return (
+                        <div className="space-y-2 rounded border bg-white p-2">
+                          <div className="text-[11px] uppercase text-gray-500">Prompt Rewards</div>
+                          {promptsWithRewards.map((prompt) => (
+                            <div key={`active-hex-prompt-reward-${prompt.checkPromptId}`} className="rounded border bg-gray-50 px-2 py-2 text-[11px] text-gray-700 space-y-2">
+                              <div className="font-semibold text-gray-900">
+                                {prompt.promptLabel}
+                                <span className="ml-2 font-normal text-gray-600">
+                                  {prompt.promptKey || "check"}
+                                  {Number.isFinite(prompt.promptDc) ? ` | DC ${Math.max(0, Math.floor(prompt.promptDc))}` : ""}
+                                </span>
+                              </div>
+                              <div>
+                                Reward items: {prompt.promptRewardItemIds.map((id) => rewardItemNameById.get(String(id)) ?? String(id)).join(", ")}
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                <form
+                                  action={async () => {
+                                    "use server";
+                                    await storytellerResolveHexCheckPromptReward({
+                                      sessionId: session.id,
+                                      checkPromptId: prompt.checkPromptId,
+                                      targetMode: "highest_roll",
+                                    });
+                                    redirect(`/storyteller/sessions/${session.id}`);
+                                  }}
+                                >
+                                  <button className="rounded border px-2 py-1 text-[11px]">Grant Prompt Reward (Highest Roll)</button>
+                                </form>
+                                {storytellerPlayers.map((player) => (
+                                  <form
+                                    key={`active-hex-prompt-reward-${prompt.checkPromptId}-${player.playerId}`}
+                                    action={async () => {
+                                      "use server";
+                                      await storytellerResolveHexCheckPromptReward({
+                                        sessionId: session.id,
+                                        checkPromptId: prompt.checkPromptId,
+                                        targetMode: "manual",
+                                        playerId: player.playerId,
+                                      });
+                                      redirect(`/storyteller/sessions/${session.id}`);
+                                    }}
+                                  >
+                                    <button className="rounded border px-2 py-1 text-[11px]">
+                                      Grant to {playerLabelById.get(player.playerId) ?? player.playerId.slice(0, 8)}
+                                    </button>
+                                  </form>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
                     {focusedRequiredQuestIds.length ? (
                       <div className="text-[11px] text-gray-700">
                         Required active quest IDs: {focusedRequiredQuestIds.join(", ")}
