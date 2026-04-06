@@ -122,6 +122,21 @@ function appendEncounterLog(
   return [...(Array.isArray(current) ? current : []), nextEntry].slice(-60);
 }
 
+function isDefeatedCombatant(row: EncounterCombatant | null | undefined) {
+  if (!row) return false;
+  return Number.isFinite(Number(row.hp_current ?? NaN)) && Number(row.hp_current) <= 0;
+}
+
+function nextLivingTurnIndex(combatants: EncounterCombatant[], startIndex: number) {
+  if (!combatants.length) return 0;
+  for (let offset = 0; offset < combatants.length; offset += 1) {
+    const idx = (startIndex + offset) % combatants.length;
+    const row = combatants[idx];
+    if (!isDefeatedCombatant(row)) return idx;
+  }
+  return 0;
+}
+
 async function persistEncounterCombatantHp(
   supabase: Awaited<ReturnType<typeof createClient>>,
   characterId: string,
@@ -311,7 +326,7 @@ export async function storytellerLockEncounterInitiative(input: { sessionId: str
       ...encounter,
       status: "active",
       round: 1,
-      turn_index: 0,
+      turn_index: nextLivingTurnIndex(sortEncounterCombatants(encounter.combatants), 0),
       combatants: sortEncounterCombatants(encounter.combatants),
       turn_action: null,
       combat_log: appendEncounterLog(encounter.combat_log, {
@@ -336,20 +351,22 @@ export async function storytellerAdvanceEncounterTurn(input: { sessionId: string
   const encounter = normalizeEncounterState((st as any)?.encounter_state);
   if (!encounter) throw new Error("Encounter not active.");
   if (!encounter.combatants.length) throw new Error("No combatants.");
-  const nextIndex = encounter.turn_index + 1;
-  const wrapped = nextIndex >= encounter.combatants.length;
+  const combatants = encounter.combatants;
+  const tentativeIndex = encounter.turn_index + 1;
+  const wrapped = tentativeIndex >= combatants.length;
+  const nextIndex = nextLivingTurnIndex(combatants, wrapped ? 0 : tentativeIndex);
   await updateState(sessionId, {
     encounter_state: {
       ...encounter,
       status: "active",
       round: wrapped ? encounter.round + 1 : encounter.round,
-      turn_index: wrapped ? 0 : nextIndex,
+      turn_index: nextIndex,
       turn_action: null,
       combat_log: appendEncounterLog(encounter.combat_log, {
         type: "system",
         text: wrapped
           ? `Round ${encounter.round + 1} begins.`
-          : `Turn passes to ${String(encounter.combatants[wrapped ? 0 : nextIndex]?.name ?? "next combatant")}.`,
+          : `Turn passes to ${String(combatants[nextIndex]?.name ?? "next combatant")}.`,
       }),
       updated_at: new Date().toISOString(),
     },

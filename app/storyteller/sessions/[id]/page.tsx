@@ -1615,6 +1615,7 @@ export default async function DmScreenPage({
                           sessionId={session.id}
                           combatantId={String(row.id)}
                           combatantName={String(row.name ?? "Monster")}
+                          combatantHpCurrent={Number.isFinite(Number(row?.hp_current ?? NaN)) ? Number(row.hp_current) : null}
                           combatants={(hydratedEncounterState?.combatants ?? []).map((c: any) => ({
                             id: String(c?.id ?? ""),
                             name: String(c?.name ?? ""),

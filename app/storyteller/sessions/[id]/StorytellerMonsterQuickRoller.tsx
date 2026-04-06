@@ -7,6 +7,7 @@ export default function StorytellerMonsterQuickRoller(props: {
   sessionId: string;
   combatantId: string;
   combatantName: string;
+  combatantHpCurrent?: number | null;
   combatants: Array<{ id: string; name: string; defense?: number | null }>;
   actionOptions?: Array<{
     id: string;
@@ -18,6 +19,7 @@ export default function StorytellerMonsterQuickRoller(props: {
     damage_bonus?: number | null;
   }>;
 }) {
+  const isDefeated = Number.isFinite(Number(props.combatantHpCurrent ?? NaN)) && Number(props.combatantHpCurrent) <= 0;
   const normalizedActions = useMemo(
     () =>
       props.actionOptions?.length
@@ -66,6 +68,7 @@ export default function StorytellerMonsterQuickRoller(props: {
   function run(kind: "attack" | "damage") {
     startTransition(async () => {
       try {
+        if (isDefeated) throw new Error(`${props.combatantName} is defeated and cannot act.`);
         const target = props.combatants.find((row) => String(row.id) === String(targetId)) ?? null;
         const actionName = selectedAction?.name ?? props.combatantName ?? "Attack";
         const targetLabel = String(target?.name ?? "").trim();
@@ -170,11 +173,16 @@ export default function StorytellerMonsterQuickRoller(props: {
           No NPC abilities were resolved for this combatant yet. The encounter enemy may be missing its NPC link or action ids.
         </div>
       ) : null}
+      {isDefeated ? (
+        <div className="rounded border border-red-200 bg-red-50 px-2 py-2 text-[11px] text-red-900">
+          {props.combatantName} is defeated and cannot roll actions.
+        </div>
+      ) : null}
       <div className="grid grid-cols-2 gap-2">
         <button
           type="button"
           className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60"
-          disabled={pending || !targetId}
+          disabled={pending || !targetId || isDefeated}
           onClick={() => run("attack")}
         >
           {pending ? "Rolling..." : "Roll Attack"}
@@ -182,7 +190,7 @@ export default function StorytellerMonsterQuickRoller(props: {
         <button
           type="button"
           className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60"
-          disabled={pending || !targetId || !damageDice.trim() || lastHitSuccess !== true}
+          disabled={pending || !targetId || !damageDice.trim() || lastHitSuccess !== true || isDefeated}
           onClick={() => run("damage")}
         >
           {pending ? "Rolling..." : lastHitSuccess === false ? "Missed" : "Roll Damage"}
