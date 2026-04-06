@@ -343,6 +343,11 @@ export default function MapMarkerEditorClient(props: {
           </div>
           <div className="flex gap-2 overflow-x-auto pb-1">
             {markers.map((m, i) => (
+              (() => {
+                const topLevelRewardCount = (m.reward_item_ids ?? []).length;
+                const promptRewardCount = (m.check_prompts ?? []).reduce((sum, p) => sum + ((p.reward_item_ids ?? []).length || 0), 0);
+                const totalRewardCount = topLevelRewardCount + promptRewardCount;
+                return (
               <button
                 key={`card-${m.id}`}
                 type="button"
@@ -366,12 +371,15 @@ export default function MapMarkerEditorClient(props: {
                       : "No check"}
                 </div>
                 <div className="text-[11px] text-gray-600 truncate">
-                  Rewards: {(m.reward_item_ids ?? []).length}
+                  Rewards: {totalRewardCount}
+                  {promptRewardCount ? ` (${topLevelRewardCount} hex, ${promptRewardCount} prompt)` : ""}
                 </div>
                 <div className="text-[11px] text-gray-600 truncate">
                   Quest gate: {(m.required_quest_ids ?? []).length ? `${(m.required_quest_ids ?? []).length} quest(s)` : "none"}
                 </div>
               </button>
+                );
+              })()
             ))}
             {!markers.length ? <div className="text-xs text-gray-500 px-1 py-2">No hex markers yet.</div> : null}
           </div>
