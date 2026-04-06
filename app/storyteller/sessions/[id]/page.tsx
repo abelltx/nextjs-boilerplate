@@ -1616,6 +1616,14 @@ export default async function DmScreenPage({
                           combatantId={String(row.id)}
                           combatantName={String(row.name ?? "Monster")}
                           combatantHpCurrent={Number.isFinite(Number(row?.hp_current ?? NaN)) ? Number(row.hp_current) : null}
+                          isCurrentTurn={encounterCurrentTurnId === String(row.id)}
+                          actionUsed={
+                            Boolean(
+                              hydratedEncounterState?.turn_action &&
+                              hydratedEncounterState.turn_action.round === hydratedEncounterState.round &&
+                              String(hydratedEncounterState.turn_action.combatant_id ?? "") === String(row.id)
+                            )
+                          }
                           combatants={(hydratedEncounterState?.combatants ?? []).map((c: any) => ({
                             id: String(c?.id ?? ""),
                             name: String(c?.name ?? ""),

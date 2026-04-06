@@ -1,13 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { storytellerAddEncounterLogNote, storytellerApplyEncounterDamageAction } from "./actions";
+import {
+  storytellerAddEncounterLogNote,
+  storytellerApplyEncounterDamageAction,
+  storytellerConsumeEncounterTurnAction,
+} from "./actions";
 
 export default function StorytellerMonsterQuickRoller(props: {
   sessionId: string;
   combatantId: string;
   combatantName: string;
   combatantHpCurrent?: number | null;
+  isCurrentTurn?: boolean;
+  actionUsed?: boolean;
   combatants: Array<{ id: string; name: string; defense?: number | null }>;
   actionOptions?: Array<{
     id: string;
@@ -69,12 +75,20 @@ export default function StorytellerMonsterQuickRoller(props: {
     startTransition(async () => {
       try {
         if (isDefeated) throw new Error(`${props.combatantName} is defeated and cannot act.`);
+        if (!props.isCurrentTurn) throw new Error(`It is not ${props.combatantName}'s turn.`);
         const target = props.combatants.find((row) => String(row.id) === String(targetId)) ?? null;
         const actionName = selectedAction?.name ?? props.combatantName ?? "Attack";
         const targetLabel = String(target?.name ?? "").trim();
         if (!targetLabel) throw new Error("Choose a target first.");
 
         if (kind === "attack") {
+          if (props.actionUsed) throw new Error(`${props.combatantName} already used an action this turn.`);
+          await storytellerConsumeEncounterTurnAction({
+            sessionId: props.sessionId,
+            combatantId: props.combatantId,
+            actionId: selectedAction?.id ?? null,
+            actionName,
+          });
           const bonus = Number(attackBonus.trim() || 0);
           const d20 = rollDie(20);
           const total = d20 + bonus;
@@ -178,11 +192,21 @@ export default function StorytellerMonsterQuickRoller(props: {
           {props.combatantName} is defeated and cannot roll actions.
         </div>
       ) : null}
+      {!props.isCurrentTurn ? (
+        <div className="rounded border border-slate-200 bg-slate-50 px-2 py-2 text-[11px] text-slate-700">
+          It is not this combatant's turn.
+        </div>
+      ) : null}
+      {props.actionUsed ? (
+        <div className="rounded border border-amber-200 bg-amber-50 px-2 py-2 text-[11px] text-amber-900">
+          This combatant already used an action this turn.
+        </div>
+      ) : null}
       <div className="grid grid-cols-2 gap-2">
         <button
           type="button"
           className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60"
-          disabled={pending || !targetId || isDefeated}
+          disabled={pending || !targetId || isDefeated || !props.isCurrentTurn || Boolean(props.actionUsed)}
           onClick={() => run("attack")}
         >
           {pending ? "Rolling..." : "Roll Attack"}
@@ -190,7 +214,7 @@ export default function StorytellerMonsterQuickRoller(props: {
         <button
           type="button"
           className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60"
-          disabled={pending || !targetId || !damageDice.trim() || lastHitSuccess !== true || isDefeated}
+          disabled={pending || !targetId || !damageDice.trim() || lastHitSuccess !== true || isDefeated || !props.isCurrentTurn}
           onClick={() => run("damage")}
         >
           {pending ? "Rolling..." : lastHitSuccess === false ? "Missed" : "Roll Damage"}

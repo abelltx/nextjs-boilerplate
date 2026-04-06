@@ -373,6 +373,58 @@ export async function storytellerAdvanceEncounterTurn(input: { sessionId: string
   });
 }
 
+export async function storytellerConsumeEncounterTurnAction(input: {
+  sessionId: string;
+  combatantId: string;
+  actionId?: string | null;
+  actionName?: string | null;
+}) {
+  const sessionId = String(input.sessionId ?? "").trim();
+  const combatantId = String(input.combatantId ?? "").trim();
+  if (!isUuid(sessionId) || !combatantId) throw new Error("Missing turn action details.");
+
+  const supabase = await createClient();
+  const { data: st, error: stErr } = await supabase
+    .from("session_state")
+    .select("encounter_state")
+    .eq("session_id", sessionId)
+    .maybeSingle();
+  if (stErr) throw new Error(stErr.message);
+  const encounter = normalizeEncounterState((st as any)?.encounter_state);
+  if (!encounter) throw new Error("Encounter not active.");
+  if (encounter.status !== "active") throw new Error("Encounter is not in an active round.");
+
+  const currentTurn = encounter.combatants[encounter.turn_index] ?? null;
+  if (!currentTurn || String(currentTurn.id ?? "") !== combatantId) {
+    throw new Error("It is not this combatant's turn.");
+  }
+  if (isDefeatedCombatant(currentTurn)) {
+    throw new Error(`${currentTurn.name} is defeated and cannot act.`);
+  }
+  if (
+    encounter.turn_action &&
+    encounter.turn_action.round === encounter.round &&
+    encounter.turn_action.combatant_id === combatantId
+  ) {
+    return { ok: true as const, alreadyUsed: true as const };
+  }
+
+  await updateState(sessionId, {
+    encounter_state: {
+      ...encounter,
+      turn_action: {
+        round: encounter.round,
+        combatant_id: combatantId,
+        action_id: String(input.actionId ?? "").trim() || null,
+        action_name: String(input.actionName ?? "").trim() || null,
+        consumed_at: new Date().toISOString(),
+      },
+      updated_at: new Date().toISOString(),
+    },
+  });
+  return { ok: true as const };
+}
+
 export async function storytellerEndEncounter(input: { sessionId: string }) {
   const sessionId = String(input.sessionId ?? "").trim();
   if (!isUuid(sessionId)) throw new Error("Missing session.");
