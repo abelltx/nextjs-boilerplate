@@ -41,6 +41,7 @@ import { parsePassiveEffectNotes } from "@/lib/passiveEffectNotes";
 import QuestProgressAutoRefresh from "./QuestProgressAutoRefresh";
 import { normalizeEncounterState } from "@/lib/encounter";
 import StorytellerMonsterQuickRoller from "./StorytellerMonsterQuickRoller";
+import StorytellerEncounterMap from "./StorytellerEncounterMap";
 
 
 
@@ -71,81 +72,6 @@ function isEncounter(b: Block) {
 }
 function isPresentable(b: Block) {
   return b.audience !== "storyteller";
-}
-
-function StorytellerEncounterBoard(props: { encounter: any }) {
-  const gridCols = Math.max(1, Number(props.encounter?.grid?.cols ?? 12));
-  const gridRows = Math.max(1, Number(props.encounter?.grid?.rows ?? 12));
-  const lineOpacity = Math.max(0.05, Math.min(1, Number(props.encounter?.grid?.line_opacity ?? 0.2) || 0.2));
-  const currentTurn = props.encounter?.combatants?.[props.encounter?.turn_index ?? 0] ?? null;
-
-  return (
-    <div className="rounded border overflow-hidden bg-gray-100 relative">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={props.encounter.map_image_url} alt={props.encounter.title ?? "Encounter"} className="w-full h-auto block" />
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          backgroundImage:
-            `linear-gradient(to right, rgba(255,255,255,${lineOpacity}) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,${lineOpacity}) 1px, transparent 1px)`,
-          backgroundSize: `${100 / gridCols}% ${100 / gridRows}%`,
-          backgroundPosition: `${Number(props.encounter?.grid?.offset_x ?? 0) || 0}px ${Number(props.encounter?.grid?.offset_y ?? 0) || 0}px`,
-        }}
-      />
-      {(Array.isArray(props.encounter?.combatants) ? props.encounter.combatants : []).map((row: any) => {
-        const x = Number.isFinite(Number(row?.x ?? NaN)) ? Number(row.x) : null;
-        const y = Number.isFinite(Number(row?.y ?? NaN)) ? Number(row.y) : null;
-        if (x == null || y == null) return null;
-        const label = String(row?.name ?? row?.kind ?? "Unit").trim();
-        const hpMax = Number(row?.hp_max ?? NaN);
-        const hpCurrent = Number(row?.hp_current ?? NaN);
-        const ratio = Number.isFinite(hpCurrent) && Number.isFinite(hpMax) && hpMax > 0 ? hpCurrent / hpMax : 1;
-        const tone = ratio <= 0.25 ? "bg-red-500" : ratio <= 0.5 ? "bg-orange-500" : "bg-emerald-500";
-        const imageUrl = String(row?.image_url ?? "").trim();
-        const initials = label
-          .split(/\s+/)
-          .map((part: string) => part.slice(0, 1))
-          .join("")
-          .slice(0, 2)
-          .toUpperCase();
-        const isCurrent = currentTurn?.id === row.id && props.encounter?.status === "active";
-        return (
-          <div key={row.id} className="absolute -translate-x-1/2 -translate-y-1/2" style={{ left: `${x}%`, top: `${y}%` }}>
-            <div className="flex flex-col items-center gap-1">
-              <div
-                className={[
-                  "h-12 w-12 overflow-hidden rounded-full border-2 shadow",
-                  row.kind === "player" ? "border-cyan-400 bg-cyan-950" : "border-white bg-neutral-900",
-                  isCurrent ? "ring-2 ring-emerald-400" : "",
-                ].join(" ")}
-              >
-                {imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={imageUrl} alt={label} className="h-full w-full object-cover" />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center text-xs font-semibold text-white">{initials || "?"}</div>
-                )}
-              </div>
-              <div className="rounded-full bg-black/70 px-2 py-1 text-[10px] text-white">{label}</div>
-              {Number.isFinite(hpCurrent) && Number.isFinite(hpMax) ? (
-                <div className="h-1.5 w-14 overflow-hidden rounded-full bg-neutral-800">
-                  <div className={`h-full ${tone}`} style={{ width: `${Math.max(0, Math.min(100, ratio * 100))}%` }} />
-                </div>
-              ) : null}
-              {Array.isArray(row?.conditions) && row.conditions.length ? (
-                <div className="max-w-[8rem] rounded bg-black/60 px-2 py-1 text-center text-[10px] text-white">
-                  {row.conditions.join(", ")}
-                </div>
-              ) : null}
-            </div>
-          </div>
-        );
-      })}
-      <div className="absolute bottom-2 right-2 rounded-full bg-black/70 px-3 py-1 text-[11px] text-white">
-        {Math.max(1, Number(props.encounter?.grid?.feet_per_square ?? 5) || 5)} ft / square
-      </div>
-    </div>
-  );
 }
 
 function getLiveRemainingSeconds(st: any) {
@@ -1740,7 +1666,7 @@ export default async function DmScreenPage({
                 </div>
 
                 <div className="rounded border bg-white p-2">
-                  <StorytellerEncounterBoard encounter={hydratedEncounterState} />
+                  <StorytellerEncounterMap sessionId={session.id} encounter={hydratedEncounterState} />
                 </div>
 
                 <div className="rounded border bg-cyan-50 p-3">
@@ -1814,7 +1740,7 @@ export default async function DmScreenPage({
                       </div>
                     ) : null}
                     {hydratedEncounterState && hydratedEncounterState.encounter_block_id === String(presentedBlock.id) && hydratedEncounterState.status !== "ended" ? (
-                      <StorytellerEncounterBoard encounter={hydratedEncounterState} />
+                      <StorytellerEncounterMap sessionId={session.id} encounter={hydratedEncounterState} />
                     ) : null}
                     {presentedBlock.body ? (
                       <div className="text-sm whitespace-pre-wrap text-gray-700">{presentedBlock.body}</div>

@@ -142,10 +142,10 @@ export default function StorytellerMonsterQuickRoller(props: {
         <button
           type="button"
           className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60"
-          disabled={pending || !targetId || !attackBonus.trim()}
+          disabled={pending || !targetId}
           onClick={() => run("attack")}
         >
-        {pending ? "Rolling..." : "Roll Attack"}
+          {pending ? "Rolling..." : "Roll Attack"}
         </button>
         <button
           type="button"
@@ -161,9 +161,9 @@ export default function StorytellerMonsterQuickRoller(props: {
           Choose a target to enable the monster roll buttons.
         </div>
       ) : null}
-      {selectedAction && !attackBonus.trim() && !damageDice.trim() ? (
+      {selectedAction && !damageDice.trim() ? (
         <div className="rounded border border-amber-200 bg-amber-50 px-2 py-2 text-[11px] text-amber-900">
-          This ability is loaded, but it has no hit bonus or damage formula yet.
+          This ability is loaded, but it has no damage formula yet.
         </div>
       ) : null}
       {lastHitSuccess != null ? (
