@@ -1915,7 +1915,13 @@ export default async function DmScreenPage({
                                   const stScript = String(p?.storytellerScript ?? "").trim();
                                   const promptRewardItemIds = Array.from(
                                     new Set(
-                                      (Array.isArray(p?.rewardItemIds) ? p.rewardItemIds : [])
+                                      (
+                                        Array.isArray(p?.rewardItemIds)
+                                          ? p.rewardItemIds
+                                          : Array.isArray(p?.reward_item_ids)
+                                            ? p.reward_item_ids
+                                            : []
+                                      )
                                         .map((v: any) => String(v ?? "").trim())
                                         .filter(Boolean)
                                     )
