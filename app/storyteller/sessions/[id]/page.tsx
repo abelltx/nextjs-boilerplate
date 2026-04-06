@@ -451,6 +451,18 @@ export default async function DmScreenPage({
         .filter(Boolean)
     )
   );
+  const missingEncounterRuntimeNpcIds = encounterNpcIds.filter((npcId) => !runtimeByNpcId.has(npcId));
+  if (missingEncounterRuntimeNpcIds.length) {
+    const { data: runtimeRows } = await admin
+      .from("npc_runtime_configs")
+      .select("npc_id,meta_json")
+      .in("npc_id", missingEncounterRuntimeNpcIds);
+    for (const row of runtimeRows ?? []) {
+      const npcId = String((row as any)?.npc_id ?? "").trim();
+      const meta = ((row as any)?.meta_json ?? {}) as Record<string, any>;
+      if (npcId) runtimeByNpcId.set(npcId, meta);
+    }
+  }
   const npcRowsById = new Map<string, any>();
   if (encounterNpcIds.length) {
     const { data: npcRows } = await admin
