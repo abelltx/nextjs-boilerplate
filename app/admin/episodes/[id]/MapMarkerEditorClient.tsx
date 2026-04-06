@@ -20,6 +20,7 @@ type Marker = {
     label?: string;
     check_key: string;
     dc?: number | null;
+    reward_item_ids?: string[];
     storyteller_script?: string;
     notes?: string;
   }>;
@@ -70,6 +71,11 @@ function normalizeMarkers(input: any): Marker[] {
           label: String(p?.label ?? "").trim(),
           check_key: String(p?.check_key ?? "").trim(),
           dc: Number.isFinite(Number(p?.dc ?? NaN)) ? Math.max(0, Math.floor(Number(p?.dc))) : null,
+          reward_item_ids: Array.isArray(p?.reward_item_ids)
+            ? p.reward_item_ids.map((v: any) => String(v ?? "").trim()).filter(Boolean)
+            : typeof p?.reward_item_ids === "string"
+              ? p.reward_item_ids.split(",").map((v: string) => v.trim()).filter(Boolean)
+              : [],
           storyteller_script: String(p?.storyteller_script ?? "").trim(),
           notes: String(p?.notes ?? "").trim(),
         }))
@@ -225,6 +231,7 @@ export default function MapMarkerEditorClient(props: {
               label: "",
               check_key: "",
               dc: null,
+              reward_item_ids: [],
               storyteller_script: "",
               notes: "",
             },
@@ -641,6 +648,39 @@ export default function MapMarkerEditorClient(props: {
                               Remove
                             </button>
                           </div>
+                        </div>
+                        <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                          <input
+                            className="border rounded p-2 text-sm"
+                            value={(p.reward_item_ids ?? []).join(", ")}
+                            onChange={(e) =>
+                              updateCheckPrompt(p.id, {
+                                reward_item_ids: e.target.value
+                                  .split(",")
+                                  .map((v) => v.trim())
+                                  .filter(Boolean),
+                              })
+                            }
+                            placeholder="Reward item UUIDs for this prompt (optional)"
+                          />
+                          <select
+                            className="border rounded p-2 text-sm"
+                            defaultValue=""
+                            onChange={(e) => {
+                              const v = String(e.target.value ?? "").trim();
+                              if (!v) return;
+                              const next = Array.from(new Set([...(p.reward_item_ids ?? []), v]));
+                              updateCheckPrompt(p.id, { reward_item_ids: next });
+                              e.currentTarget.value = "";
+                            }}
+                          >
+                            <option value="">Add reward item to this prompt</option>
+                            {rewardOptions.map((it) => (
+                              <option key={`${p.id}-${it.id}`} value={it.id}>
+                                {it.name}
+                              </option>
+                            ))}
+                          </select>
                         </div>
                         <textarea
                           className="border rounded p-2 text-sm w-full h-16"

@@ -16,6 +16,7 @@ import {
   storytellerSetHexFocus,
   storytellerClearHexFocus,
   storytellerResolveHexReward,
+  storytellerResolveHexCheckPromptReward,
   storytellerStartEncounter,
   storytellerLockEncounterInitiative,
   storytellerAdvanceEncounterTurn,
@@ -759,12 +760,23 @@ export default async function DmScreenPage({
         .filter(Boolean)
     )
   );
+  const focusedPromptRewardItemIds = Array.from(
+    new Set(
+      (Array.isArray(stageHexFocus?.check_prompts) ? (stageHexFocus?.check_prompts as any[]) : [])
+        .flatMap((p: any) =>
+          (Array.isArray(p?.reward_item_ids) ? p.reward_item_ids : [])
+            .map((v: any) => String(v ?? "").trim())
+            .filter(Boolean)
+        )
+    )
+  );
   const rewardItemNameById = new Map<string, string>();
-  if (focusedRewardItemIds.length) {
+  const rewardLookupIds = Array.from(new Set([...focusedRewardItemIds, ...focusedPromptRewardItemIds]));
+  if (rewardLookupIds.length) {
     const { data: rewardItemRows } = await admin
       .from("items")
       .select("id,name")
-      .in("id", focusedRewardItemIds);
+      .in("id", rewardLookupIds);
     for (const row of rewardItemRows ?? []) {
       const id = String((row as any)?.id ?? "").trim();
       const name = String((row as any)?.name ?? "").trim();
@@ -1867,6 +1879,11 @@ export default async function DmScreenPage({
                                         label: String(p?.label ?? ""),
                                         checkKey: String(p?.checkKey ?? ""),
                                         dc: Number(p?.dc ?? NaN),
+                                        rewardItemIds: Array.isArray(p?.rewardItemIds)
+                                          ? p.rewardItemIds
+                                          : Array.isArray(p?.reward_item_ids)
+                                            ? p.reward_item_ids
+                                            : [],
                                         storytellerScript: String(p?.storytellerScript ?? ""),
                                         notes: String(p?.notes ?? ""),
                                     }))
@@ -1891,10 +1908,18 @@ export default async function DmScreenPage({
                               <div className="space-y-2">
                                 {prompts.map((p: any) => {
                                   const checkKey = String(p?.checkKey ?? "").trim();
+                                  const checkPromptId = String(p?.id ?? checkKey).trim();
                                   const promptLabel = String(p?.label ?? "").trim();
                                   const dcNum = Number(p?.dc ?? NaN);
                                   const hasDc = Number.isFinite(dcNum) && dcNum > 0;
                                   const stScript = String(p?.storytellerScript ?? "").trim();
+                                  const promptRewardItemIds = Array.from(
+                                    new Set(
+                                      (Array.isArray(p?.rewardItemIds) ? p.rewardItemIds : [])
+                                        .map((v: any) => String(v ?? "").trim())
+                                        .filter(Boolean)
+                                    )
+                                  );
                                   const promptActive =
                                     rollOpenNow &&
                                     currentPromptText.toLowerCase().includes(`${checkKey} check`.toLowerCase()) &&
@@ -1965,6 +1990,47 @@ export default async function DmScreenPage({
                                           </>
                                         ) : null}
                                       </div>
+                                      {promptRewardItemIds.length ? (
+                                        <div className="rounded border bg-white px-2 py-2 text-[11px] text-gray-700 space-y-2">
+                                          <div>
+                                            Prompt rewards: {promptRewardItemIds.map((id) => rewardItemNameById.get(String(id)) ?? String(id)).join(", ")}
+                                          </div>
+                                          <div className="flex flex-wrap gap-2">
+                                            <form
+                                              action={async () => {
+                                                "use server";
+                                                await storytellerResolveHexCheckPromptReward({
+                                                  sessionId: session.id,
+                                                  checkPromptId,
+                                                  targetMode: "highest_roll",
+                                                });
+                                                redirect(`/storyteller/sessions/${session.id}`);
+                                              }}
+                                            >
+                                              <button className="rounded border px-2 py-1 text-[11px]">Grant Prompt Reward (Highest Roll)</button>
+                                            </form>
+                                            {storytellerPlayers.map((player) => (
+                                              <form
+                                                key={`prompt-reward-${checkPromptId}-${player.playerId}`}
+                                                action={async () => {
+                                                  "use server";
+                                                  await storytellerResolveHexCheckPromptReward({
+                                                    sessionId: session.id,
+                                                    checkPromptId,
+                                                    targetMode: "manual",
+                                                    playerId: player.playerId,
+                                                  });
+                                                  redirect(`/storyteller/sessions/${session.id}`);
+                                                }}
+                                              >
+                                                <button className="rounded border px-2 py-1 text-[11px]">
+                                                  Grant to {playerLabelById.get(player.playerId) ?? player.playerId.slice(0, 8)}
+                                                </button>
+                                              </form>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      ) : null}
                                     </div>
                                   );
                                 })}

@@ -1360,6 +1360,7 @@ export async function storytellerSetHexFocus(input: {
     label?: string;
     checkKey?: string;
     dc?: number | null;
+    rewardItemIds?: string[];
     storytellerScript?: string;
     notes?: string | null;
   }>;
@@ -1397,6 +1398,7 @@ export async function storytellerSetHexFocus(input: {
           label: String(p?.label ?? "").trim() || null,
           check_key: String(p?.checkKey ?? "").trim(),
           dc: Number.isFinite(dcRaw) ? Math.max(0, Math.floor(dcRaw)) : null,
+          reward_item_ids: cleanIds(p?.rewardItemIds),
           storyteller_script: String(p?.storytellerScript ?? "").trim(),
           notes: String(p?.notes ?? "").trim() || null,
         };
@@ -1591,6 +1593,77 @@ export async function storytellerResolveHexReward(input: {
     reward_target_player_id: winnerPlayerId,
     reward_item_ids_granted: rewardItemIds,
     reward_granted_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+  const { error: upErr } = await supabase.from("session_state").update({ hex_focus: next }).eq("session_id", sessionId);
+  if (upErr) return;
+}
+
+export async function storytellerResolveHexCheckPromptReward(input: {
+  sessionId: string;
+  checkPromptId: string;
+  targetMode?: "highest_roll" | "manual";
+  playerId?: string | null;
+}) {
+  const sessionId = String(input.sessionId ?? "").trim();
+  const checkPromptId = String(input.checkPromptId ?? "").trim();
+  if (!isUuid(sessionId) || !checkPromptId) return;
+
+  const supabase = await createClient();
+  const admin = createAdminClient() ?? supabase;
+  const { data: st, error: stErr } = await supabase
+    .from("session_state")
+    .select("*")
+    .eq("session_id", sessionId)
+    .maybeSingle();
+  if (stErr || !st) return;
+
+  const focus = ((st as any).hex_focus ?? null) as Record<string, any> | null;
+  if (!focus) return;
+  const checkPrompts = Array.isArray(focus.check_prompts) ? (focus.check_prompts as any[]) : [];
+  const checkPrompt = checkPrompts.find((p: any) => String(p?.id ?? "").trim() === checkPromptId);
+  if (!checkPrompt) return;
+
+  const rewardItemIds = cleanIds(Array.isArray(checkPrompt.reward_item_ids) ? checkPrompt.reward_item_ids : []);
+  if (!rewardItemIds.length) return;
+
+  const targets = await getSessionCharacterTargets(sessionId);
+  if (!targets.length) return;
+  const charByPlayer = new Map<string, string>(targets.map((t) => [t.playerId, t.characterId]));
+
+  let winnerPlayerId = String(input.playerId ?? "").trim();
+  if (String(input.targetMode ?? "highest_roll").trim().toLowerCase() === "highest_roll") {
+    const raw = ((st as any).roll_results ?? {}) as Record<string, any>;
+    let best: { playerId: string; total: number } | null = null;
+    for (const [playerId, row] of Object.entries(raw)) {
+      const pid = String(playerId ?? "").trim();
+      if (!pid || !charByPlayer.has(pid)) continue;
+      const total = Number((row as any)?.total ?? NaN);
+      if (!Number.isFinite(total)) continue;
+      if (!best || total > best.total) best = { playerId: pid, total };
+    }
+    if (!best) return;
+    winnerPlayerId = best.playerId;
+  }
+
+  if (!winnerPlayerId || !charByPlayer.has(winnerPlayerId)) return;
+  const characterId = String(charByPlayer.get(winnerPlayerId) ?? "").trim();
+  if (!characterId) return;
+
+  await grantItemsToCharacter(admin, characterId, rewardItemIds);
+
+  const granted = Array.isArray(focus.check_prompt_rewards_granted) ? [...focus.check_prompt_rewards_granted] : [];
+  granted.push({
+    id: randomUUID(),
+    check_prompt_id: checkPromptId,
+    reward_item_ids: rewardItemIds,
+    reward_target_player_id: winnerPlayerId,
+    granted_at: new Date().toISOString(),
+  });
+
+  const next = {
+    ...focus,
+    check_prompt_rewards_granted: granted.slice(-20),
     updated_at: new Date().toISOString(),
   };
   const { error: upErr } = await supabase.from("session_state").update({ hex_focus: next }).eq("session_id", sessionId);
