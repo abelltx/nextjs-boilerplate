@@ -28,7 +28,16 @@ export default function StorytellerMonsterQuickRoller(props: {
   const initialAction = normalizedActions[0] ?? null;
   const [selectedActionId, setSelectedActionId] = useState(initialAction?.id ?? "");
   const selectedAction = normalizedActions.find((row) => row.id === selectedActionId) ?? initialAction ?? null;
-  const [targetId, setTargetId] = useState("");
+  const defaultTargetId = useMemo(
+    () =>
+      String(
+        props.combatants.find((row) => row.id !== props.combatantId)?.id ??
+          props.combatants[0]?.id ??
+          ""
+      ).trim(),
+    [props.combatants, props.combatantId]
+  );
+  const [targetId, setTargetId] = useState(defaultTargetId);
   const [attackBonus, setAttackBonus] = useState(selectedAction?.attack_bonus_override != null ? String(selectedAction.attack_bonus_override) : "");
   const [damageDice, setDamageDice] = useState(selectedAction?.damage_dice ?? "");
   const [damageBonus, setDamageBonus] = useState(selectedAction?.damage_bonus != null ? String(selectedAction.damage_bonus) : "");
@@ -43,6 +52,12 @@ export default function StorytellerMonsterQuickRoller(props: {
     setDamageDice(nextAction?.damage_dice ?? "");
     setDamageBonus(nextAction?.damage_bonus != null ? String(nextAction.damage_bonus) : "");
   }, [normalizedActions, selectedActionId]);
+
+  useEffect(() => {
+    if (!targetId && defaultTargetId) {
+      setTargetId(defaultTargetId);
+    }
+  }, [targetId, defaultTargetId]);
 
   function run(kind: "attack" | "damage" | "both") {
     startTransition(async () => {
@@ -130,7 +145,7 @@ export default function StorytellerMonsterQuickRoller(props: {
           disabled={pending || !targetId || !attackBonus.trim()}
           onClick={() => run("attack")}
         >
-          {pending ? "Rolling..." : "Roll Attack"}
+        {pending ? "Rolling..." : "Roll Attack"}
         </button>
         <button
           type="button"
@@ -141,6 +156,16 @@ export default function StorytellerMonsterQuickRoller(props: {
           {pending ? "Rolling..." : lastHitSuccess === false ? "Missed" : "Roll Damage"}
         </button>
       </div>
+      {!targetId ? (
+        <div className="rounded border border-amber-200 bg-amber-50 px-2 py-2 text-[11px] text-amber-900">
+          Choose a target to enable the monster roll buttons.
+        </div>
+      ) : null}
+      {selectedAction && !attackBonus.trim() && !damageDice.trim() ? (
+        <div className="rounded border border-amber-200 bg-amber-50 px-2 py-2 text-[11px] text-amber-900">
+          This ability is loaded, but it has no hit bonus or damage formula yet.
+        </div>
+      ) : null}
       {lastHitSuccess != null ? (
         <div className="text-[11px] text-gray-600">{lastHitSuccess ? "Last attack hit." : "Last attack missed."}</div>
       ) : null}
