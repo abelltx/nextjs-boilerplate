@@ -785,6 +785,7 @@ export async function submitRollResultAction(input: {
     [user.id]: {
       value: input.rollValue,
       source: input.source,
+      character_id: String(input.characterId ?? "").trim() || null,
       round_id: roundId,
       submitted_at: new Date().toISOString(),
     },

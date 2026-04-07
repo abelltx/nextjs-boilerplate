@@ -1671,8 +1671,8 @@ export async function storytellerResolveHexCheckPromptReward(input: {
     if (requiresDc && (!Number.isFinite(manualTotal) || manualTotal < dc)) return;
   }
 
-  if (!winnerPlayerId || !charByPlayer.has(winnerPlayerId)) return;
-  const characterId = String(charByPlayer.get(winnerPlayerId) ?? "").trim();
+  const rolledCharacterId = String((raw[winnerPlayerId] as any)?.character_id ?? "").trim();
+  const characterId = rolledCharacterId || String(charByPlayer.get(winnerPlayerId) ?? "").trim();
   if (!characterId) return;
 
   await grantItemsToCharacter(admin, characterId, rewardItemIds);
