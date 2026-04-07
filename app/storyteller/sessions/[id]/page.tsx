@@ -1957,6 +1957,9 @@ export default async function DmScreenPage({
                                     rollOpenNow &&
                                     currentPromptText.toLowerCase().includes(`${checkKey} check`.toLowerCase()) &&
                                     currentPromptText.toLowerCase().includes(`context: ${markerLabel}`.toLowerCase());
+                                  const winningPromptTotal = Number(highestRollRow?.total ?? NaN);
+                                  const promptRewardUnlocked =
+                                    !hasDc || (Number.isFinite(winningPromptTotal) && winningPromptTotal >= dcNum);
                                   return (
                                     <div key={`${m.id}-${String(p?.id ?? checkKey)}`} className="rounded border bg-gray-50 p-2 space-y-1">
                                       <div className="text-xs font-semibold">
@@ -2028,40 +2031,46 @@ export default async function DmScreenPage({
                                           <div>
                                             Prompt rewards: {promptRewardItemIds.map((id) => rewardItemNameById.get(String(id)) ?? String(id)).join(", ")}
                                           </div>
-                                          <div className="flex flex-wrap gap-2">
-                                            <form
-                                              action={async () => {
-                                                "use server";
-                                                await storytellerResolveHexCheckPromptReward({
-                                                  sessionId: session.id,
-                                                  checkPromptId,
-                                                  targetMode: "highest_roll",
-                                                });
-                                                redirect(`/storyteller/sessions/${session.id}`);
-                                              }}
-                                            >
-                                              <button className="rounded border px-2 py-1 text-[11px]">Grant Prompt Reward (Highest Roll)</button>
-                                            </form>
-                                            {storytellerPlayers.map((player) => (
+                                          {promptRewardUnlocked ? (
+                                            <div className="flex flex-wrap gap-2">
                                               <form
-                                                key={`prompt-reward-${checkPromptId}-${player.playerId}`}
                                                 action={async () => {
                                                   "use server";
                                                   await storytellerResolveHexCheckPromptReward({
                                                     sessionId: session.id,
                                                     checkPromptId,
-                                                    targetMode: "manual",
-                                                    playerId: player.playerId,
+                                                    targetMode: "highest_roll",
                                                   });
                                                   redirect(`/storyteller/sessions/${session.id}`);
                                                 }}
                                               >
-                                                <button className="rounded border px-2 py-1 text-[11px]">
-                                                  Grant to {playerLabelById.get(player.playerId) ?? player.playerId.slice(0, 8)}
-                                                </button>
+                                                <button className="rounded border px-2 py-1 text-[11px]">Grant Prompt Reward (Highest Roll)</button>
                                               </form>
-                                            ))}
-                                          </div>
+                                              {storytellerPlayers.map((player) => (
+                                                <form
+                                                  key={`prompt-reward-${checkPromptId}-${player.playerId}`}
+                                                  action={async () => {
+                                                    "use server";
+                                                    await storytellerResolveHexCheckPromptReward({
+                                                      sessionId: session.id,
+                                                      checkPromptId,
+                                                      targetMode: "manual",
+                                                      playerId: player.playerId,
+                                                    });
+                                                    redirect(`/storyteller/sessions/${session.id}`);
+                                                  }}
+                                                >
+                                                  <button className="rounded border px-2 py-1 text-[11px]">
+                                                    Grant to {playerLabelById.get(player.playerId) ?? player.playerId.slice(0, 8)}
+                                                  </button>
+                                                </form>
+                                              ))}
+                                            </div>
+                                          ) : (
+                                            <div className="text-[11px] text-amber-800">
+                                              Reward locked until the prompt DC is met.
+                                            </div>
+                                          )}
                                         </div>
                                       ) : null}
                                     </div>
@@ -2167,6 +2176,7 @@ export default async function DmScreenPage({
                     </div>
                     {(() => {
                       const prompts = focusedCheckPrompts;
+                      const focusedHighestRoll = Number(highestRollRow?.total ?? NaN);
                       const promptsWithRewards = prompts
                         .map((p: any, i: number) => {
                           const checkPromptId = String(p?.id ?? `prompt-${i + 1}`).trim();
@@ -2189,6 +2199,10 @@ export default async function DmScreenPage({
                             promptLabel: String(p?.label ?? p?.title ?? p?.prompt ?? `Check Prompt ${i + 1}`).trim() || `Check Prompt ${i + 1}`,
                             promptKey: String(p?.checkKey ?? p?.check_key ?? "").trim(),
                             promptDc: Number(p?.dc ?? p?.check_dc ?? NaN),
+                            unlocked:
+                              !Number.isFinite(Number(p?.dc ?? p?.check_dc ?? NaN)) ||
+                              Number(p?.dc ?? p?.check_dc ?? NaN) <= 0 ||
+                              (Number.isFinite(focusedHighestRoll) && focusedHighestRoll >= Number(p?.dc ?? p?.check_dc ?? NaN)),
                           };
                         })
                         .filter((p) => p.promptRewardItemIds.length);
@@ -2208,40 +2222,46 @@ export default async function DmScreenPage({
                               <div>
                                 Reward items: {prompt.promptRewardItemIds.map((id) => rewardItemNameById.get(String(id)) ?? String(id)).join(", ")}
                               </div>
-                              <div className="flex flex-wrap gap-2">
-                                <form
-                                  action={async () => {
-                                    "use server";
-                                    await storytellerResolveHexCheckPromptReward({
-                                      sessionId: session.id,
-                                      checkPromptId: prompt.checkPromptId,
-                                      targetMode: "highest_roll",
-                                    });
-                                    redirect(`/storyteller/sessions/${session.id}`);
-                                  }}
-                                >
-                                  <button className="rounded border px-2 py-1 text-[11px]">Grant Prompt Reward (Highest Roll)</button>
-                                </form>
-                                {storytellerPlayers.map((player) => (
+                              {prompt.unlocked ? (
+                                <div className="flex flex-wrap gap-2">
                                   <form
-                                    key={`active-hex-prompt-reward-${prompt.checkPromptId}-${player.playerId}`}
                                     action={async () => {
                                       "use server";
                                       await storytellerResolveHexCheckPromptReward({
                                         sessionId: session.id,
                                         checkPromptId: prompt.checkPromptId,
-                                        targetMode: "manual",
-                                        playerId: player.playerId,
+                                        targetMode: "highest_roll",
                                       });
                                       redirect(`/storyteller/sessions/${session.id}`);
                                     }}
                                   >
-                                    <button className="rounded border px-2 py-1 text-[11px]">
-                                      Grant to {playerLabelById.get(player.playerId) ?? player.playerId.slice(0, 8)}
-                                    </button>
+                                    <button className="rounded border px-2 py-1 text-[11px]">Grant Prompt Reward (Highest Roll)</button>
                                   </form>
-                                ))}
-                              </div>
+                                  {storytellerPlayers.map((player) => (
+                                    <form
+                                      key={`active-hex-prompt-reward-${prompt.checkPromptId}-${player.playerId}`}
+                                      action={async () => {
+                                        "use server";
+                                        await storytellerResolveHexCheckPromptReward({
+                                          sessionId: session.id,
+                                          checkPromptId: prompt.checkPromptId,
+                                          targetMode: "manual",
+                                          playerId: player.playerId,
+                                        });
+                                        redirect(`/storyteller/sessions/${session.id}`);
+                                      }}
+                                    >
+                                      <button className="rounded border px-2 py-1 text-[11px]">
+                                        Grant to {playerLabelById.get(player.playerId) ?? player.playerId.slice(0, 8)}
+                                      </button>
+                                    </form>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="text-[11px] text-amber-800">
+                                  Reward locked until the prompt DC is met.
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>

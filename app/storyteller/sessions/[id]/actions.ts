@@ -12,6 +12,7 @@ import {
   initiativeModifierFromStatBlock,
   sortEncounterCombatants,
 } from "@/lib/encounter";
+import { extractHexMarkers } from "@/lib/episodeRuntime";
 
 /**
  * Loads the DM session, state, and joined players
@@ -1620,11 +1621,29 @@ export async function storytellerResolveHexCheckPromptReward(input: {
 
   const focus = ((st as any).hex_focus ?? null) as Record<string, any> | null;
   if (!focus) return;
-  const checkPrompts = Array.isArray(focus.check_prompts) ? (focus.check_prompts as any[]) : [];
-  const checkPrompt = checkPrompts.find((p: any) => String(p?.id ?? "").trim() === checkPromptId);
+  let checkPrompts = Array.isArray(focus.check_prompts) ? (focus.check_prompts as any[]) : [];
+  let checkPrompt = checkPrompts.find((p: any) => String(p?.id ?? "").trim() === checkPromptId);
+  if (!checkPrompt && String(focus.block_id ?? "").trim()) {
+    const { data: blockRow, error: blockErr } = await admin
+      .from("episode_blocks")
+      .select("id,meta")
+      .eq("id", String(focus.block_id))
+      .maybeSingle();
+    if (blockErr) throw new Error(blockErr.message);
+    const markers = blockRow ? extractHexMarkers((blockRow as any).meta) : [];
+    const marker = markers.find((m: any) => String(m?.id ?? "").trim() === String(focus.marker_id ?? "").trim()) ?? null;
+    checkPrompts = Array.isArray(marker?.checkPrompts) ? (marker?.checkPrompts as any[]) : [];
+    checkPrompt = checkPrompts.find((p: any) => String(p?.id ?? "").trim() === checkPromptId);
+  }
   if (!checkPrompt) return;
 
-  const rewardItemIds = cleanIds(Array.isArray(checkPrompt.reward_item_ids) ? checkPrompt.reward_item_ids : []);
+  const rewardItemIds = cleanIds(
+    Array.isArray(checkPrompt.reward_item_ids)
+      ? checkPrompt.reward_item_ids
+      : Array.isArray(checkPrompt.rewardItemIds)
+        ? checkPrompt.rewardItemIds
+        : []
+  );
   if (!rewardItemIds.length) return;
 
   const targets = await getSessionCharacterTargets(sessionId);
@@ -1632,8 +1651,10 @@ export async function storytellerResolveHexCheckPromptReward(input: {
   const charByPlayer = new Map<string, string>(targets.map((t) => [t.playerId, t.characterId]));
 
   let winnerPlayerId = String(input.playerId ?? "").trim();
+  const dc = Number((checkPrompt as any)?.dc ?? (checkPrompt as any)?.check_dc ?? NaN);
+  const requiresDc = Number.isFinite(dc) && dc > 0;
+  const raw = ((st as any).roll_results ?? {}) as Record<string, any>;
   if (String(input.targetMode ?? "highest_roll").trim().toLowerCase() === "highest_roll") {
-    const raw = ((st as any).roll_results ?? {}) as Record<string, any>;
     let best: { playerId: string; total: number } | null = null;
     for (const [playerId, row] of Object.entries(raw)) {
       const pid = String(playerId ?? "").trim();
@@ -1643,7 +1664,11 @@ export async function storytellerResolveHexCheckPromptReward(input: {
       if (!best || total > best.total) best = { playerId: pid, total };
     }
     if (!best) return;
+    if (requiresDc && best.total < dc) return;
     winnerPlayerId = best.playerId;
+  } else if (winnerPlayerId) {
+    const manualTotal = Number((raw[winnerPlayerId] as any)?.total ?? NaN);
+    if (requiresDc && (!Number.isFinite(manualTotal) || manualTotal < dc)) return;
   }
 
   if (!winnerPlayerId || !charByPlayer.has(winnerPlayerId)) return;
