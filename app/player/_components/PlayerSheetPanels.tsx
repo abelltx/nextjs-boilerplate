@@ -444,18 +444,15 @@ export function CombinedChecksCard({
                       >
                         <div className="min-w-0">
                           <div className="text-[11px] uppercase tracking-wide text-neutral-500">{skill.label}</div>
-                          <div className="flex items-center gap-1.5 text-[10px] leading-none text-neutral-400">
-                            <span>{ability.label}</span>
-                            <span
-                              className={[
-                                "inline-block h-2 w-2 rounded-full border",
-                                proficient ? "border-emerald-400 bg-emerald-400" : "border-neutral-600",
-                              ].join(" ")}
-                              title={proficient ? "Proficient" : "Not proficient"}
-                            />
-                          </div>
                         </div>
                         <div className="flex items-center gap-1 text-sm font-semibold text-white">
+                          <span
+                            className={[
+                              "inline-block h-2 w-2 rounded-full border",
+                              proficient ? "border-emerald-400 bg-emerald-400" : "border-neutral-600",
+                            ].join(" ")}
+                            title={proficient ? "Proficient" : "Not proficient"}
+                          />
                           {hasSkillAdvantage ? (
                             <span className="rounded border border-emerald-300/60 bg-emerald-500/20 px-1 py-0 text-[10px] font-semibold text-emerald-200">
                               ADV
