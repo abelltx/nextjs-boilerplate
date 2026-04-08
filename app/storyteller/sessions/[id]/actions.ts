@@ -1659,7 +1659,7 @@ export async function storytellerResolveHexCheckPromptReward(input: {
     for (const [playerId, row] of Object.entries(raw)) {
       const pid = String(playerId ?? "").trim();
       if (!pid || !charByPlayer.has(pid)) continue;
-      const total = Number((row as any)?.total ?? NaN);
+      const total = Number((row as any)?.total ?? (row as any)?.value ?? NaN);
       if (!Number.isFinite(total)) continue;
       if (!best || total > best.total) best = { playerId: pid, total };
     }
@@ -1667,7 +1667,7 @@ export async function storytellerResolveHexCheckPromptReward(input: {
     if (requiresDc && best.total < dc) return;
     winnerPlayerId = best.playerId;
   } else if (winnerPlayerId) {
-    const manualTotal = Number((raw[winnerPlayerId] as any)?.total ?? NaN);
+    const manualTotal = Number((raw[winnerPlayerId] as any)?.total ?? (raw[winnerPlayerId] as any)?.value ?? NaN);
     if (requiresDc && (!Number.isFinite(manualTotal) || manualTotal < dc)) return;
   }
 
