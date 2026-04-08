@@ -336,7 +336,7 @@ export function CombinedChecksCard({
 
   return (
     <Card title="Abilities, Skills & Saves">
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+      <div className="space-y-3">
         {abilityDefs.map((ability) => {
           const score = Number(abilities[ability.key] ?? 10);
           const abilityMod = mod(score);

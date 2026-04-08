@@ -1155,7 +1155,7 @@ export default function PlayerHubClient(props: {
         />
 
         <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-12">
-          <aside className="lg:col-span-3 space-y-4">
+          <aside className="lg:col-span-4 xl:col-span-3 space-y-4">
             <CombinedChecksCard
               stat={stat}
               highlightAbility={promptTarget?.kind === "ability" ? promptTarget.abilityKey : null}
@@ -1173,7 +1173,7 @@ export default function PlayerHubClient(props: {
             </div>
           </aside>
 
-          <section className="lg:col-span-6">
+          <section className="lg:col-span-8 xl:col-span-9">
             <div className="mb-4 rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4">
               <div className="text-sm font-semibold">{encounterOwnsStage ? "Encounter Stage" : "Stage"}</div>
 
@@ -1465,7 +1465,6 @@ export default function PlayerHubClient(props: {
               )}
             </div>
           </section>
-          <aside className="lg:col-span-3 space-y-4" />
         </div>
       </div>
 
