@@ -1106,6 +1106,58 @@ export async function appendEncounterLogAction(input: {
   return { ok: true };
 }
 
+export async function reportQuickRollAction(input: {
+  sessionId: string;
+  characterId: string;
+  label: string;
+  total: number;
+  formula?: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  "use server";
+  const { user } = await getProfile();
+  if (!user) return { ok: false, error: "Not signed in." };
+  const sessionId = String(input.sessionId ?? "").trim();
+  const characterId = String(input.characterId ?? "").trim();
+  const label = String(input.label ?? "").trim();
+  const total = Number(input.total ?? NaN);
+  const formula = String(input.formula ?? "").trim();
+  if (!sessionId || !characterId || !label || !Number.isFinite(total)) {
+    return { ok: false, error: "Missing quick roll details." };
+  }
+
+  const supabase = await supabaseServer();
+  const owner = await requireOwnedCharacter(supabase, user.id, characterId);
+  if (!owner.ok) return { ok: false, error: owner.error };
+
+  const { data: st, error: stErr } = await supabase
+    .from("session_state")
+    .select("quick_roll_feed")
+    .eq("session_id", sessionId)
+    .maybeSingle();
+  if (stErr) return { ok: false, error: stErr.message };
+
+  const currentFeed = Array.isArray((st as any)?.quick_roll_feed) ? ((st as any).quick_roll_feed as any[]) : [];
+  const nextFeed = [
+    ...currentFeed,
+    {
+      id: randomUUID(),
+      player_id: user.id,
+      character_id: characterId,
+      label,
+      total,
+      formula: formula || null,
+      created_at: new Date().toISOString(),
+    },
+  ].slice(-80);
+
+  const { error: upErr } = await supabase
+    .from("session_state")
+    .update({ quick_roll_feed: nextFeed })
+    .eq("session_id", sessionId);
+  if (upErr) return { ok: false, error: upErr.message };
+  return { ok: true };
+}
+
 export async function moveOwnEncounterTokenAction(input: {
   sessionId: string;
   characterId: string;

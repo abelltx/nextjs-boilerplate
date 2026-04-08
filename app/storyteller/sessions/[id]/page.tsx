@@ -669,6 +669,25 @@ export default async function DmScreenPage({
   const highestRollRow = currentRollRows.length
     ? currentRollRows.reduce((best, cur) => (cur.total > best.total ? cur : best))
     : null;
+  const quickRollFeed = (Array.isArray((state as any)?.quick_roll_feed) ? ((state as any).quick_roll_feed as any[]) : [])
+    .map((row: any) => ({
+      playerId: String(row?.player_id ?? "").trim(),
+      characterId: String(row?.character_id ?? "").trim(),
+      label: String(row?.label ?? "").trim() || "Quick Roll",
+      total: Number(row?.total ?? NaN),
+      formula: String(row?.formula ?? "").trim() || null,
+      createdAt: String(row?.created_at ?? "").trim() || null,
+    }))
+    .filter((row) => row.playerId && row.characterId && Number.isFinite(row.total));
+  const latestQuickRollByCharacter = new Map<string, { label: string; total: number; formula: string | null; createdAt: string | null }>();
+  for (const row of quickRollFeed) {
+    latestQuickRollByCharacter.set(row.characterId, {
+      label: row.label,
+      total: row.total,
+      formula: row.formula,
+      createdAt: row.createdAt,
+    });
+  }
   const questDirectorIds = questDirectorDefs
     .map((q: any, i: number) => String(q?.id ?? "").trim() || `quest_${i + 1}`)
     .filter(Boolean);
@@ -1560,6 +1579,11 @@ export default async function DmScreenPage({
                 individualQuestCards.map((player) => (
                   <div key={`i-${player.characterId}`} className="rounded border bg-gray-50 px-2 py-1">
                     <div className="text-xs font-semibold">{player.playerName}</div>
+                    {latestQuickRollByCharacter.get(player.characterId) ? (
+                      <div className="mt-1 rounded border bg-white px-2 py-1 text-[11px] text-gray-700">
+                        Last roll: {latestQuickRollByCharacter.get(player.characterId)?.label} = {latestQuickRollByCharacter.get(player.characterId)?.total}
+                      </div>
+                    ) : null}
                     <div className="mt-1 space-y-1">
                       {player.quests.map((q) => (
                         <div key={`${player.characterId}-${q.questId}`} className="text-[11px] text-gray-700">

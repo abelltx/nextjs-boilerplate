@@ -20,6 +20,7 @@ import {
   consumePointSupportEffectsAction,
   leaveSessionAction,
   requestRollApprovalAction,
+  reportQuickRollAction,
   startNpcQuestAction,
   appendEncounterLogAction,
   moveOwnEncounterTokenAction,
@@ -771,6 +772,17 @@ export default function PlayerHubClient(props: {
     }, 7000);
   }
 
+  async function handleQuickRollLogged(entry: { label: string; total: number; formula: string }) {
+    if (!selectedSessionId) return;
+    await reportQuickRollAction({
+      sessionId: selectedSessionId,
+      characterId: String(props.character?.id ?? ""),
+      label: entry.label,
+      total: entry.total,
+      formula: entry.formula,
+    });
+  }
+
   async function handleSubmitEncounterInitiative(source: "manual" | "digital") {
     if (!selectedSessionId || !myEncounterCombatant || submittingInitiative) return;
     let rollValue = 0;
@@ -1482,6 +1494,7 @@ export default function PlayerHubClient(props: {
                   showRollConsole={false}
                   showManualEntry
                   onRollComplete={handleQuickRollComplete}
+                  onRollLogged={handleQuickRollLogged}
                 />
               ) : null}
               {pendingPointChoices.length ? (

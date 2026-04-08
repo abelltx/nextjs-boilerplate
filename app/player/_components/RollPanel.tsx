@@ -60,9 +60,11 @@ export default function RollPanel(props: {
   showRollConsole?: boolean;
   showManualEntry?: boolean;
   onRollComplete?: () => void;
+  onRollLogged?: (entry: { label: string; total: number; formula: string; breakdown: string }) => void;
 }) {
   const [history, setHistory] = useState<RollEntry[]>([]);
   const [last, setLast] = useState<RollEntry | null>(null);
+  const [manualOpen, setManualOpen] = useState(false);
   const [manualSides, setManualSides] = useState(20);
   const [manualTotal, setManualTotal] = useState("");
 
@@ -143,6 +145,12 @@ export default function RollPanel(props: {
     };
 
     setLast(entry);
+    props.onRollLogged?.({
+      label: entry.label,
+      total: entry.total,
+      formula: entry.formula,
+      breakdown: entry.breakdown,
+    });
     props.onRollComplete?.();
     return entry;
   };
@@ -241,6 +249,22 @@ export default function RollPanel(props: {
             disabled={disabled}
             highlight={props.highlightDie === 100}
           />
+          {props.showManualEntry ? (
+            <button
+              type="button"
+              onClick={() => setManualOpen((v) => !v)}
+              disabled={disabled}
+              className={[
+                "rounded-xl border px-2 py-2 text-center text-xs font-bold uppercase tracking-wide transition",
+                manualOpen
+                  ? "border-amber-300 bg-amber-500/20 text-amber-100"
+                  : "border-neutral-800 bg-neutral-950/40 text-white hover:bg-neutral-900/50 hover:border-neutral-600",
+                disabled ? "cursor-not-allowed opacity-40" : "",
+              ].join(" ")}
+            >
+              Manual
+            </button>
+          ) : null}
         </div>
 
         {last ? (
@@ -255,20 +279,16 @@ export default function RollPanel(props: {
           </div>
         ) : null}
 
-        {props.showManualEntry ? (
-          <div className="mt-3 rounded-xl border border-neutral-800 bg-neutral-900/40 p-3">
-            <div className="flex items-center justify-between gap-2">
-              <div className="text-xs font-semibold uppercase tracking-wide text-neutral-400">Manual Roll</div>
-              <div className="text-[11px] text-neutral-500">Log physical dice</div>
-            </div>
-            <div className="mt-2 grid grid-cols-4 gap-2">
+        {props.showManualEntry && manualOpen ? (
+          <div className="mt-2 rounded-xl border border-neutral-800 bg-neutral-900/40 p-3">
+            <div className="flex flex-wrap gap-1.5">
               {[4, 6, 8, 10, 12, 20, 100].map((sides) => (
                 <button
                   key={`manual-d${sides}`}
                   type="button"
                   onClick={() => setManualSides(sides)}
                   className={[
-                    "rounded border px-2 py-1 text-xs font-semibold uppercase transition",
+                    "rounded border px-2 py-1 text-[11px] font-semibold uppercase transition",
                     manualSides === sides
                       ? "border-amber-300 bg-amber-500/20 text-amber-100"
                       : "border-neutral-700 bg-neutral-950 text-neutral-300 hover:bg-neutral-900",
@@ -278,40 +298,47 @@ export default function RollPanel(props: {
                 </button>
               ))}
             </div>
-            <div className="mt-2 grid grid-cols-[minmax(0,1fr)_88px] gap-2">
-              <div className="flex items-center rounded border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-300">
-                Selected die: d{manualSides}
+            <div className="mt-2 flex items-center gap-2">
+              <div className="rounded border border-neutral-700 bg-neutral-950 px-2 py-2 text-xs text-neutral-300">
+                d{manualSides}
               </div>
               <input
                 value={manualTotal}
                 onChange={(e) => setManualTotal(e.currentTarget.value)}
                 inputMode="numeric"
                 placeholder="Total"
-                className="rounded border border-neutral-700 bg-neutral-950 px-2 py-2 text-sm"
+                className="min-w-0 flex-1 rounded border border-neutral-700 bg-neutral-950 px-2 py-2 text-sm"
               />
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => {
+                  const total = Number(manualTotal);
+                  if (!Number.isFinite(total)) return;
+                  const entry: RollEntry = {
+                    id: uid(),
+                    label: `Manual d${manualSides}`,
+                    formula: `d${manualSides} (manual)`,
+                    total,
+                    breakdown: "Physical dice result",
+                    ts: Date.now(),
+                  };
+                  setLast(entry);
+                  props.onRollLogged?.({
+                    label: entry.label,
+                    total: entry.total,
+                    formula: entry.formula,
+                    breakdown: entry.breakdown,
+                  });
+                  setManualTotal("");
+                  setManualOpen(false);
+                  props.onRollComplete?.();
+                }}
+                className="rounded border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs font-semibold text-neutral-100 hover:bg-neutral-900 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Log
+              </button>
             </div>
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={() => {
-                const total = Number(manualTotal);
-                if (!Number.isFinite(total)) return;
-                const entry: RollEntry = {
-                  id: uid(),
-                  label: `Manual d${manualSides}`,
-                  formula: `d${manualSides} (manual)`,
-                  total,
-                  breakdown: "Physical dice result",
-                  ts: Date.now(),
-                };
-                setLast(entry);
-                setManualTotal("");
-                props.onRollComplete?.();
-              }}
-              className="mt-2 rounded border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm font-semibold text-neutral-100 hover:bg-neutral-900 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              Log Manual Roll
-            </button>
           </div>
         ) : null}
       </div>
