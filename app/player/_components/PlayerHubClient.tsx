@@ -774,13 +774,16 @@ export default function PlayerHubClient(props: {
 
   async function handleQuickRollLogged(entry: { label: string; total: number; formula: string }) {
     if (!selectedSessionId) return;
-    await reportQuickRollAction({
+    const res = await reportQuickRollAction({
       sessionId: selectedSessionId,
       characterId: String(props.character?.id ?? ""),
       label: entry.label,
       total: entry.total,
       formula: entry.formula,
     });
+    if (!res.ok) {
+      alert(res.error ?? "Could not report quick roll to storyteller.");
+    }
   }
 
   async function handleSubmitEncounterInitiative(source: "manual" | "digital") {
