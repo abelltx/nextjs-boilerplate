@@ -1401,8 +1401,8 @@ export default function PlayerHubClient(props: {
             </div>
           </section>
 
-          <aside className="lg:col-span-4 xl:col-span-4 space-y-4">
-            <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4 space-y-3">
+          <aside className="lg:col-span-4 xl:col-span-4 space-y-3">
+            <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-3 space-y-2">
               <div className="text-sm font-semibold">Actions</div>
               <div className="grid grid-cols-1 gap-2">
                 <button
@@ -2470,11 +2470,11 @@ function ActionListPanel(props: {
   }
 
   return props.actions.length ? (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {props.actions.map((a) => (
         <div
           key={a.id}
-          className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-3 text-sm"
+          className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-2.5 text-sm"
           onMouseEnter={() => setActionPreview(a)}
           onMouseLeave={() => setActionPreview(null)}
           onFocus={() => setActionPreview(a)}
@@ -2496,7 +2496,7 @@ function ActionListPanel(props: {
                 const otherActionLocked = Boolean(props.combatMode && props.actionUsed && props.usedActionId && props.usedActionId !== a.id);
                 const thisActionAlreadyUsed = Boolean(props.combatMode && props.actionUsed && props.usedActionId === a.id);
                 return (
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="truncate font-semibold text-neutral-100">{a.name}</div>
@@ -2509,7 +2509,7 @@ function ActionListPanel(props: {
                     </div>
 
                     {actionConfig?.kind === "targeted_support" ? (
-                      <div className="space-y-2">
+                      <div className="space-y-1.5">
                         <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-300">
                           {props.combatMode ? (
                             <>
@@ -2577,8 +2577,8 @@ function ActionListPanel(props: {
                         </div>
                       </div>
                     ) : a.uses_attack_roll !== false && a.attack_bonus_override != null ? (
-                      <div className="space-y-2">
-                        <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-300">
+                      <div className="space-y-1.5">
+                        <div className="flex flex-wrap items-center gap-1.5 text-xs text-neutral-300">
                           <div>+{a.attack_bonus_override}</div>
                           {targetRequired ? (
                             <button
@@ -2633,6 +2633,8 @@ function ActionListPanel(props: {
                               {otherActionLocked ? "Action Used" : HEAL_TYPES.has(String(a.damage_type ?? "").toLowerCase()) ? "Roll Heal" : "Roll Dmg"}
                             </button>
                           ) : null}
+                          {rolls[a.id]?.hit ? <div className="truncate text-[11px] text-emerald-300">{rolls[a.id]?.hit}</div> : null}
+                          {rolls[a.id]?.damage ? <div className="truncate text-[11px] text-emerald-300">{rolls[a.id]?.damage}</div> : null}
                           {hasReroll && rolls[a.id]?.hit ? (
                             <button
                               type="button"
@@ -2671,12 +2673,10 @@ function ActionListPanel(props: {
                             <div className="text-amber-300">Reroll ready: {(props.temporaryRerollSources ?? []).join(", ")}</div>
                           ) : null}
                         </div>
-                        {rolls[a.id]?.hit ? <div className="text-[11px] text-emerald-300">{rolls[a.id]?.hit}</div> : null}
-                        {rolls[a.id]?.damage ? <div className="text-[11px] text-emerald-300">{rolls[a.id]?.damage}</div> : null}
                       </div>
                     ) : (
-                      <div className="space-y-2">
-                        <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-300">
+                      <div className="space-y-1.5">
+                        <div className="flex flex-wrap items-center gap-1.5 text-xs text-neutral-300">
                           {a.save_dc_override != null ? (
                             <div>{`DC ${a.save_dc_override}${a.save_ability ? ` ${String(a.save_ability).toUpperCase()}` : ""}`}</div>
                           ) : null}
@@ -2705,12 +2705,12 @@ function ActionListPanel(props: {
                               </button>
                             </>
                           ) : null}
+                          {rolls[a.id]?.damage ? <div className="truncate text-[11px] text-emerald-300">{rolls[a.id]?.damage}</div> : null}
                         </div>
-                        {rolls[a.id]?.damage ? <div className="text-[11px] text-emerald-300">{rolls[a.id]?.damage}</div> : null}
                       </div>
                     )}
 
-                    <div className="border-t border-neutral-800 pt-2 text-[11px] leading-relaxed text-neutral-300">
+                    <div className="border-t border-neutral-800 pt-1.5 text-[11px] leading-relaxed text-neutral-300">
                       {a.summary?.trim() ? <div className="whitespace-pre-wrap break-words">{a.summary}</div> : null}
                       {!a.summary?.trim() && a.rules_text?.trim() ? (
                         <div className="whitespace-pre-wrap break-words">{a.rules_text}</div>
