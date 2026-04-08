@@ -55,6 +55,29 @@ export default function PlayersPassivePanel({
   const selected = selectedPlayerId ? playersById.get(selectedPlayerId) ?? null : null;
   const rollOpen = Boolean(liveState?.roll_open);
   const rollTarget = String(liveState?.roll_target ?? "all").trim();
+  const liveQuickRollByPlayerId = useMemo(() => {
+    const byCharacter = new Map<string, QuickRollData>();
+    const feed = Array.isArray(liveState?.quick_roll_feed) ? (liveState.quick_roll_feed as any[]) : [];
+    for (const row of feed) {
+      const characterId = String(row?.character_id ?? "").trim();
+      if (!characterId) continue;
+      byCharacter.set(characterId, {
+        label: String(row?.label ?? "").trim() || "Quick Roll",
+        total: Number(row?.total ?? NaN),
+        formula: String(row?.formula ?? "").trim() || null,
+        createdAt: String(row?.created_at ?? "").trim() || null,
+      });
+    }
+    const byPlayer: Record<string, QuickRollData | undefined> = {};
+    for (const p of players ?? []) {
+      const playerId = String(p?.playerId ?? "").trim();
+      const characterId = String(p?.characterId ?? "").trim();
+      if (!playerId || !characterId) continue;
+      const quick = byCharacter.get(characterId);
+      if (quick && Number.isFinite(quick.total)) byPlayer[playerId] = quick;
+    }
+    return byPlayer;
+  }, [liveState, players]);
   const questGlowSet = useMemo(
     () =>
       new Set(
@@ -98,7 +121,7 @@ export default function PlayersPassivePanel({
           const playerId = String(pRow?.player_id ?? "").trim();
           const hasPlayer = Boolean(playerId);
           const info = hasPlayer ? playersById.get(playerId) : null;
-          const quickRoll = hasPlayer ? quickRollByPlayerId?.[playerId] : null;
+          const quickRoll = hasPlayer ? (liveQuickRollByPlayerId[playerId] ?? quickRollByPlayerId?.[playerId] ?? null) : null;
           const hasActiveRoll = hasPlayer && rollOpen && (rollTarget === "all" || rollTarget === playerId);
           const questGlow = hasPlayer && questGlowSet.has(playerId);
           return (
