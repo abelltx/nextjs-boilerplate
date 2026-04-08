@@ -284,6 +284,198 @@ export function SkillsCard({
   );
 }
 
+export function CombinedChecksCard({
+  stat,
+  highlightAbility = null,
+  highlightSkill = null,
+  onAbilityRoll,
+  onSkillRoll,
+  rollLocked = false,
+  advantageByAbility,
+  advantageBySkill,
+}: {
+  stat: StatBlock;
+  highlightAbility?: AbilityKey | null;
+  highlightSkill?: string | null;
+  onAbilityRoll?: (ability: AbilityKey, meta: RollClickMeta, fromRect: DOMRect) => void;
+  onSkillRoll?: (skillKey: string, meta: RollClickMeta, fromRect: DOMRect) => void;
+  rollLocked?: boolean;
+  advantageByAbility?: Partial<Record<AbilityKey, boolean>>;
+  advantageBySkill?: Record<string, boolean>;
+}) {
+  const abilities = stat.abilities ?? { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
+  const saves = stat.saves ?? {};
+  const skills = stat.skills ?? {};
+  const abilityDefs: Array<{ key: AbilityKey; label: string }> = [
+    { key: "str", label: "Strength" },
+    { key: "dex", label: "Dexterity" },
+    { key: "con", label: "Constitution" },
+    { key: "int", label: "Intelligence" },
+    { key: "wis", label: "Wisdom" },
+    { key: "cha", label: "Charisma" },
+  ];
+  const skillDefs: Array<{ key: string; label: string; ability: AbilityKey }> = [
+    { key: "acrobatics", label: "Acrobatics", ability: "dex" },
+    { key: "animal_handling", label: "Animal Handling", ability: "wis" },
+    { key: "athletics", label: "Athletics", ability: "str" },
+    { key: "deception", label: "Deception", ability: "cha" },
+    { key: "history", label: "History", ability: "int" },
+    { key: "insight", label: "Insight", ability: "wis" },
+    { key: "intimidation", label: "Intimidation", ability: "cha" },
+    { key: "investigation", label: "Investigation", ability: "int" },
+    { key: "medicine", label: "Medicine", ability: "wis" },
+    { key: "nature", label: "Nature", ability: "int" },
+    { key: "perception", label: "Perception", ability: "wis" },
+    { key: "performance", label: "Performance", ability: "cha" },
+    { key: "persuasion", label: "Persuasion", ability: "cha" },
+    { key: "religion", label: "Religion", ability: "int" },
+    { key: "sleight_of_hand", label: "Sleight of Hand", ability: "dex" },
+    { key: "stealth", label: "Stealth", ability: "dex" },
+    { key: "survival", label: "Survival", ability: "wis" },
+  ];
+
+  return (
+    <Card title="Abilities, Skills & Saves">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+        {abilityDefs.map((ability) => {
+          const score = Number(abilities[ability.key] ?? 10);
+          const abilityMod = mod(score);
+          const abilityGear = abilityGearBonus(stat, ability.key);
+          const totalAbilityBonus = abilityMod + abilityGear;
+          const saveBonus = abilityMod + Number(saves[ability.key] ?? 0);
+          const hasAbilityAdvantage = Boolean(advantageByAbility?.[ability.key]);
+          const groupedSkills = skillDefs.filter((row) => row.ability === ability.key);
+          const info = stat._breakdown?.abilities?.[ability.key];
+          const base = Number(info?.base ?? score);
+          const gear = Number(info?.gear ?? 0);
+          const final = Number(info?.final ?? score);
+
+          return (
+            <div
+              key={ability.key}
+              className={[
+                "rounded-xl border bg-neutral-950/40 p-3",
+                highlightAbility === ability.key
+                  ? "border-green-300 bg-green-500/10 shadow-[0_0_0_2px_rgba(74,222,128,0.45),0_0_20px_rgba(34,197,94,0.28)]"
+                  : "border-neutral-800",
+              ].join(" ")}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <button
+                  type="button"
+                  disabled={rollLocked}
+                  onClick={(e) => {
+                    const rollA = Math.floor(Math.random() * 20) + 1;
+                    const rollB = hasAbilityAdvantage ? Math.floor(Math.random() * 20) + 1 : null;
+                    const roll = rollB == null ? rollA : Math.max(rollA, rollB);
+                    const total = roll + totalAbilityBonus;
+                    onAbilityRoll?.(
+                      ability.key,
+                      {
+                        label: `${ability.label} Check`,
+                        total,
+                        breakdown:
+                          rollB == null
+                            ? `d20(${roll}) ${totalAbilityBonus >= 0 ? "+" : "-"} ${Math.abs(totalAbilityBonus)}`
+                            : `Advantage roll: ${rollA} and ${rollB}, kept ${roll}, ${totalAbilityBonus >= 0 ? "+" : "-"}${Math.abs(totalAbilityBonus)} bonus`,
+                      },
+                      e.currentTarget.getBoundingClientRect()
+                    );
+                  }}
+                  className="min-w-0 text-left disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <div className="text-[11px] uppercase tracking-wide text-neutral-500">{ability.label}</div>
+                  <div className="mt-1 flex items-center gap-2">
+                    <div className="text-lg font-semibold text-white" title={`base ${base}, gear ${gear >= 0 ? `+${gear}` : gear}`}>
+                      {final}
+                    </div>
+                    <div className="text-sm font-semibold text-neutral-300">{fmt(abilityMod)}</div>
+                    {hasAbilityAdvantage ? (
+                      <span className="rounded border border-emerald-300/60 bg-emerald-500/20 px-1 py-0 text-[10px] font-semibold text-emerald-200">
+                        ADV
+                      </span>
+                    ) : null}
+                  </div>
+                </button>
+                <div className="rounded-lg border border-neutral-800 bg-neutral-900/70 px-2 py-1 text-right">
+                  <div className="text-[10px] uppercase tracking-wide text-neutral-500">Save</div>
+                  <div className="text-sm font-semibold text-white">{fmt(saveBonus)}</div>
+                </div>
+              </div>
+
+              {groupedSkills.length ? (
+                <div className="mt-3 space-y-1.5">
+                  {groupedSkills.map((skill) => {
+                    const baseSkillBonus = totalAbilityBonus;
+                    const hasOverride = Object.prototype.hasOwnProperty.call(skills, skill.key);
+                    const totalSkillBonus = hasOverride ? Number(skills[skill.key] ?? 0) + abilityGear : baseSkillBonus;
+                    const proficient = totalSkillBonus > baseSkillBonus;
+                    const hasSkillAdvantage = Boolean(advantageBySkill?.[skill.key]);
+
+                    return (
+                      <button
+                        key={skill.key}
+                        type="button"
+                        disabled={rollLocked}
+                        onClick={(e) => {
+                          const rollA = Math.floor(Math.random() * 20) + 1;
+                          const rollB = hasSkillAdvantage ? Math.floor(Math.random() * 20) + 1 : null;
+                          const roll = rollB == null ? rollA : Math.max(rollA, rollB);
+                          const total = roll + totalSkillBonus;
+                          onSkillRoll?.(
+                            skill.key,
+                            {
+                              label: `${skill.label} Check`,
+                              total,
+                              breakdown:
+                                rollB == null
+                                  ? `d20(${roll}) ${totalSkillBonus >= 0 ? "+" : "-"} ${Math.abs(totalSkillBonus)}`
+                                  : `Advantage roll: ${rollA} and ${rollB}, kept ${roll}, ${totalSkillBonus >= 0 ? "+" : "-"}${Math.abs(totalSkillBonus)} bonus`,
+                            },
+                            e.currentTarget.getBoundingClientRect()
+                          );
+                        }}
+                        className={[
+                          "flex w-full items-center justify-between gap-3 rounded-lg border px-2.5 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-60",
+                          highlightSkill === skill.key
+                            ? "border-green-300 bg-green-500/15 shadow-[0_0_0_2px_rgba(74,222,128,0.45),0_0_18px_rgba(34,197,94,0.28)]"
+                            : "border-neutral-800 bg-neutral-900/60",
+                        ].join(" ")}
+                      >
+                        <div className="min-w-0">
+                          <div className="text-[11px] uppercase tracking-wide text-neutral-500">{skill.label}</div>
+                          <div className="flex items-center gap-2 text-[10px] text-neutral-400">
+                            <span>{ability.label}</span>
+                            <span
+                              className={[
+                                "inline-block h-2 w-2 rounded-full border",
+                                proficient ? "border-emerald-400 bg-emerald-400" : "border-neutral-600",
+                              ].join(" ")}
+                              title={proficient ? "Proficient" : "Not proficient"}
+                            />
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-sm font-semibold text-white">
+                          {hasSkillAdvantage ? (
+                            <span className="rounded border border-emerald-300/60 bg-emerald-500/20 px-1 py-0 text-[10px] font-semibold text-emerald-200">
+                              ADV
+                            </span>
+                          ) : null}
+                          <span>{fmt(totalSkillBonus)}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
 export function PassivesCard({ stat }: { stat: StatBlock }) {
   const passives = stat.passives ?? {};
   const entries = Object.entries(passives);

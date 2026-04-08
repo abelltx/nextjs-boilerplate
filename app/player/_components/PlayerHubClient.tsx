@@ -6,7 +6,7 @@ import { createClient } from "@/utils/supabase/client";
 import PlayerStatusHeader from "./PlayerStatusHeader";
 import JourneyLog from "./JourneyLog";
 import JoinSessionModal from "./JoinSessionModal";
-import { AbilitiesCard, SavesCard, SkillsCard, PassivesCard, type AbilityKey } from "./PlayerSheetPanels";
+import { CombinedChecksCard, PassivesCard, type AbilityKey } from "./PlayerSheetPanels";
 import RollPanel from "./RollPanel";
 import PlayerInventoryPanel from "./PlayerInventoryPanel";
 import {
@@ -1156,14 +1156,16 @@ export default function PlayerHubClient(props: {
 
         <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-12">
           <aside className="lg:col-span-3 space-y-4">
-            <AbilitiesCard
+            <CombinedChecksCard
               stat={stat}
               highlightAbility={promptTarget?.kind === "ability" ? promptTarget.abilityKey : null}
+              highlightSkill={promptTarget?.kind === "skill" ? promptTarget.skillKey : null}
               onAbilityRoll={handleAbilityGuidedRoll}
+              onSkillRoll={handleSkillGuidedRoll}
               rollLocked={rollLocked || diceMode === "manual" || submittingRoll}
               advantageByAbility={abilityAdvantageMap}
+              advantageBySkill={skillAdvantageMap}
             />
-            <SavesCard stat={stat} highlightAbility={promptTarget?.kind === "ability" ? promptTarget.abilityKey : null} />
             <PassivesCard stat={stat} />
 
             <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4 text-xs text-neutral-400">
@@ -1463,18 +1465,7 @@ export default function PlayerHubClient(props: {
               )}
             </div>
           </section>
-
-          <aside className="lg:col-span-3 space-y-4">
-            <div className="lg:sticky lg:top-4">
-              <SkillsCard
-                stat={stat}
-                highlightSkill={promptTarget?.kind === "skill" ? promptTarget.skillKey : null}
-                onSkillRoll={handleSkillGuidedRoll}
-                rollLocked={rollLocked || diceMode === "manual" || submittingRoll}
-                advantageBySkill={skillAdvantageMap}
-              />
-            </div>
-          </aside>
+          <aside className="lg:col-span-3 space-y-4" />
         </div>
       </div>
 

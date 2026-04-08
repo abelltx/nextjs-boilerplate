@@ -810,6 +810,15 @@ export default async function DmScreenPage({
       if (id) rewardItemNameById.set(id, name || id);
     }
   }
+  const focusedPromptRewardGrants = Array.isArray(stageHexFocus?.check_prompt_rewards_granted)
+    ? (stageHexFocus?.check_prompt_rewards_granted as any[])
+    : [];
+  const latestPromptGrantById = new Map<string, any>();
+  for (const row of focusedPromptRewardGrants) {
+    const promptId = String((row as any)?.check_prompt_id ?? "").trim();
+    if (!promptId) continue;
+    latestPromptGrantById.set(promptId, row);
+  }
   const questGlowPlayerIds = focusedRequiredQuestIds.length
     ? storytellerPlayers
         .filter((p: any) => {
@@ -1960,6 +1969,7 @@ export default async function DmScreenPage({
                                   const winningPromptTotal = Number(highestRollRow?.total ?? NaN);
                                   const promptRewardUnlocked =
                                     !hasDc || (Number.isFinite(winningPromptTotal) && winningPromptTotal >= dcNum);
+                                  const promptGrant = latestPromptGrantById.get(checkPromptId);
                                   return (
                                     <div key={`${m.id}-${String(p?.id ?? checkKey)}`} className="rounded border bg-gray-50 p-2 space-y-1">
                                       <div className="text-xs font-semibold">
@@ -2031,7 +2041,12 @@ export default async function DmScreenPage({
                                           <div>
                                             Prompt rewards: {promptRewardItemIds.map((id) => rewardItemNameById.get(String(id)) ?? String(id)).join(", ")}
                                           </div>
-                                          {promptRewardUnlocked ? (
+                                          {promptGrant ? (
+                                            <div className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] text-emerald-900">
+                                              Granted to {playerLabelById.get(String(promptGrant?.reward_target_player_id ?? "")) ?? String(promptGrant?.reward_target_player_id ?? "").slice(0, 8)}
+                                            </div>
+                                          ) : null}
+                                          {!promptGrant && promptRewardUnlocked ? (
                                             <div className="flex flex-wrap gap-2">
                                               <form
                                                 action={async () => {
@@ -2066,11 +2081,11 @@ export default async function DmScreenPage({
                                                 </form>
                                               ))}
                                             </div>
-                                          ) : (
+                                          ) : !promptGrant ? (
                                             <div className="text-[11px] text-amber-800">
                                               Reward locked until the prompt DC is met.
                                             </div>
-                                          )}
+                                          ) : null}
                                         </div>
                                       ) : null}
                                     </div>
@@ -2199,6 +2214,7 @@ export default async function DmScreenPage({
                             promptLabel: String(p?.label ?? p?.title ?? p?.prompt ?? `Check Prompt ${i + 1}`).trim() || `Check Prompt ${i + 1}`,
                             promptKey: String(p?.checkKey ?? p?.check_key ?? "").trim(),
                             promptDc: Number(p?.dc ?? p?.check_dc ?? NaN),
+                            grant: latestPromptGrantById.get(checkPromptId),
                             unlocked:
                               !Number.isFinite(Number(p?.dc ?? p?.check_dc ?? NaN)) ||
                               Number(p?.dc ?? p?.check_dc ?? NaN) <= 0 ||
@@ -2222,7 +2238,12 @@ export default async function DmScreenPage({
                               <div>
                                 Reward items: {prompt.promptRewardItemIds.map((id) => rewardItemNameById.get(String(id)) ?? String(id)).join(", ")}
                               </div>
-                              {prompt.unlocked ? (
+                              {prompt.grant ? (
+                                <div className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] text-emerald-900">
+                                  Granted to {playerLabelById.get(String(prompt.grant?.reward_target_player_id ?? "")) ?? String(prompt.grant?.reward_target_player_id ?? "").slice(0, 8)}
+                                </div>
+                              ) : null}
+                              {!prompt.grant && prompt.unlocked ? (
                                 <div className="flex flex-wrap gap-2">
                                   <form
                                     action={async () => {
@@ -2257,11 +2278,11 @@ export default async function DmScreenPage({
                                     </form>
                                   ))}
                                 </div>
-                              ) : (
+                              ) : !prompt.grant ? (
                                 <div className="text-[11px] text-amber-800">
                                   Reward locked until the prompt DC is met.
                                 </div>
-                              )}
+                              ) : null}
                             </div>
                           ))}
                         </div>
