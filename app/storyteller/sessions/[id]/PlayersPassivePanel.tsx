@@ -147,17 +147,17 @@ export default function PlayersPassivePanel({
               <div className="mt-1 text-[11px] text-gray-600">
                 {info?.characterName ? info.characterName : hasPlayer ? "Open passives" : "No player"}
               </div>
-              {quickRoll ? (
-                <div className="mt-1 rounded border bg-white px-1.5 py-1 text-[10px] text-gray-700">
-                  {quickRoll.label}: {quickRoll.total}
-                </div>
-              ) : null}
               {hasActiveRoll ? (
                 <div className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">Roll Active</div>
               ) : questGlow ? (
                 <div className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-amber-700">Quest Target</div>
               ) : null}
-              <DmPlayerRollLineRealtime sessionId={sessionId} playerId={hasPlayer ? playerId : null} initialState={initialState as any} />
+              <DmPlayerRollLineRealtime
+                sessionId={sessionId}
+                playerId={hasPlayer ? playerId : null}
+                initialState={initialState as any}
+                quickRoll={quickRoll}
+              />
             </button>
           );
         })}

@@ -23,10 +23,15 @@ export default function DmPlayerRollLineRealtime({
   sessionId,
   playerId,
   initialState,
+  quickRoll,
 }: {
   sessionId: string;
   playerId: string | null;
   initialState: AnyState;
+  quickRoll?: {
+    label: string;
+    total: number;
+  } | null;
 }) {
   const supabase = useMemo(() => supabaseBrowser(), []);
   const [state, setState] = useState<AnyState>(initialState ?? {});
@@ -55,21 +60,30 @@ export default function DmPlayerRollLineRealtime({
     };
   }, [supabase, sessionId, playerId]);
 
-  if (!playerId) return <div className="text-[11px] text-gray-400 mt-1">No roll yet</div>;
+  if (!playerId) return <div className="mt-1 text-[11px] text-gray-400">No roll yet</div>;
+
+  if (quickRoll && Number.isFinite(quickRoll.total)) {
+    return (
+      <div className="mt-1 text-[11px] text-gray-700">
+        Last roll: <span className="font-mono">{quickRoll.label}</span>{" "}
+        <span className="font-bold">{String(quickRoll.total)}</span>
+      </div>
+    );
+  }
 
   const rollDie = String(state.roll_die ?? "");
   const rollResults = asObject(state.roll_results) as Record<string, any>;
   const mine = rollResults[playerId] ?? null;
 
   if (!mine?.value && mine?.value !== 0) {
-    return <div className="text-[11px] text-gray-400 mt-1">No roll yet</div>;
+    return <div className="mt-1 text-[11px] text-gray-400">No roll yet</div>;
   }
 
   return (
-    <div className="text-[11px] text-gray-700 mt-1">
+    <div className="mt-1 text-[11px] text-gray-700">
       <span className="font-mono">{rollDie ? rollDie.toUpperCase() : "ROLL"}</span>:{" "}
       <span className="font-bold">{String(mine.value)}</span>{" "}
-      <span className="text-gray-500">({String(mine.source ?? "—")})</span>
+      <span className="text-gray-500">({String(mine.source ?? "-")})</span>
     </div>
   );
 }
