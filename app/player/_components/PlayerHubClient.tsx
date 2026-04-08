@@ -1429,6 +1429,11 @@ export default function PlayerHubClient(props: {
                 <button
                   type="button"
                   onClick={() => {
+                    if (requestPickMode) {
+                      setRequestPickMode(false);
+                      setRequestRollOpen(false);
+                      return;
+                    }
                     setRequestPickMode(true);
                     setRequestRollOpen(false);
                   }}

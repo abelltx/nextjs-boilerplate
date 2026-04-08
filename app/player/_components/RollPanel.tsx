@@ -46,27 +46,6 @@ function nowLabel(ts: number) {
   return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 }
 
-function dieGlyph(sides: number) {
-  switch (sides) {
-    case 4:
-      return "△";
-    case 6:
-      return "□";
-    case 8:
-      return "◇";
-    case 10:
-      return "⬟";
-    case 12:
-      return "⬢";
-    case 20:
-      return "✦";
-    case 100:
-      return "◎";
-    default:
-      return "◈";
-  }
-}
-
 export default function RollPanel(props: {
   stat: StatBlock;
   disabled?: boolean;
@@ -264,33 +243,18 @@ export default function RollPanel(props: {
             highlight={props.highlightDie === 100}
           />
         </div>
-      </div>
 
-      {/* Ability Checks */}
-      {props.showAbilityChecks !== false ? (
-      <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
-        <div className="text-sm font-semibold">Ability Checks</div>
-        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {abilityRows.map((a) => {
-            const score = Number((abilities as any)[a.key] ?? 10);
-            const bonus = mod(score) + abilityGearBonus(props.stat, a.key);
-            return (
-              <ActionRollButton
-                key={a.key}
-                title={`${a.label} Check`}
-                subtitle={`d20 ${fmtSigned(bonus)}`}
-                onClick={(fromRect) => {
-                  const entry = doRoll(`${a.label} Check`, [{ n: 1, sides: 20 }], bonus);
-                  if (props.highlightAbility === a.key && props.onGuidedRoll) {
-                    props.onGuidedRoll({ label: entry.label, total: entry.total, breakdown: entry.breakdown }, fromRect);
-                  }
-                }}
-                disabled={disabled}
-                highlight={props.highlightAbility === a.key}
-              />
-            );
-          })}
-        </div>
+        {last ? (
+          <div className="mt-3 rounded-xl border border-neutral-800 bg-neutral-900/40 px-3 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="truncate text-xs font-semibold text-neutral-200">{last.label}</div>
+                <div className="truncate text-[11px] text-neutral-500">{last.breakdown}</div>
+              </div>
+              <div className="text-lg font-bold text-white">{last.total}</div>
+            </div>
+          </div>
+        ) : null}
 
         {props.showManualEntry ? (
           <div className="mt-3 rounded-xl border border-neutral-800 bg-neutral-900/40 p-3">
@@ -338,6 +302,33 @@ export default function RollPanel(props: {
             </button>
           </div>
         ) : null}
+      </div>
+
+      {/* Ability Checks */}
+      {props.showAbilityChecks !== false ? (
+      <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
+        <div className="text-sm font-semibold">Ability Checks</div>
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {abilityRows.map((a) => {
+            const score = Number((abilities as any)[a.key] ?? 10);
+            const bonus = mod(score) + abilityGearBonus(props.stat, a.key);
+            return (
+              <ActionRollButton
+                key={a.key}
+                title={`${a.label} Check`}
+                subtitle={`d20 ${fmtSigned(bonus)}`}
+                onClick={(fromRect) => {
+                  const entry = doRoll(`${a.label} Check`, [{ n: 1, sides: 20 }], bonus);
+                  if (props.highlightAbility === a.key && props.onGuidedRoll) {
+                    props.onGuidedRoll({ label: entry.label, total: entry.total, breakdown: entry.breakdown }, fromRect);
+                  }
+                }}
+                disabled={disabled}
+                highlight={props.highlightAbility === a.key}
+              />
+            );
+          })}
+        </div>
       </div>
       ) : null}
 
@@ -462,7 +453,6 @@ function DieButton(props: {
   highlight?: boolean;
 }) {
   const text = props.label ?? `d${props.sides}`;
-  const glyph = dieGlyph(props.sides);
   return (
     <button
       onClick={(e) => {
@@ -479,8 +469,7 @@ function DieButton(props: {
       ].join(" ")}
       title={`Roll ${text}`}
     >
-      <div className="text-sm leading-none text-neutral-400 group-hover:text-neutral-300">{glyph}</div>
-      <div className="mt-1 text-xs font-bold uppercase tracking-wide text-white">{text}</div>
+      <div className="text-xs font-bold uppercase tracking-wide text-white">{text}</div>
       <div className="pointer-events-none absolute inset-0 rounded-xl ring-0 ring-white/10 group-hover:ring-1" />
     </button>
   );
