@@ -1155,7 +1155,7 @@ export default function PlayerHubClient(props: {
         />
 
         <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-12">
-          <aside className="lg:col-span-4 xl:col-span-3 space-y-4">
+          <aside className="lg:col-span-3 xl:col-span-3 space-y-4">
             <CombinedChecksCard
               stat={stat}
               highlightAbility={promptTarget?.kind === "ability" ? promptTarget.abilityKey : null}
@@ -1173,11 +1173,49 @@ export default function PlayerHubClient(props: {
             </div>
           </aside>
 
-          <section className="lg:col-span-8 xl:col-span-9">
+          <section className="lg:col-span-6 xl:col-span-6">
             <div className="mb-4 rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4">
               <div className="text-sm font-semibold">{encounterOwnsStage ? "Encounter Stage" : "Stage"}</div>
 
               <div className="mt-4 space-y-4">
+                {rollOpen ? (
+                  <div ref={promptBoxRef} className="rounded-2xl border border-emerald-400/40 bg-neutral-950/70 p-3">
+                    <RollRequestPanel
+                      prompt={rollPrompt}
+                      guidedResult={guidedResult}
+                      diceMode={diceMode}
+                      setDiceMode={setDiceMode}
+                      manualValue={manualValue}
+                      manualValueB={manualValueB}
+                      setManualValue={setManualValue}
+                      setManualValueB={setManualValueB}
+                      onSubmitManual={async () => {
+                        if (rollLocked || submittingRoll) return;
+                        const rawA = Number(manualValue);
+                        if (!Number.isFinite(rawA)) {
+                          alert("Enter your first d20 roll.");
+                          return;
+                        }
+                        const hasAdvantage = (activePromptAdvantageSources?.length ?? 0) > 0;
+                        const rawB = manualValueB.trim() ? Number(manualValueB) : null;
+                        if (hasAdvantage && !Number.isFinite(Number(rawB))) {
+                          alert("Advantage is active. Enter your second d20 roll.");
+                          return;
+                        }
+                        const computed = calculateRequestedRollTotal(rawA, rawB);
+                        setGuidedResult({ label: "Table Dice", total: computed.total, breakdown: computed.breakdown });
+                        await submitRoll(computed.total, "manual", pendingPromptRerollEffectId);
+                      }}
+                      rollLocked={rollLocked}
+                      submitting={submittingRoll}
+                      advantageSources={activePromptAdvantageSources}
+                      rerollSources={temporaryRerollSources}
+                      rerollReady={Boolean(guidedResult || alreadySubmittedRound || pendingPromptRerollEffectId)}
+                      rerollPendingManual={Boolean(pendingPromptRerollEffectId && diceMode === "manual")}
+                      onUseReroll={handlePromptReroll}
+                    />
+                  </div>
+                ) : null}
                 {encounterOwnsStage ? (
                   <div className="space-y-4">
                     <EncounterPanel
@@ -1246,45 +1284,6 @@ export default function PlayerHubClient(props: {
                   />
                 )}
 
-                {rollOpen ? (
-                  <div ref={promptBoxRef}>
-                    <RollRequestPanel
-                      prompt={rollPrompt}
-                      guidedResult={guidedResult}
-                      diceMode={diceMode}
-                      setDiceMode={setDiceMode}
-                      manualValue={manualValue}
-                      manualValueB={manualValueB}
-                      setManualValue={setManualValue}
-                      setManualValueB={setManualValueB}
-                      onSubmitManual={async () => {
-                        if (rollLocked || submittingRoll) return;
-                        const rawA = Number(manualValue);
-                        if (!Number.isFinite(rawA)) {
-                          alert("Enter your first d20 roll.");
-                          return;
-                        }
-                        const hasAdvantage = (activePromptAdvantageSources?.length ?? 0) > 0;
-                        const rawB = manualValueB.trim() ? Number(manualValueB) : null;
-                        if (hasAdvantage && !Number.isFinite(Number(rawB))) {
-                          alert("Advantage is active. Enter your second d20 roll.");
-                          return;
-                        }
-                        const computed = calculateRequestedRollTotal(rawA, rawB);
-                        setGuidedResult({ label: "Table Dice", total: computed.total, breakdown: computed.breakdown });
-                        await submitRoll(computed.total, "manual", pendingPromptRerollEffectId);
-                      }}
-                      rollLocked={rollLocked}
-                      submitting={submittingRoll}
-                      advantageSources={activePromptAdvantageSources}
-                      rerollSources={temporaryRerollSources}
-                      rerollReady={Boolean(guidedResult || alreadySubmittedRound || pendingPromptRerollEffectId)}
-                      rerollPendingManual={Boolean(pendingPromptRerollEffectId && diceMode === "manual")}
-                      onUseReroll={handlePromptReroll}
-                    />
-                  </div>
-                ) : null}
-
                 {stageStoryText ? (
                   <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
                     <div className="text-sm font-semibold">Story (Board)</div>
@@ -1299,7 +1298,6 @@ export default function PlayerHubClient(props: {
             <div className="flex flex-wrap gap-2 rounded-2xl border border-neutral-800 bg-neutral-900/40 p-2">
               <Tab active={tab === "inventory"} onClick={() => setTab("inventory")}>Inventory</Tab>
               <Tab active={tab === "quests"} onClick={() => setTab("quests")}>Quests</Tab>
-              <Tab active={tab === "actions"} onClick={() => setTab("actions")}>Actions</Tab>
               <Tab
                 active={tab === "talents"}
                 onClick={() => setTab("talents")}
@@ -1380,91 +1378,99 @@ export default function PlayerHubClient(props: {
                   <div className="text-sm text-neutral-300">Scaffold only for now.</div>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  <div className="text-sm font-semibold">Actions</div>
-                  {selectedSessionId ? (
-                    <div className="rounded-xl border border-neutral-800 bg-neutral-950/50 p-3 space-y-2">
-                      <div className="text-xs uppercase tracking-wide text-neutral-400">Request Roll</div>
-                      <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-                        <select
-                          className="rounded border border-neutral-700 bg-neutral-950 px-2 py-2 text-sm"
-                          value={requestCheckKey}
-                          onChange={(e) => setRequestCheckKey(e.currentTarget.value)}
-                          disabled={Boolean(myPendingRequest) || requestingRoll}
-                        >
-                          {REQUESTABLE_CHECKS.map((k) => (
-                            <option key={k} value={k}>
-                              {k}
-                            </option>
-                          ))}
-                        </select>
-                        <input
-                          className="md:col-span-2 rounded border border-neutral-700 bg-neutral-950 px-2 py-2 text-sm"
-                          placeholder="Optional plan for storyteller..."
-                          value={requestMessage}
-                          onChange={(e) => setRequestMessage(e.currentTarget.value)}
-                          disabled={Boolean(myPendingRequest) || requestingRoll}
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleRequestRoll}
-                        disabled={Boolean(myPendingRequest) || requestingRoll}
-                        className={[
-                          "rounded border px-3 py-2 text-sm font-semibold transition",
-                          myActiveRoll
-                            ? "border-emerald-400 bg-emerald-500/20 text-emerald-200 shadow-[0_0_0_2px_rgba(74,222,128,0.35),0_0_22px_rgba(34,197,94,0.45)]"
-                            : myPendingRequest
-                              ? "border-amber-400 bg-amber-500/20 text-amber-200 shadow-[0_0_0_2px_rgba(251,191,36,0.25),0_0_14px_rgba(245,158,11,0.35)] animate-pulse"
-                              : "border-amber-400 bg-amber-500/20 text-amber-100 hover:bg-amber-500/30",
-                        ].join(" ")}
-                      >
-                        {myActiveRoll ? "Roll Active" : myPendingRequest ? "Request Pending" : requestingRoll ? "Sending..." : "Request Roll"}
-                      </button>
-                    </div>
-                  ) : null}
-                  <RollPanel
-                    stat={stat}
-                    disabled={isLiveMode && !rollOpen}
-                    disabledReason="Rolls are handled in Live Mode."
-                    highlightAbility={promptTarget?.kind === "ability" ? promptTarget.abilityKey : undefined}
-                    highlightSkill={promptTarget?.kind === "skill" ? promptTarget.skillKey : undefined}
-                    highlightDie={promptTarget?.kind === "die" ? promptTarget.die : undefined}
-                    onGuidedRoll={handleRollPanelGuided}
-                    lockRoll={rollLocked || diceMode === "manual" || submittingRoll}
-                    showAbilityChecks={false}
-                    showSkillChecks={false}
-                    showRollConsole={false}
-                  />
-                  {pendingPointChoices.length ? (
-                    <PendingPointChoicePanel
-                      effects={pendingPointChoices}
-                      resolvingId={resolvingPointId}
-                      onChoose={handleChoosePoint}
-                    />
-                  ) : null}
-                  <ActionListPanel
-                    characterId={String(props.character?.id ?? "")}
-                    actions={props.playerActions ?? []}
-                    sessionId={selectedSessionId}
-                    sessionRoster={sessionRoster}
-                    onActionPreviewChange={setEncounterActionPreview}
-                    onUsePoint={handleUsePoint}
-                    pointActionBusyId={usingPointActionId}
-                    attackAdvantageSources={advantageMap[normalizeAdvantageKey("attack_roll")] ?? []}
-                    temporaryAttackAdvantageEffectIds={temporaryAttackPointEffects.map((row) => String(row.id ?? "").trim()).filter(Boolean)}
-                    temporaryAttackAdvantageSources={temporaryAttackAdvantageSources}
-                    temporaryDamageBonus={temporaryDamageBonus}
-                    temporaryDamageBonusEffectIds={temporaryDamagePointEffects.map((row) => String(row.id ?? "").trim()).filter(Boolean)}
-                    temporaryDamageBonusSources={temporaryDamageBonusSources}
-                    temporaryRerollEffectIds={temporaryRerollPointEffects.map((row) => String(row.id ?? "").trim()).filter(Boolean)}
-                    temporaryRerollSources={temporaryRerollSources}
-                  />
-                  <TraitListPanel traits={props.playerTraits ?? []} />
+                <div className="space-y-2">
+                  <div className="text-sm font-semibold">Choose a panel</div>
+                  <div className="text-sm text-neutral-300">Inventory, quests, talents, and journal stay here. Actions now live in the right column.</div>
                 </div>
               )}
             </div>
           </section>
+
+          <aside className="lg:col-span-3 xl:col-span-3 space-y-4">
+            {selectedSessionId ? (
+              <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4 space-y-2">
+                <div className="text-sm font-semibold">Request Roll</div>
+                <div className="grid grid-cols-1 gap-2">
+                  <select
+                    className="rounded border border-neutral-700 bg-neutral-950 px-2 py-2 text-sm"
+                    value={requestCheckKey}
+                    onChange={(e) => setRequestCheckKey(e.currentTarget.value)}
+                    disabled={Boolean(myPendingRequest) || requestingRoll}
+                  >
+                    {REQUESTABLE_CHECKS.map((k) => (
+                      <option key={k} value={k}>
+                        {k}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    className="rounded border border-neutral-700 bg-neutral-950 px-2 py-2 text-sm"
+                    placeholder="Optional plan for storyteller..."
+                    value={requestMessage}
+                    onChange={(e) => setRequestMessage(e.currentTarget.value)}
+                    disabled={Boolean(myPendingRequest) || requestingRoll}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRequestRoll}
+                  disabled={Boolean(myPendingRequest) || requestingRoll}
+                  className={[
+                    "rounded border px-3 py-2 text-sm font-semibold transition",
+                    myActiveRoll
+                      ? "border-emerald-400 bg-emerald-500/20 text-emerald-200 shadow-[0_0_0_2px_rgba(74,222,128,0.35),0_0_22px_rgba(34,197,94,0.45)]"
+                      : myPendingRequest
+                        ? "border-amber-400 bg-amber-500/20 text-amber-200 shadow-[0_0_0_2px_rgba(251,191,36,0.25),0_0_14px_rgba(245,158,11,0.35)] animate-pulse"
+                        : "border-amber-400 bg-amber-500/20 text-amber-100 hover:bg-amber-500/30",
+                  ].join(" ")}
+                >
+                  {myActiveRoll ? "Roll Active" : myPendingRequest ? "Request Pending" : requestingRoll ? "Sending..." : "Request Roll"}
+                </button>
+              </div>
+            ) : null}
+
+            <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4 space-y-3">
+              <div className="text-sm font-semibold">Actions</div>
+              <RollPanel
+                stat={stat}
+                disabled={isLiveMode && !rollOpen}
+                disabledReason="Rolls are handled in Live Mode."
+                highlightAbility={promptTarget?.kind === "ability" ? promptTarget.abilityKey : undefined}
+                highlightSkill={promptTarget?.kind === "skill" ? promptTarget.skillKey : undefined}
+                highlightDie={promptTarget?.kind === "die" ? promptTarget.die : undefined}
+                onGuidedRoll={handleRollPanelGuided}
+                lockRoll={rollLocked || diceMode === "manual" || submittingRoll}
+                showAbilityChecks={false}
+                showSkillChecks={false}
+                showRollConsole={false}
+              />
+              {pendingPointChoices.length ? (
+                <PendingPointChoicePanel
+                  effects={pendingPointChoices}
+                  resolvingId={resolvingPointId}
+                  onChoose={handleChoosePoint}
+                />
+              ) : null}
+              <ActionListPanel
+                characterId={String(props.character?.id ?? "")}
+                actions={props.playerActions ?? []}
+                sessionId={selectedSessionId}
+                sessionRoster={sessionRoster}
+                onActionPreviewChange={setEncounterActionPreview}
+                onUsePoint={handleUsePoint}
+                pointActionBusyId={usingPointActionId}
+                attackAdvantageSources={advantageMap[normalizeAdvantageKey("attack_roll")] ?? []}
+                temporaryAttackAdvantageEffectIds={temporaryAttackPointEffects.map((row) => String(row.id ?? "").trim()).filter(Boolean)}
+                temporaryAttackAdvantageSources={temporaryAttackAdvantageSources}
+                temporaryDamageBonus={temporaryDamageBonus}
+                temporaryDamageBonusEffectIds={temporaryDamagePointEffects.map((row) => String(row.id ?? "").trim()).filter(Boolean)}
+                temporaryDamageBonusSources={temporaryDamageBonusSources}
+                temporaryRerollEffectIds={temporaryRerollPointEffects.map((row) => String(row.id ?? "").trim()).filter(Boolean)}
+                temporaryRerollSources={temporaryRerollSources}
+              />
+              <TraitListPanel traits={props.playerTraits ?? []} />
+            </div>
+          </aside>
         </div>
       </div>
 
