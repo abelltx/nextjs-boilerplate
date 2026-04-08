@@ -354,7 +354,7 @@ export function CombinedChecksCard({
             <div
               key={ability.key}
               className={[
-                "rounded-xl border bg-neutral-950/40 p-2",
+                "rounded-xl border bg-neutral-950/40 p-1.5",
                 highlightAbility === ability.key
                   ? "border-green-300 bg-green-500/10 shadow-[0_0_0_2px_rgba(74,222,128,0.45),0_0_20px_rgba(34,197,94,0.28)]"
                   : "border-neutral-800",
@@ -384,15 +384,15 @@ export function CombinedChecksCard({
                   }}
                   className="min-w-0 text-left leading-tight disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  <div className="inline-flex items-center gap-1.5 rounded-md border border-neutral-700 bg-neutral-900/80 px-2 py-1 text-sm">
+                  <div className="inline-flex items-center gap-1 rounded-md border border-neutral-700 bg-neutral-900/80 px-1.5 py-0.5 text-[13px]">
                     <span className="font-semibold text-white">{ability.label}</span>
                     <span
-                      className="text-sm font-semibold text-white"
+                      className="text-[13px] font-semibold text-white"
                       title={`base ${base}, gear ${gear >= 0 ? `+${gear}` : gear}`}
                     >
                       ({final})
                     </span>
-                    <span className="text-xs font-semibold text-neutral-200">{fmt(abilityMod)}</span>
+                    <span className="text-[11px] font-semibold text-neutral-200">{fmt(abilityMod)}</span>
                     {hasAbilityAdvantage ? (
                       <span className="rounded border border-emerald-300/60 bg-emerald-500/20 px-1 py-0 text-[10px] font-semibold text-emerald-200">
                         ADV
@@ -400,13 +400,13 @@ export function CombinedChecksCard({
                     ) : null}
                   </div>
                 </button>
-                <div className="px-1 py-0.5 text-right">
+                <div className="px-1 py-0 text-right">
                   <div className="text-xs font-medium text-neutral-400">Save {fmt(saveBonus)}</div>
                 </div>
               </div>
 
               {groupedSkills.length ? (
-                <div className="mt-1 space-y-0">
+                <div className="mt-0.5 space-y-0">
                   {groupedSkills.map((skill) => {
                     const baseSkillBonus = totalAbilityBonus;
                     const hasOverride = Object.prototype.hasOwnProperty.call(skills, skill.key);
