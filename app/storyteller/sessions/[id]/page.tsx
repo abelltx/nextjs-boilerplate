@@ -688,6 +688,14 @@ export default async function DmScreenPage({
       createdAt: row.createdAt,
     });
   }
+  const latestQuickRollByPlayerId: Record<string, { label: string; total: number; formula: string | null; createdAt: string | null } | undefined> = {};
+  for (const p of storytellerPlayers) {
+    const playerId = String((p as any)?.playerId ?? "").trim();
+    const characterId = String((p as any)?.characterId ?? "").trim();
+    if (!playerId || !characterId) continue;
+    const row = latestQuickRollByCharacter.get(characterId);
+    if (row) latestQuickRollByPlayerId[playerId] = row;
+  }
   const questDirectorIds = questDirectorDefs
     .map((q: any, i: number) => String(q?.id ?? "").trim() || `quest_${i + 1}`)
     .filter(Boolean);
@@ -1533,6 +1541,7 @@ export default async function DmScreenPage({
             initialState={state as any}
             players={storytellerPlayers as any[]}
             questGlowPlayerIds={questGlowPlayerIds}
+            quickRollByPlayerId={latestQuickRollByPlayerId}
             onRequestSave={async (fd) => {
               "use server";
               const playerId = String(fd.get("player_id") ?? "").trim();

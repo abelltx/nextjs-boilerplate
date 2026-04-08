@@ -170,7 +170,7 @@ export default function RollPanel(props: {
           )}
         </div>
 
-        <div className="mt-3 grid grid-cols-4 gap-2">
+        <div className="mt-3 grid grid-cols-3 gap-2">
           <DieButton
             sides={4}
             onClick={(fromRect) => {

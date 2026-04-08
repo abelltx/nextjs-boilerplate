@@ -19,12 +19,20 @@ type PlayerCardData = {
   passives: PassiveRow[];
 };
 
+type QuickRollData = {
+  label: string;
+  total: number;
+  formula?: string | null;
+  createdAt?: string | null;
+};
+
 export default function PlayersPassivePanel({
   sessionId,
   joins,
   initialState,
   players,
   questGlowPlayerIds,
+  quickRollByPlayerId,
   onRequestSave,
 }: {
   sessionId: string;
@@ -32,6 +40,7 @@ export default function PlayersPassivePanel({
   initialState: any;
   players: PlayerCardData[];
   questGlowPlayerIds?: string[];
+  quickRollByPlayerId?: Record<string, QuickRollData | undefined>;
   onRequestSave: (formData: FormData) => Promise<void>;
 }) {
   const supabase = useMemo(() => supabaseBrowser(), []);
@@ -89,6 +98,7 @@ export default function PlayersPassivePanel({
           const playerId = String(pRow?.player_id ?? "").trim();
           const hasPlayer = Boolean(playerId);
           const info = hasPlayer ? playersById.get(playerId) : null;
+          const quickRoll = hasPlayer ? quickRollByPlayerId?.[playerId] : null;
           const hasActiveRoll = hasPlayer && rollOpen && (rollTarget === "all" || rollTarget === playerId);
           const questGlow = hasPlayer && questGlowSet.has(playerId);
           return (
@@ -114,6 +124,11 @@ export default function PlayersPassivePanel({
               <div className="mt-1 text-[11px] text-gray-600">
                 {info?.characterName ? info.characterName : hasPlayer ? "Open passives" : "No player"}
               </div>
+              {quickRoll ? (
+                <div className="mt-1 rounded border bg-white px-1.5 py-1 text-[10px] text-gray-700">
+                  {quickRoll.label}: {quickRoll.total}
+                </div>
+              ) : null}
               {hasActiveRoll ? (
                 <div className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">Roll Active</div>
               ) : questGlow ? (
