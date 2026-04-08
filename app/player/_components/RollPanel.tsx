@@ -63,7 +63,7 @@ export default function RollPanel(props: {
 }) {
   const [history, setHistory] = useState<RollEntry[]>([]);
   const [last, setLast] = useState<RollEntry | null>(null);
-  const [manualLabel, setManualLabel] = useState("Table Dice");
+  const [manualSides, setManualSides] = useState(20);
   const [manualTotal, setManualTotal] = useState("");
 
   const abilities = props.stat?.abilities ?? {
@@ -143,7 +143,6 @@ export default function RollPanel(props: {
     };
 
     setLast(entry);
-    setHistory((h) => [entry, ...h].slice(0, 12));
     props.onRollComplete?.();
     return entry;
   };
@@ -262,13 +261,27 @@ export default function RollPanel(props: {
               <div className="text-xs font-semibold uppercase tracking-wide text-neutral-400">Manual Roll</div>
               <div className="text-[11px] text-neutral-500">Log physical dice</div>
             </div>
+            <div className="mt-2 grid grid-cols-4 gap-2">
+              {[4, 6, 8, 10, 12, 20, 100].map((sides) => (
+                <button
+                  key={`manual-d${sides}`}
+                  type="button"
+                  onClick={() => setManualSides(sides)}
+                  className={[
+                    "rounded border px-2 py-1 text-xs font-semibold uppercase transition",
+                    manualSides === sides
+                      ? "border-amber-300 bg-amber-500/20 text-amber-100"
+                      : "border-neutral-700 bg-neutral-950 text-neutral-300 hover:bg-neutral-900",
+                  ].join(" ")}
+                >
+                  d{sides}
+                </button>
+              ))}
+            </div>
             <div className="mt-2 grid grid-cols-[minmax(0,1fr)_88px] gap-2">
-              <input
-                value={manualLabel}
-                onChange={(e) => setManualLabel(e.currentTarget.value)}
-                placeholder="Roll label"
-                className="rounded border border-neutral-700 bg-neutral-950 px-2 py-2 text-sm"
-              />
+              <div className="flex items-center rounded border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-300">
+                Selected die: d{manualSides}
+              </div>
               <input
                 value={manualTotal}
                 onChange={(e) => setManualTotal(e.currentTarget.value)}
@@ -285,14 +298,13 @@ export default function RollPanel(props: {
                 if (!Number.isFinite(total)) return;
                 const entry: RollEntry = {
                   id: uid(),
-                  label: manualLabel.trim() || "Table Dice",
-                  formula: "manual",
+                  label: `Manual d${manualSides}`,
+                  formula: `d${manualSides} (manual)`,
                   total,
                   breakdown: "Physical dice result",
                   ts: Date.now(),
                 };
                 setLast(entry);
-                setHistory((h) => [entry, ...h].slice(0, 12));
                 setManualTotal("");
                 props.onRollComplete?.();
               }}
