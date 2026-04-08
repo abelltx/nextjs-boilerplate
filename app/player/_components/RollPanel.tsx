@@ -58,9 +58,12 @@ export default function RollPanel(props: {
   showAbilityChecks?: boolean;
   showSkillChecks?: boolean;
   showRollConsole?: boolean;
+  showManualEntry?: boolean;
 }) {
   const [history, setHistory] = useState<RollEntry[]>([]);
   const [last, setLast] = useState<RollEntry | null>(null);
+  const [manualLabel, setManualLabel] = useState("Table Dice");
+  const [manualTotal, setManualTotal] = useState("");
 
   const abilities = props.stat?.abilities ?? {
     str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10,
@@ -158,7 +161,7 @@ export default function RollPanel(props: {
           )}
         </div>
 
-        <div className="mt-3 grid grid-cols-4 gap-2 sm:grid-cols-7">
+        <div className="mt-3 grid grid-cols-4 gap-2">
           <DieButton
             sides={4}
             onClick={(fromRect) => {
@@ -265,6 +268,52 @@ export default function RollPanel(props: {
             );
           })}
         </div>
+
+        {props.showManualEntry ? (
+          <div className="mt-3 rounded-xl border border-neutral-800 bg-neutral-900/40 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-xs font-semibold uppercase tracking-wide text-neutral-400">Manual Roll</div>
+              <div className="text-[11px] text-neutral-500">Log physical dice</div>
+            </div>
+            <div className="mt-2 grid grid-cols-[minmax(0,1fr)_88px] gap-2">
+              <input
+                value={manualLabel}
+                onChange={(e) => setManualLabel(e.currentTarget.value)}
+                placeholder="Roll label"
+                className="rounded border border-neutral-700 bg-neutral-950 px-2 py-2 text-sm"
+              />
+              <input
+                value={manualTotal}
+                onChange={(e) => setManualTotal(e.currentTarget.value)}
+                inputMode="numeric"
+                placeholder="Total"
+                className="rounded border border-neutral-700 bg-neutral-950 px-2 py-2 text-sm"
+              />
+            </div>
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => {
+                const total = Number(manualTotal);
+                if (!Number.isFinite(total)) return;
+                const entry: RollEntry = {
+                  id: uid(),
+                  label: manualLabel.trim() || "Table Dice",
+                  formula: "manual",
+                  total,
+                  breakdown: "Physical dice result",
+                  ts: Date.now(),
+                };
+                setLast(entry);
+                setHistory((h) => [entry, ...h].slice(0, 12));
+                setManualTotal("");
+              }}
+              className="mt-2 rounded border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm font-semibold text-neutral-100 hover:bg-neutral-900 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Log Manual Roll
+            </button>
+          </div>
+        ) : null}
       </div>
       ) : null}
 

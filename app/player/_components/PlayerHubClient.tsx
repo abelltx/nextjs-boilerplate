@@ -564,6 +564,7 @@ export default function PlayerHubClient(props: {
   const [requestCheckKey, setRequestCheckKey] = useState("Perception");
   const [requestMessage, setRequestMessage] = useState("");
   const [requestRollOpen, setRequestRollOpen] = useState(false);
+  const [requestPickMode, setRequestPickMode] = useState(false);
   const [quickRollsOpen, setQuickRollsOpen] = useState(false);
   const promptBoxRef = useRef<HTMLDivElement | null>(null);
   const [guidedResult, setGuidedResult] = useState<GuidedRoll | null>(null);
@@ -897,6 +898,12 @@ export default function PlayerHubClient(props: {
   }
 
   function handleAbilityGuidedRoll(ability: AbilityKey, meta: { label: string; total: number; breakdown?: string }, fromRect: DOMRect) {
+    if (requestPickMode) {
+      setRequestCheckKey(ability.toUpperCase());
+      setRequestRollOpen(true);
+      setRequestPickMode(false);
+      return;
+    }
     if (diceMode !== "digital") return;
     if (rollLocked) return;
     if (!rollOpen || promptTarget?.kind !== "ability" || promptTarget.abilityKey !== ability) return;
@@ -904,6 +911,13 @@ export default function PlayerHubClient(props: {
   }
 
   function handleSkillGuidedRoll(skillKey: string, meta: { label: string; total: number; breakdown?: string }, fromRect: DOMRect) {
+    if (requestPickMode) {
+      const requestLabel = meta.label.replace(/\s+Check$/i, "").trim();
+      setRequestCheckKey(requestLabel);
+      setRequestRollOpen(true);
+      setRequestPickMode(false);
+      return;
+    }
     if (diceMode !== "digital") return;
     if (rollLocked) return;
     if (!rollOpen || promptTarget?.kind !== "skill" || promptTarget.skillKey !== skillKey) return;
@@ -1390,40 +1404,46 @@ export default function PlayerHubClient(props: {
           </section>
 
           <aside className="lg:col-span-3 xl:col-span-3 space-y-4">
-            {selectedSessionId ? (
-              <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4 space-y-2">
-                <div className="text-sm font-semibold">Request Roll</div>
-                <div className="text-xs text-neutral-400">
-                  Ask the storyteller for a specific check only when you need one.
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setRequestRollOpen(true)}
-                  disabled={Boolean(myPendingRequest) || requestingRoll}
-                  className={[
-                    "rounded border px-3 py-2 text-sm font-semibold transition",
-                    myActiveRoll
-                      ? "border-emerald-400 bg-emerald-500/20 text-emerald-200 shadow-[0_0_0_2px_rgba(74,222,128,0.35),0_0_22px_rgba(34,197,94,0.45)]"
-                      : myPendingRequest
-                        ? "border-amber-400 bg-amber-500/20 text-amber-200 shadow-[0_0_0_2px_rgba(251,191,36,0.25),0_0_14px_rgba(245,158,11,0.35)] animate-pulse"
-                        : "border-amber-400 bg-amber-500/20 text-amber-100 hover:bg-amber-500/30",
-                  ].join(" ")}
-                >
-                  {myActiveRoll ? "Roll Active" : myPendingRequest ? "Request Pending" : requestingRoll ? "Sending..." : "Request Roll"}
-                </button>
-              </div>
-            ) : null}
-
             <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4 space-y-3">
               <div className="text-sm font-semibold">Actions</div>
-              <button
-                type="button"
-                onClick={() => setQuickRollsOpen((v) => !v)}
-                className="flex w-full items-center justify-between rounded-xl border border-neutral-800 bg-neutral-950/50 px-3 py-2 text-left text-sm font-semibold text-neutral-100"
-              >
-                <span>Quick Rolls</span>
-                <span className="text-xs text-neutral-400">{quickRollsOpen ? "Hide" : "Show"}</span>
-              </button>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRequestPickMode(true);
+                    setRequestRollOpen(false);
+                  }}
+                  disabled={!selectedSessionId || Boolean(myPendingRequest) || requestingRoll}
+                  className={[
+                    "rounded-xl border px-3 py-2 text-left text-sm font-semibold transition",
+                    requestPickMode
+                      ? "border-amber-300 bg-amber-500/20 text-amber-100 shadow-[0_0_0_2px_rgba(251,191,36,0.25),0_0_14px_rgba(245,158,11,0.35)]"
+                      : myActiveRoll
+                        ? "border-emerald-400 bg-emerald-500/20 text-emerald-200"
+                        : myPendingRequest
+                          ? "border-amber-400 bg-amber-500/20 text-amber-200"
+                          : "border-neutral-800 bg-neutral-950/50 text-neutral-100 hover:bg-neutral-900/70",
+                  ].join(" ")}
+                >
+                  <div>Request Roll</div>
+                  <div className="mt-1 text-[11px] font-normal text-neutral-400">
+                    {requestPickMode ? "Pick from left column" : "Choose from sheet"}
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQuickRollsOpen((v) => !v)}
+                  className="rounded-xl border border-neutral-800 bg-neutral-950/50 px-3 py-2 text-left text-sm font-semibold text-neutral-100 hover:bg-neutral-900/70"
+                >
+                  <div>Quick Rolls</div>
+                  <div className="mt-1 text-[11px] font-normal text-neutral-400">{quickRollsOpen ? "Hide dice" : "Show dice"}</div>
+                </button>
+              </div>
+              {requestPickMode ? (
+                <div className="rounded-xl border border-amber-400/60 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100">
+                  Click a skill or ability in the left column to build the request.
+                </div>
+              ) : null}
               {quickRollsOpen ? (
                 <RollPanel
                   stat={stat}
@@ -1436,7 +1456,8 @@ export default function PlayerHubClient(props: {
                   lockRoll={rollLocked || diceMode === "manual" || submittingRoll}
                   showAbilityChecks={false}
                   showSkillChecks={false}
-                  showRollConsole={false}
+                  showRollConsole
+                  showManualEntry
                 />
               ) : null}
               {pendingPointChoices.length ? (
@@ -1497,23 +1518,24 @@ export default function PlayerHubClient(props: {
           <div className="w-full max-w-md rounded-2xl border border-neutral-800 bg-neutral-900 p-4 shadow-2xl">
             <div className="text-base font-semibold text-neutral-100">Request Roll</div>
             <div className="mt-1 text-sm text-neutral-400">
-              Pick the roll you want, then tell the storyteller why you want it.
+              Confirm the selected roll, or reset if you clicked the wrong one.
             </div>
             <div className="mt-4 space-y-3">
               <div className="space-y-1">
                 <label className="text-xs uppercase tracking-wide text-neutral-500">Roll</label>
-                <select
-                  className="w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-2 text-sm"
-                  value={requestCheckKey}
-                  onChange={(e) => setRequestCheckKey(e.currentTarget.value)}
-                  disabled={Boolean(myPendingRequest) || requestingRoll}
-                >
-                  {REQUESTABLE_CHECKS.map((k) => (
-                    <option key={k} value={k}>
-                      {k}
-                    </option>
-                  ))}
-                </select>
+                <div className="flex items-center justify-between gap-2 rounded border border-neutral-700 bg-neutral-950 px-3 py-2">
+                  <div className="text-sm font-semibold text-neutral-100">{requestCheckKey}</div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRequestRollOpen(false);
+                      setRequestPickMode(true);
+                    }}
+                    className="rounded border border-neutral-700 px-2 py-1 text-[11px] text-neutral-300 hover:bg-neutral-900"
+                  >
+                    Reset
+                  </button>
+                </div>
               </div>
               <div className="space-y-1">
                 <label className="text-xs uppercase tracking-wide text-neutral-500">Why</label>
@@ -1529,7 +1551,10 @@ export default function PlayerHubClient(props: {
             <div className="mt-4 flex items-center justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setRequestRollOpen(false)}
+                onClick={() => {
+                  setRequestRollOpen(false);
+                  setRequestPickMode(false);
+                }}
                 className="rounded border border-neutral-700 px-3 py-2 text-sm text-neutral-300"
               >
                 Cancel
