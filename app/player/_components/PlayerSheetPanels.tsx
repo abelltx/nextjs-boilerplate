@@ -354,7 +354,7 @@ export function CombinedChecksCard({
             <div
               key={ability.key}
               className={[
-                "rounded-xl border bg-neutral-950/40 p-2.5",
+                "rounded-xl border bg-neutral-950/40 p-2",
                 highlightAbility === ability.key
                   ? "border-green-300 bg-green-500/10 shadow-[0_0_0_2px_rgba(74,222,128,0.45),0_0_20px_rgba(34,197,94,0.28)]"
                   : "border-neutral-800",
@@ -384,15 +384,15 @@ export function CombinedChecksCard({
                   }}
                   className="min-w-0 text-left leading-tight disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  <div className="flex items-center gap-1.5 text-sm">
-                    <span className="font-semibold text-neutral-100">{ability.label}</span>
+                  <div className="inline-flex items-center gap-1.5 rounded-md border border-neutral-700 bg-neutral-900/80 px-2 py-1 text-sm">
+                    <span className="font-semibold text-white">{ability.label}</span>
                     <span
                       className="text-sm font-semibold text-white"
                       title={`base ${base}, gear ${gear >= 0 ? `+${gear}` : gear}`}
                     >
                       ({final})
                     </span>
-                    <span className="text-xs font-semibold text-neutral-300">{fmt(abilityMod)}</span>
+                    <span className="text-xs font-semibold text-neutral-200">{fmt(abilityMod)}</span>
                     {hasAbilityAdvantage ? (
                       <span className="rounded border border-emerald-300/60 bg-emerald-500/20 px-1 py-0 text-[10px] font-semibold text-emerald-200">
                         ADV
@@ -400,13 +400,13 @@ export function CombinedChecksCard({
                     ) : null}
                   </div>
                 </button>
-                <div className="rounded-lg border border-neutral-800 bg-neutral-900/70 px-2 py-0.5 text-right">
-                  <div className="text-xs font-semibold text-white">Save {fmt(saveBonus)}</div>
+                <div className="px-1 py-0.5 text-right">
+                  <div className="text-xs font-medium text-neutral-400">Save {fmt(saveBonus)}</div>
                 </div>
               </div>
 
               {groupedSkills.length ? (
-                <div className="mt-2 space-y-1">
+                <div className="mt-1 space-y-0.5">
                   {groupedSkills.map((skill) => {
                     const baseSkillBonus = totalAbilityBonus;
                     const hasOverride = Object.prototype.hasOwnProperty.call(skills, skill.key);
@@ -438,14 +438,14 @@ export function CombinedChecksCard({
                           );
                         }}
                         className={[
-                          "flex w-full items-center justify-between gap-2 rounded-lg border px-2 py-1.5 text-left transition disabled:cursor-not-allowed disabled:opacity-60",
+                          "flex w-full items-center justify-between gap-2 rounded-lg border px-2 py-1 text-left transition disabled:cursor-not-allowed disabled:opacity-60",
                           highlightSkill === skill.key
                             ? "border-green-300 bg-green-500/15 shadow-[0_0_0_2px_rgba(74,222,128,0.45),0_0_18px_rgba(34,197,94,0.28)]"
                             : "border-neutral-800 bg-neutral-900/60",
                         ].join(" ")}
                       >
                         <div className="min-w-0">
-                          <div className="text-[11px] uppercase tracking-wide text-neutral-500">{skill.label}</div>
+                          <div className="text-[11px] uppercase leading-tight tracking-wide text-neutral-500">{skill.label}</div>
                         </div>
                         <div className="flex items-center gap-1 text-sm font-semibold text-white">
                           <span
