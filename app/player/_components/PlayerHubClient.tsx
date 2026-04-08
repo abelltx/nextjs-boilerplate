@@ -1447,13 +1447,12 @@ export default function PlayerHubClient(props: {
               {quickRollsOpen ? (
                 <RollPanel
                   stat={stat}
-                  disabled={isLiveMode && !rollOpen}
-                  disabledReason="Rolls are handled in Live Mode."
+                  disabled={false}
                   highlightAbility={promptTarget?.kind === "ability" ? promptTarget.abilityKey : undefined}
                   highlightSkill={promptTarget?.kind === "skill" ? promptTarget.skillKey : undefined}
                   highlightDie={promptTarget?.kind === "die" ? promptTarget.die : undefined}
                   onGuidedRoll={handleRollPanelGuided}
-                  lockRoll={rollLocked || diceMode === "manual" || submittingRoll}
+                  lockRoll={submittingRoll}
                   showAbilityChecks={false}
                   showSkillChecks={false}
                   showRollConsole
