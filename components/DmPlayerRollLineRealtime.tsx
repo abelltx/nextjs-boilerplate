@@ -62,6 +62,20 @@ export default function DmPlayerRollLineRealtime({
 
   if (!playerId) return <div className="mt-1 text-[11px] text-gray-400">No roll yet</div>;
 
+  const rollDie = String(state.roll_die ?? "");
+  const rollResults = asObject(state.roll_results) as Record<string, any>;
+  const mine = rollResults[playerId] ?? null;
+
+  if (mine?.value || mine?.value === 0) {
+    return (
+      <div className="mt-1 text-[11px] text-gray-700">
+        <span className="font-mono">{rollDie ? rollDie.toUpperCase() : "ROLL"}</span>:{" "}
+        <span className="font-bold">{String(mine.value)}</span>{" "}
+        <span className="text-gray-500">({String(mine.source ?? "-")})</span>
+      </div>
+    );
+  }
+
   if (quickRoll && Number.isFinite(quickRoll.total)) {
     return (
       <div className="mt-1 text-[11px] text-gray-700">
@@ -71,19 +85,5 @@ export default function DmPlayerRollLineRealtime({
     );
   }
 
-  const rollDie = String(state.roll_die ?? "");
-  const rollResults = asObject(state.roll_results) as Record<string, any>;
-  const mine = rollResults[playerId] ?? null;
-
-  if (!mine?.value && mine?.value !== 0) {
-    return <div className="mt-1 text-[11px] text-gray-400">No roll yet</div>;
-  }
-
-  return (
-    <div className="mt-1 text-[11px] text-gray-700">
-      <span className="font-mono">{rollDie ? rollDie.toUpperCase() : "ROLL"}</span>:{" "}
-      <span className="font-bold">{String(mine.value)}</span>{" "}
-      <span className="text-gray-500">({String(mine.source ?? "-")})</span>
-    </div>
-  );
+  return <div className="mt-1 text-[11px] text-gray-400">No roll yet</div>;
 }
