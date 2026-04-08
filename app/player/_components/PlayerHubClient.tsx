@@ -566,6 +566,7 @@ export default function PlayerHubClient(props: {
   const [requestRollOpen, setRequestRollOpen] = useState(false);
   const [requestPickMode, setRequestPickMode] = useState(false);
   const [quickRollsOpen, setQuickRollsOpen] = useState(false);
+  const quickRollCollapseRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const promptBoxRef = useRef<HTMLDivElement | null>(null);
   const [guidedResult, setGuidedResult] = useState<GuidedRoll | null>(null);
   const [flight, setFlight] = useState<{
@@ -577,6 +578,14 @@ export default function PlayerHubClient(props: {
     dy: number;
     active: boolean;
   } | null>(null);
+  useEffect(() => {
+    return () => {
+      if (quickRollCollapseRef.current) {
+        window.clearTimeout(quickRollCollapseRef.current);
+        quickRollCollapseRef.current = null;
+      }
+    };
+  }, []);
   const currentRoundId = String(stageState?.roll_round_id ?? "");
   const myExistingResult = (stageState?.roll_results?.[props.userId] ?? null) as any;
   const alreadySubmittedRound = Boolean(
@@ -750,6 +759,16 @@ export default function PlayerHubClient(props: {
     } finally {
       setRequestingRoll(false);
     }
+  }
+
+  function handleQuickRollComplete() {
+    if (quickRollCollapseRef.current) {
+      clearTimeout(quickRollCollapseRef.current);
+    }
+    quickRollCollapseRef.current = setTimeout(() => {
+      setQuickRollsOpen(false);
+      quickRollCollapseRef.current = null;
+    }, 7000);
   }
 
   async function handleSubmitEncounterInitiative(source: "manual" | "digital") {
@@ -1455,8 +1474,9 @@ export default function PlayerHubClient(props: {
                   lockRoll={submittingRoll}
                   showAbilityChecks={false}
                   showSkillChecks={false}
-                  showRollConsole
+                  showRollConsole={false}
                   showManualEntry
+                  onRollComplete={handleQuickRollComplete}
                 />
               ) : null}
               {pendingPointChoices.length ? (

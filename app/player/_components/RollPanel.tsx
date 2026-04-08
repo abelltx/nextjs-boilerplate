@@ -46,6 +46,27 @@ function nowLabel(ts: number) {
   return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 }
 
+function dieGlyph(sides: number) {
+  switch (sides) {
+    case 4:
+      return "△";
+    case 6:
+      return "□";
+    case 8:
+      return "◇";
+    case 10:
+      return "⬟";
+    case 12:
+      return "⬢";
+    case 20:
+      return "✦";
+    case 100:
+      return "◎";
+    default:
+      return "◈";
+  }
+}
+
 export default function RollPanel(props: {
   stat: StatBlock;
   disabled?: boolean;
@@ -59,6 +80,7 @@ export default function RollPanel(props: {
   showSkillChecks?: boolean;
   showRollConsole?: boolean;
   showManualEntry?: boolean;
+  onRollComplete?: () => void;
 }) {
   const [history, setHistory] = useState<RollEntry[]>([]);
   const [last, setLast] = useState<RollEntry | null>(null);
@@ -143,6 +165,7 @@ export default function RollPanel(props: {
 
     setLast(entry);
     setHistory((h) => [entry, ...h].slice(0, 12));
+    props.onRollComplete?.();
     return entry;
   };
 
@@ -307,6 +330,7 @@ export default function RollPanel(props: {
                 setLast(entry);
                 setHistory((h) => [entry, ...h].slice(0, 12));
                 setManualTotal("");
+                props.onRollComplete?.();
               }}
               className="mt-2 rounded border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm font-semibold text-neutral-100 hover:bg-neutral-900 disabled:cursor-not-allowed disabled:opacity-60"
             >
@@ -438,6 +462,7 @@ function DieButton(props: {
   highlight?: boolean;
 }) {
   const text = props.label ?? `d${props.sides}`;
+  const glyph = dieGlyph(props.sides);
   return (
     <button
       onClick={(e) => {
@@ -445,7 +470,7 @@ function DieButton(props: {
       }}
       disabled={props.disabled}
       className={[
-        "group relative rounded-2xl border bg-neutral-950/40 px-3 py-3 text-center transition",
+        "group relative rounded-xl border bg-neutral-950/40 px-2 py-2 text-center transition",
         "hover:bg-neutral-900/50 hover:border-neutral-600 active:scale-[0.99]",
         "disabled:opacity-40 disabled:hover:bg-neutral-950/40 disabled:hover:border-neutral-800 disabled:cursor-not-allowed",
         props.highlight
@@ -454,9 +479,9 @@ function DieButton(props: {
       ].join(" ")}
       title={`Roll ${text}`}
     >
-      <div className="text-xs uppercase tracking-wide text-neutral-400 group-hover:text-neutral-300">Roll</div>
-      <div className="mt-1 text-lg font-extrabold text-white">{text}</div>
-      <div className="pointer-events-none absolute inset-0 rounded-2xl ring-0 ring-white/10 group-hover:ring-1" />
+      <div className="text-sm leading-none text-neutral-400 group-hover:text-neutral-300">{glyph}</div>
+      <div className="mt-1 text-xs font-bold uppercase tracking-wide text-white">{text}</div>
+      <div className="pointer-events-none absolute inset-0 rounded-xl ring-0 ring-white/10 group-hover:ring-1" />
     </button>
   );
 }
