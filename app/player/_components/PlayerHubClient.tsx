@@ -1188,7 +1188,7 @@ export default function PlayerHubClient(props: {
             </div>
           </aside>
 
-          <section className="lg:col-span-6 xl:col-span-6">
+          <section className="lg:col-span-5 xl:col-span-5">
             <div className="mb-4 rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4">
               <div className="text-sm font-semibold">{encounterOwnsStage ? "Encounter Stage" : "Stage"}</div>
 
@@ -1401,7 +1401,7 @@ export default function PlayerHubClient(props: {
             </div>
           </section>
 
-          <aside className="lg:col-span-3 xl:col-span-3 space-y-4">
+          <aside className="lg:col-span-4 xl:col-span-4 space-y-4">
             <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4 space-y-3">
               <div className="text-sm font-semibold">Actions</div>
               <div className="grid grid-cols-1 gap-2">
@@ -2469,28 +2469,18 @@ function ActionListPanel(props: {
     }
   }
 
-  return (
-    <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-4">
-      <div className="text-sm font-semibold">Actions</div>
-      {props.actions.length ? (
-        <div className="mt-3 overflow-hidden rounded-xl border border-neutral-800">
-          <div className="grid grid-cols-12 gap-2 border-b border-neutral-800 bg-neutral-900/50 px-3 py-2 text-[11px] uppercase tracking-wide text-neutral-400">
-            <div className="col-span-3">Attack</div>
-            <div className="col-span-2">Range</div>
-            <div className="col-span-2">Hit / DC</div>
-            <div className="col-span-2">Damage</div>
-            <div className="col-span-3">Notes</div>
-          </div>
-          {props.actions.map((a) => (
-            <div
-              key={a.id}
-              className="grid grid-cols-12 gap-2 border-b border-neutral-800 px-3 py-2 text-sm last:border-b-0"
-              onMouseEnter={() => setActionPreview(a)}
-              onMouseLeave={() => setActionPreview(null)}
-              onFocus={() => setActionPreview(a)}
-              onBlur={() => setActionPreview(null)}
-            >
-              {(() => {
+  return props.actions.length ? (
+    <div className="space-y-3">
+      {props.actions.map((a) => (
+        <div
+          key={a.id}
+          className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-3 text-sm"
+          onMouseEnter={() => setActionPreview(a)}
+          onMouseLeave={() => setActionPreview(null)}
+          onFocus={() => setActionPreview(a)}
+          onBlur={() => setActionPreview(null)}
+        >
+          {(() => {
                 const actionConfig = normalizeActionConfig(a.action_config);
                 const availableTargets =
                   actionConfig?.kind === "targeted_support"
@@ -2506,203 +2496,236 @@ function ActionListPanel(props: {
                 const otherActionLocked = Boolean(props.combatMode && props.actionUsed && props.usedActionId && props.usedActionId !== a.id);
                 const thisActionAlreadyUsed = Boolean(props.combatMode && props.actionUsed && props.usedActionId === a.id);
                 return (
-                  <>
-              <div className="col-span-3 min-w-0">
-                <div className="truncate font-semibold text-neutral-100">{a.name}</div>
-                <div className="text-[11px] text-neutral-400">{a.type ?? "other"}</div>
-              </div>
-              <div className="col-span-2 text-xs text-neutral-300">
-                {a.range_normal ? `${a.range_normal} ft.` : ""}
-                {a.range_max ? ` (${a.range_max})` : ""}
-              </div>
-              <div className="col-span-2 text-xs text-neutral-300">
-                {actionConfig?.kind === "targeted_support" ? (
-                  <div className="space-y-1">
-                    {props.combatMode ? (
-                      <>
-                        <button
-                          type="button"
-                          className={[
-                            "rounded border px-2 py-1 text-[11px]",
-                            props.targetingActionId === a.id
-                              ? "border-amber-400 bg-amber-500/20 text-amber-200 shadow-[0_0_0_2px_rgba(251,191,36,0.25),0_0_14px_rgba(245,158,11,0.35)] animate-pulse"
-                              : "border-neutral-700 hover:bg-neutral-900",
-                          ].join(" ")}
-                          onClick={() => props.onBeginTargeting?.(String(a.id))}
-                        >
-                          {combatTarget ? `Target: ${combatTarget}` : "Choose Target"}
-                        </button>
-                      </>
+                  <div className="space-y-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="truncate font-semibold text-neutral-100">{a.name}</div>
+                        <div className="text-[11px] text-neutral-400">{a.type ?? "other"}</div>
+                      </div>
+                      <div className="shrink-0 text-right text-[11px] text-neutral-300">
+                        {a.range_normal ? `${a.range_normal} ft.` : ""}
+                        {a.range_max ? ` (${a.range_max})` : ""}
+                      </div>
+                    </div>
+
+                    {actionConfig?.kind === "targeted_support" ? (
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-300">
+                          {props.combatMode ? (
+                            <>
+                              <button
+                                type="button"
+                                className={[
+                                  "rounded border px-2 py-1 text-[11px]",
+                                  props.targetingActionId === a.id
+                                    ? "border-amber-400 bg-amber-500/20 text-amber-200 shadow-[0_0_0_2px_rgba(251,191,36,0.25),0_0_14px_rgba(245,158,11,0.35)] animate-pulse"
+                                    : "border-neutral-700 hover:bg-neutral-900",
+                                ].join(" ")}
+                                onClick={() => props.onBeginTargeting?.(String(a.id))}
+                              >
+                                {combatTarget ? `Target: ${combatTarget}` : "Target"}
+                              </button>
+                            </>
+                          ) : (
+                            <select
+                              value={pointTargetByAction[a.id] ?? ""}
+                              onChange={(e) =>
+                                setPointTargetByAction((prev) => ({
+                                  ...prev,
+                                  [a.id]: e.currentTarget.value,
+                                }))
+                              }
+                              className="min-w-[12rem] rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-[11px]"
+                              disabled={!props.sessionId || Boolean(props.pointActionBusyId)}
+                            >
+                              <option value="">{actionConfig.target_scope === "ally_or_self" ? "Choose ally or self" : "Choose ally"}</option>
+                              {availableTargets.map((row) => (
+                                <option key={row.characterId} value={row.characterId}>
+                                  {row.name}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                          <button
+                            type="button"
+                            className={[
+                              "rounded px-2 py-1 text-[11px] disabled:opacity-60",
+                              props.combatMode
+                                ? "border border-green-300 bg-green-500/15 shadow-[0_0_0_2px_rgba(74,222,128,0.8),0_0_24px_rgba(34,197,94,0.95),0_0_44px_rgba(34,197,94,0.55)] animate-pulse"
+                                : "border border-neutral-700 hover:bg-neutral-900",
+                            ].join(" ")}
+                            disabled={
+                              !props.sessionId ||
+                              (!props.combatMode && (!availableTargets.length || !String(pointTargetByAction[a.id] ?? "").trim())) ||
+                              (props.combatMode && !combatTarget) ||
+                              Boolean(props.pointActionBusyId) ||
+                              Boolean(props.combatMode && props.actionUsed)
+                            }
+                            onClick={() =>
+                              props.onUsePoint?.(
+                                a.id,
+                                props.combatMode
+                                  ? String(
+                                      (props.encounterCombatants ?? []).find((row: any) => String(row?.id ?? "") === String(props.combatTargetByAction?.[a.id] ?? ""))?.character_id ?? ""
+                                    ).trim()
+                                  : String(pointTargetByAction[a.id] ?? "").trim()
+                              )
+                            }
+                          >
+                            {props.actionUsed ? "Action Used" : props.pointActionBusyId === a.id ? "Applying..." : "Use Action"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : a.uses_attack_roll !== false && a.attack_bonus_override != null ? (
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-300">
+                          <div>+{a.attack_bonus_override}</div>
+                          {targetRequired ? (
+                            <button
+                              type="button"
+                              className={[
+                                "rounded px-2 py-1 text-[11px]",
+                                props.targetingActionId === a.id
+                                  ? "border border-amber-400 bg-amber-500/20 text-amber-200 shadow-[0_0_0_2px_rgba(251,191,36,0.25),0_0_14px_rgba(245,158,11,0.35)] animate-pulse"
+                                  : "border border-neutral-700 hover:bg-neutral-900",
+                              ].join(" ")}
+                              onClick={() => props.onBeginTargeting?.(String(a.id))}
+                            >
+                              {combatTarget ? `Target: ${combatTarget}` : "Target"}
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            className={[
+                              "rounded px-2 py-1 text-[11px]",
+                              props.combatMode
+                                ? "border border-green-300 bg-green-500/15 shadow-[0_0_0_2px_rgba(74,222,128,0.8),0_0_24px_rgba(34,197,94,0.95),0_0_44px_rgba(34,197,94,0.55)] animate-pulse"
+                                : "border border-neutral-700 hover:bg-neutral-900",
+                            ].join(" ")}
+                            disabled={Boolean(props.combatMode && props.actionUsed)}
+                            onClick={async () => {
+                              const ok = await consumeTurnAction(a);
+                              if (!ok) return;
+                              await rollHit(a);
+                            }}
+                          >
+                            {props.actionUsed ? "Action Used" : "Roll Hit"}
+                          </button>
+                          {a.damage_dice ? (
+                            <button
+                              type="button"
+                              className={[
+                                "rounded px-2 py-1 text-[11px]",
+                                props.combatMode
+                                  ? "border border-green-300 bg-green-500/15 shadow-[0_0_0_2px_rgba(74,222,128,0.8),0_0_24px_rgba(34,197,94,0.95),0_0_44px_rgba(34,197,94,0.55)] animate-pulse"
+                                  : "border border-neutral-700 hover:bg-neutral-900",
+                              ].join(" ")}
+                              disabled={otherActionLocked}
+                              onClick={async () => {
+                                const needsOwnActionSpend = a.uses_attack_roll === false;
+                                if (needsOwnActionSpend && !thisActionAlreadyUsed) {
+                                  const ok = await consumeTurnAction(a);
+                                  if (!ok) return;
+                                }
+                                await rollDamage(a);
+                              }}
+                            >
+                              {otherActionLocked ? "Action Used" : HEAL_TYPES.has(String(a.damage_type ?? "").toLowerCase()) ? "Roll Heal" : "Roll Dmg"}
+                            </button>
+                          ) : null}
+                          {hasReroll && rolls[a.id]?.hit ? (
+                            <button
+                              type="button"
+                              className="rounded border border-amber-600/70 px-2 py-1 text-[11px] text-amber-200 hover:bg-neutral-900"
+                              onClick={() => rollHit(a, true)}
+                            >
+                              Reroll Hit
+                            </button>
+                          ) : null}
+                          {hasReroll && rolls[a.id]?.damage ? (
+                            <button
+                              type="button"
+                              className="rounded border border-amber-600/70 px-2 py-1 text-[11px] text-amber-200 hover:bg-neutral-900"
+                              onClick={() => rollDamage(a, true)}
+                            >
+                              Reroll Dmg
+                            </button>
+                          ) : null}
+                        </div>
+                        <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-neutral-300">
+                          {targetRequired ? (
+                            <div className="text-amber-200">{combatTarget ? `Targeting ${combatTarget}` : "Choose a target on the map"}</div>
+                          ) : null}
+                          {Array.isArray([...((props.attackAdvantageSources ?? []) as string[]), ...((props.temporaryAttackAdvantageSources ?? []) as string[])]) &&
+                          [...(props.attackAdvantageSources ?? []), ...(props.temporaryAttackAdvantageSources ?? [])].length ? (
+                            <div className="text-emerald-300">
+                              Adv: {[...(props.attackAdvantageSources ?? []), ...(props.temporaryAttackAdvantageSources ?? [])].join(", ")}
+                            </div>
+                          ) : null}
+                          {Number(props.temporaryDamageBonus ?? 0) > 0 ? (
+                            <div className="text-emerald-300">
+                              +{props.temporaryDamageBonus} dmg: {(props.temporaryDamageBonusSources ?? []).join(", ")}
+                            </div>
+                          ) : null}
+                          {hasReroll ? (
+                            <div className="text-amber-300">Reroll ready: {(props.temporaryRerollSources ?? []).join(", ")}</div>
+                          ) : null}
+                        </div>
+                        {rolls[a.id]?.hit ? <div className="text-[11px] text-emerald-300">{rolls[a.id]?.hit}</div> : null}
+                        {rolls[a.id]?.damage ? <div className="text-[11px] text-emerald-300">{rolls[a.id]?.damage}</div> : null}
+                      </div>
                     ) : (
-                      <select
-                        value={pointTargetByAction[a.id] ?? ""}
-                        onChange={(e) =>
-                          setPointTargetByAction((prev) => ({
-                            ...prev,
-                            [a.id]: e.currentTarget.value,
-                          }))
-                        }
-                        className="w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-[11px]"
-                        disabled={!props.sessionId || Boolean(props.pointActionBusyId)}
-                      >
-                        <option value="">{actionConfig.target_scope === "ally_or_self" ? "Choose ally or self" : "Choose ally"}</option>
-                        {availableTargets.map((row) => (
-                          <option key={row.characterId} value={row.characterId}>
-                            {row.name}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-300">
+                          {a.save_dc_override != null ? (
+                            <div>{`DC ${a.save_dc_override}${a.save_ability ? ` ${String(a.save_ability).toUpperCase()}` : ""}`}</div>
+                          ) : null}
+                          {a.damage_dice ? (
+                            <>
+                              <div>{`${a.damage_dice}${a.damage_type ? ` ${a.damage_type}` : ""}`}</div>
+                              <button
+                                type="button"
+                                className={[
+                                  "rounded px-2 py-1 text-[11px]",
+                                  props.combatMode
+                                    ? "border border-green-300 bg-green-500/15 shadow-[0_0_0_2px_rgba(74,222,128,0.8),0_0_24px_rgba(34,197,94,0.95),0_0_44px_rgba(34,197,94,0.55)] animate-pulse"
+                                    : "border border-neutral-700 hover:bg-neutral-900",
+                                ].join(" ")}
+                                disabled={otherActionLocked}
+                                onClick={async () => {
+                                  const needsOwnActionSpend = a.uses_attack_roll === false;
+                                  if (needsOwnActionSpend && !thisActionAlreadyUsed) {
+                                    const ok = await consumeTurnAction(a);
+                                    if (!ok) return;
+                                  }
+                                  await rollDamage(a);
+                                }}
+                              >
+                                {otherActionLocked ? "Action Used" : HEAL_TYPES.has(String(a.damage_type ?? "").toLowerCase()) ? "Roll Heal" : "Roll Dmg"}
+                              </button>
+                            </>
+                          ) : null}
+                        </div>
+                        {rolls[a.id]?.damage ? <div className="text-[11px] text-emerald-300">{rolls[a.id]?.damage}</div> : null}
+                      </div>
                     )}
-                    <button
-                      type="button"
-                      className={[
-                        "rounded px-2 py-0.5 text-[11px] disabled:opacity-60",
-                        props.combatMode
-                          ? "border border-green-300 bg-green-500/15 shadow-[0_0_0_2px_rgba(74,222,128,0.8),0_0_24px_rgba(34,197,94,0.95),0_0_44px_rgba(34,197,94,0.55)] animate-pulse"
-                          : "border border-neutral-700 hover:bg-neutral-900",
-                      ].join(" ")}
-                      disabled={
-                        !props.sessionId ||
-                        (!props.combatMode && (!availableTargets.length || !String(pointTargetByAction[a.id] ?? "").trim())) ||
-                        (props.combatMode && !combatTarget) ||
-                        Boolean(props.pointActionBusyId) ||
-                        Boolean(props.combatMode && props.actionUsed)
-                      }
-                      onClick={() =>
-                        props.onUsePoint?.(
-                          a.id,
-                          props.combatMode
-                            ? String(
-                                (props.encounterCombatants ?? []).find((row: any) => String(row?.id ?? "") === String(props.combatTargetByAction?.[a.id] ?? ""))?.character_id ?? ""
-                              ).trim()
-                            : String(pointTargetByAction[a.id] ?? "").trim()
-                        )
-                      }
-                    >
-                      {props.actionUsed ? "Action Used" : props.pointActionBusyId === a.id ? "Applying..." : "Use Action"}
-                    </button>
+
+                    <div className="border-t border-neutral-800 pt-2 text-[11px] leading-relaxed text-neutral-300">
+                      {a.summary?.trim() ? <div className="whitespace-pre-wrap break-words">{a.summary}</div> : null}
+                      {!a.summary?.trim() && a.rules_text?.trim() ? (
+                        <div className="whitespace-pre-wrap break-words">{a.rules_text}</div>
+                      ) : null}
+                      {a.on_fail?.trim() ? <div className="mt-1 whitespace-pre-wrap break-words">{`On fail: ${a.on_fail}`}</div> : null}
+                      {a.on_success?.trim() ? <div className="mt-1 whitespace-pre-wrap break-words">{`On success: ${a.on_success}`}</div> : null}
+                    </div>
                   </div>
-                ) : a.uses_attack_roll !== false && a.attack_bonus_override != null ? (
-                  <div className="space-y-1">
-                    <div>+{a.attack_bonus_override}</div>
-                    <button
-                      type="button"
-                      className={[
-                        "rounded px-2 py-0.5 text-[11px]",
-                        props.combatMode
-                          ? "border border-green-300 bg-green-500/15 shadow-[0_0_0_2px_rgba(74,222,128,0.8),0_0_24px_rgba(34,197,94,0.95),0_0_44px_rgba(34,197,94,0.55)] animate-pulse"
-                          : "border border-neutral-700 hover:bg-neutral-900",
-                      ].join(" ")}
-                      disabled={Boolean(props.combatMode && props.actionUsed)}
-                      onClick={async () => {
-                        const ok = await consumeTurnAction(a);
-                        if (!ok) return;
-                        await rollHit(a);
-                      }}
-                    >
-                      {props.actionUsed ? "Action Used" : "Roll Hit"}
-                    </button>
-                    {targetRequired ? (
-                      <button
-                        type="button"
-                        className={[
-                          "rounded px-2 py-0.5 text-[11px]",
-                          props.targetingActionId === a.id
-                            ? "border border-amber-400 bg-amber-500/20 text-amber-200 shadow-[0_0_0_2px_rgba(251,191,36,0.25),0_0_14px_rgba(245,158,11,0.35)] animate-pulse"
-                            : "border border-neutral-700 hover:bg-neutral-900",
-                        ].join(" ")}
-                        onClick={() => props.onBeginTargeting?.(String(a.id))}
-                      >
-                        {combatTarget ? `Target: ${combatTarget}` : "Choose Target"}
-                      </button>
-                    ) : null}
-                    {Array.isArray([...((props.attackAdvantageSources ?? []) as string[]), ...((props.temporaryAttackAdvantageSources ?? []) as string[])]) &&
-                    [...(props.attackAdvantageSources ?? []), ...(props.temporaryAttackAdvantageSources ?? [])].length ? (
-                      <div className="text-[11px] text-emerald-300">
-                        Adv: {[...(props.attackAdvantageSources ?? []), ...(props.temporaryAttackAdvantageSources ?? [])].join(", ")}
-                      </div>
-                    ) : null}
-                    {rolls[a.id]?.hit ? <div className="text-emerald-300">{rolls[a.id]?.hit}</div> : null}
-                    {hasReroll && rolls[a.id]?.hit ? (
-                      <button
-                        type="button"
-                        className="rounded border border-amber-600/70 px-2 py-0.5 text-[11px] text-amber-200 hover:bg-neutral-900"
-                        onClick={() => rollHit(a, true)}
-                      >
-                        Reroll Hit
-                      </button>
-                    ) : null}
-                  </div>
-                ) : a.save_dc_override != null ? (
-                  <div>{`DC ${a.save_dc_override}${a.save_ability ? ` ${String(a.save_ability).toUpperCase()}` : ""}`}</div>
-                ) : null}
-              </div>
-              <div className="col-span-2 text-xs text-neutral-300">
-                {a.damage_dice ? (
-                  <div>
-                    <div>{`${a.damage_dice}${a.damage_type ? ` ${a.damage_type}` : ""}`}</div>
-                    {Number(props.temporaryDamageBonus ?? 0) > 0 ? (
-                      <div className="text-[11px] text-emerald-300">
-                        +{props.temporaryDamageBonus} dmg: {(props.temporaryDamageBonusSources ?? []).join(", ")}
-                      </div>
-                    ) : null}
-                    <button
-                      type="button"
-                      className={[
-                        "mt-1 rounded px-2 py-0.5 text-[11px]",
-                        props.combatMode
-                          ? "border border-green-300 bg-green-500/15 shadow-[0_0_0_2px_rgba(74,222,128,0.8),0_0_24px_rgba(34,197,94,0.95),0_0_44px_rgba(34,197,94,0.55)] animate-pulse"
-                          : "border border-neutral-700 hover:bg-neutral-900",
-                      ].join(" ")}
-                      disabled={otherActionLocked}
-                      onClick={async () => {
-                        const needsOwnActionSpend = a.uses_attack_roll === false;
-                        if (needsOwnActionSpend && !thisActionAlreadyUsed) {
-                          const ok = await consumeTurnAction(a);
-                          if (!ok) return;
-                        }
-                        await rollDamage(a);
-                      }}
-                    >
-                      {otherActionLocked ? "Action Used" : HEAL_TYPES.has(String(a.damage_type ?? "").toLowerCase()) ? "Roll Heal" : "Roll Dmg"}
-                    </button>
-                    {targetRequired ? (
-                      <div className="text-[11px] text-amber-200">{combatTarget ? `Targeting ${combatTarget}` : "Choose a target on the map"}</div>
-                    ) : null}
-                    {rolls[a.id]?.damage ? <div className="text-emerald-300">{rolls[a.id]?.damage}</div> : null}
-                    {hasReroll && rolls[a.id]?.damage ? (
-                      <button
-                        type="button"
-                        className="mt-1 rounded border border-amber-600/70 px-2 py-0.5 text-[11px] text-amber-200 hover:bg-neutral-900"
-                        onClick={() => rollDamage(a, true)}
-                      >
-                        Reroll Dmg
-                      </button>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
-              <div className="col-span-3 text-xs text-neutral-300">
-                {a.summary?.trim() ? <div>{a.summary}</div> : null}
-                {!a.summary?.trim() && a.rules_text?.trim() ? (
-                  <div className="line-clamp-2">{a.rules_text}</div>
-                ) : null}
-                {a.on_fail?.trim() ? <div>{`On fail: ${a.on_fail}`}</div> : null}
-                {a.on_success?.trim() ? <div>{`On success: ${a.on_success}`}</div> : null}
-                {hasReroll ? (
-                  <div className="text-amber-300">Reroll ready: {(props.temporaryRerollSources ?? []).join(", ")}</div>
-                ) : null}
-              </div>
-                  </>
                 );
               })()}
-            </div>
-          ))}
         </div>
-      ) : (
-        <div className="mt-3 text-sm text-neutral-400">No learned actions yet.</div>
-      )}
+      ))}
     </div>
+  ) : (
+    <div className="text-sm text-neutral-400">No learned actions yet.</div>
   );
 }
 
