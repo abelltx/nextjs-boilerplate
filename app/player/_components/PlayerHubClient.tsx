@@ -563,6 +563,8 @@ export default function PlayerHubClient(props: {
   const [resolvingPointId, setResolvingPointId] = useState<string | null>(null);
   const [requestCheckKey, setRequestCheckKey] = useState("Perception");
   const [requestMessage, setRequestMessage] = useState("");
+  const [requestRollOpen, setRequestRollOpen] = useState(false);
+  const [quickRollsOpen, setQuickRollsOpen] = useState(false);
   const promptBoxRef = useRef<HTMLDivElement | null>(null);
   const [guidedResult, setGuidedResult] = useState<GuidedRoll | null>(null);
   const [flight, setFlight] = useState<{
@@ -729,7 +731,7 @@ export default function PlayerHubClient(props: {
   }
 
   async function handleRequestRoll() {
-    if (!selectedSessionId || requestingRoll || myPendingRequest) return;
+    if (!selectedSessionId || requestingRoll || myPendingRequest) return false;
     setRequestingRoll(true);
     try {
       const res = await requestRollApprovalAction({
@@ -739,10 +741,11 @@ export default function PlayerHubClient(props: {
       });
       if (!res.ok) {
         alert(res.error ?? "Could not send roll request.");
-        return;
+        return false;
       }
       setRequestMessage("");
       router.refresh();
+      return true;
     } finally {
       setRequestingRoll(false);
     }
@@ -1390,30 +1393,12 @@ export default function PlayerHubClient(props: {
             {selectedSessionId ? (
               <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4 space-y-2">
                 <div className="text-sm font-semibold">Request Roll</div>
-                <div className="grid grid-cols-1 gap-2">
-                  <select
-                    className="rounded border border-neutral-700 bg-neutral-950 px-2 py-2 text-sm"
-                    value={requestCheckKey}
-                    onChange={(e) => setRequestCheckKey(e.currentTarget.value)}
-                    disabled={Boolean(myPendingRequest) || requestingRoll}
-                  >
-                    {REQUESTABLE_CHECKS.map((k) => (
-                      <option key={k} value={k}>
-                        {k}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    className="rounded border border-neutral-700 bg-neutral-950 px-2 py-2 text-sm"
-                    placeholder="Optional plan for storyteller..."
-                    value={requestMessage}
-                    onChange={(e) => setRequestMessage(e.currentTarget.value)}
-                    disabled={Boolean(myPendingRequest) || requestingRoll}
-                  />
+                <div className="text-xs text-neutral-400">
+                  Ask the storyteller for a specific check only when you need one.
                 </div>
                 <button
                   type="button"
-                  onClick={handleRequestRoll}
+                  onClick={() => setRequestRollOpen(true)}
                   disabled={Boolean(myPendingRequest) || requestingRoll}
                   className={[
                     "rounded border px-3 py-2 text-sm font-semibold transition",
@@ -1431,19 +1416,29 @@ export default function PlayerHubClient(props: {
 
             <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4 space-y-3">
               <div className="text-sm font-semibold">Actions</div>
-              <RollPanel
-                stat={stat}
-                disabled={isLiveMode && !rollOpen}
-                disabledReason="Rolls are handled in Live Mode."
-                highlightAbility={promptTarget?.kind === "ability" ? promptTarget.abilityKey : undefined}
-                highlightSkill={promptTarget?.kind === "skill" ? promptTarget.skillKey : undefined}
-                highlightDie={promptTarget?.kind === "die" ? promptTarget.die : undefined}
-                onGuidedRoll={handleRollPanelGuided}
-                lockRoll={rollLocked || diceMode === "manual" || submittingRoll}
-                showAbilityChecks={false}
-                showSkillChecks={false}
-                showRollConsole={false}
-              />
+              <button
+                type="button"
+                onClick={() => setQuickRollsOpen((v) => !v)}
+                className="flex w-full items-center justify-between rounded-xl border border-neutral-800 bg-neutral-950/50 px-3 py-2 text-left text-sm font-semibold text-neutral-100"
+              >
+                <span>Quick Rolls</span>
+                <span className="text-xs text-neutral-400">{quickRollsOpen ? "Hide" : "Show"}</span>
+              </button>
+              {quickRollsOpen ? (
+                <RollPanel
+                  stat={stat}
+                  disabled={isLiveMode && !rollOpen}
+                  disabledReason="Rolls are handled in Live Mode."
+                  highlightAbility={promptTarget?.kind === "ability" ? promptTarget.abilityKey : undefined}
+                  highlightSkill={promptTarget?.kind === "skill" ? promptTarget.skillKey : undefined}
+                  highlightDie={promptTarget?.kind === "die" ? promptTarget.die : undefined}
+                  onGuidedRoll={handleRollPanelGuided}
+                  lockRoll={rollLocked || diceMode === "manual" || submittingRoll}
+                  showAbilityChecks={false}
+                  showSkillChecks={false}
+                  showRollConsole={false}
+                />
+              ) : null}
               {pendingPointChoices.length ? (
                 <PendingPointChoicePanel
                   effects={pendingPointChoices}
@@ -1496,6 +1491,71 @@ export default function PlayerHubClient(props: {
           setOptimisticLiveSession({ id: sessionId, name: sessionName });
         }}
       />
+
+      {requestRollOpen ? (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/70 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-neutral-800 bg-neutral-900 p-4 shadow-2xl">
+            <div className="text-base font-semibold text-neutral-100">Request Roll</div>
+            <div className="mt-1 text-sm text-neutral-400">
+              Pick the roll you want, then tell the storyteller why you want it.
+            </div>
+            <div className="mt-4 space-y-3">
+              <div className="space-y-1">
+                <label className="text-xs uppercase tracking-wide text-neutral-500">Roll</label>
+                <select
+                  className="w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-2 text-sm"
+                  value={requestCheckKey}
+                  onChange={(e) => setRequestCheckKey(e.currentTarget.value)}
+                  disabled={Boolean(myPendingRequest) || requestingRoll}
+                >
+                  {REQUESTABLE_CHECKS.map((k) => (
+                    <option key={k} value={k}>
+                      {k}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs uppercase tracking-wide text-neutral-500">Why</label>
+                <textarea
+                  className="min-h-[96px] w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-2 text-sm"
+                  placeholder="Explain the request to the storyteller..."
+                  value={requestMessage}
+                  onChange={(e) => setRequestMessage(e.currentTarget.value)}
+                  disabled={Boolean(myPendingRequest) || requestingRoll}
+                />
+              </div>
+            </div>
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setRequestRollOpen(false)}
+                className="rounded border border-neutral-700 px-3 py-2 text-sm text-neutral-300"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const ok = await handleRequestRoll();
+                  if (ok) setRequestRollOpen(false);
+                }}
+                disabled={Boolean(myPendingRequest) || requestingRoll}
+                className={[
+                  "rounded border px-3 py-2 text-sm font-semibold transition",
+                  myActiveRoll
+                    ? "border-emerald-400 bg-emerald-500/20 text-emerald-200"
+                    : myPendingRequest
+                      ? "border-amber-400 bg-amber-500/20 text-amber-200"
+                      : "border-amber-400 bg-amber-500/20 text-amber-100 hover:bg-amber-500/30",
+                ].join(" ")}
+              >
+                {requestingRoll ? "Sending..." : "Send Request"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }
