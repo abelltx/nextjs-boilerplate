@@ -360,7 +360,7 @@ export function CombinedChecksCard({
                   : "border-neutral-800",
               ].join(" ")}
             >
-              <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center justify-between gap-2">
                 <button
                   type="button"
                   disabled={rollLocked}
@@ -384,12 +384,15 @@ export function CombinedChecksCard({
                   }}
                   className="min-w-0 text-left leading-tight disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  <div className="text-[11px] uppercase tracking-wide text-neutral-500">{ability.label}</div>
-                  <div className="mt-0.5 flex items-center gap-1.5">
-                    <div className="text-base font-semibold text-white" title={`base ${base}, gear ${gear >= 0 ? `+${gear}` : gear}`}>
-                      {final}
-                    </div>
-                    <div className="text-xs font-semibold text-neutral-300">{fmt(abilityMod)}</div>
+                  <div className="flex items-center gap-1.5 text-sm">
+                    <span className="font-semibold text-neutral-100">{ability.label}</span>
+                    <span
+                      className="text-sm font-semibold text-white"
+                      title={`base ${base}, gear ${gear >= 0 ? `+${gear}` : gear}`}
+                    >
+                      ({final})
+                    </span>
+                    <span className="text-xs font-semibold text-neutral-300">{fmt(abilityMod)}</span>
                     {hasAbilityAdvantage ? (
                       <span className="rounded border border-emerald-300/60 bg-emerald-500/20 px-1 py-0 text-[10px] font-semibold text-emerald-200">
                         ADV
@@ -398,8 +401,7 @@ export function CombinedChecksCard({
                   </div>
                 </button>
                 <div className="rounded-lg border border-neutral-800 bg-neutral-900/70 px-2 py-0.5 text-right">
-                  <div className="text-[10px] uppercase tracking-wide text-neutral-500">Save</div>
-                  <div className="text-sm font-semibold text-white">{fmt(saveBonus)}</div>
+                  <div className="text-xs font-semibold text-white">Save {fmt(saveBonus)}</div>
                 </div>
               </div>
 
