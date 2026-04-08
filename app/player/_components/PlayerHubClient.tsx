@@ -7,7 +7,6 @@ import PlayerStatusHeader from "./PlayerStatusHeader";
 import JourneyLog from "./JourneyLog";
 import JoinSessionModal from "./JoinSessionModal";
 import { CombinedChecksCard, PassivesCard, type AbilityKey } from "./PlayerSheetPanels";
-import RollPanel from "./RollPanel";
 import PlayerInventoryPanel from "./PlayerInventoryPanel";
 import {
   abandonNpcQuestAction,
@@ -20,7 +19,6 @@ import {
   consumePointSupportEffectsAction,
   leaveSessionAction,
   requestRollApprovalAction,
-  reportQuickRollAction,
   startNpcQuestAction,
   appendEncounterLogAction,
   moveOwnEncounterTokenAction,
@@ -566,8 +564,6 @@ export default function PlayerHubClient(props: {
   const [requestMessage, setRequestMessage] = useState("");
   const [requestRollOpen, setRequestRollOpen] = useState(false);
   const [requestPickMode, setRequestPickMode] = useState(false);
-  const [quickRollsOpen, setQuickRollsOpen] = useState(false);
-  const quickRollCollapseRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const promptBoxRef = useRef<HTMLDivElement | null>(null);
   const [guidedResult, setGuidedResult] = useState<GuidedRoll | null>(null);
   const [flight, setFlight] = useState<{
@@ -579,14 +575,6 @@ export default function PlayerHubClient(props: {
     dy: number;
     active: boolean;
   } | null>(null);
-  useEffect(() => {
-    return () => {
-      if (quickRollCollapseRef.current) {
-        window.clearTimeout(quickRollCollapseRef.current);
-        quickRollCollapseRef.current = null;
-      }
-    };
-  }, []);
   const currentRoundId = String(stageState?.roll_round_id ?? "");
   const myExistingResult = (stageState?.roll_results?.[props.userId] ?? null) as any;
   const alreadySubmittedRound = Boolean(
@@ -759,30 +747,6 @@ export default function PlayerHubClient(props: {
       return true;
     } finally {
       setRequestingRoll(false);
-    }
-  }
-
-  function handleQuickRollComplete() {
-    if (quickRollCollapseRef.current) {
-      clearTimeout(quickRollCollapseRef.current);
-    }
-    quickRollCollapseRef.current = setTimeout(() => {
-      setQuickRollsOpen(false);
-      quickRollCollapseRef.current = null;
-    }, 7000);
-  }
-
-  async function handleQuickRollLogged(entry: { label: string; total: number; formula: string }) {
-    if (!selectedSessionId) return;
-    const res = await reportQuickRollAction({
-      sessionId: selectedSessionId,
-      characterId: String(props.character?.id ?? ""),
-      label: entry.label,
-      total: entry.total,
-      formula: entry.formula,
-    });
-    if (!res.ok) {
-      alert(res.error ?? "Could not report quick roll to storyteller.");
     }
   }
 
@@ -1440,7 +1404,7 @@ export default function PlayerHubClient(props: {
           <aside className="lg:col-span-3 xl:col-span-3 space-y-4">
             <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4 space-y-3">
               <div className="text-sm font-semibold">Actions</div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-2">
                 <button
                   type="button"
                   onClick={() => {
@@ -1469,36 +1433,11 @@ export default function PlayerHubClient(props: {
                     {requestPickMode ? "Pick from left column" : "Choose from sheet"}
                   </div>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setQuickRollsOpen((v) => !v)}
-                  className="rounded-xl border border-neutral-800 bg-neutral-950/50 px-3 py-2 text-left text-sm font-semibold text-neutral-100 hover:bg-neutral-900/70"
-                >
-                  <div>Quick Rolls</div>
-                  <div className="mt-1 text-[11px] font-normal text-neutral-400">{quickRollsOpen ? "Hide dice" : "Show dice"}</div>
-                </button>
               </div>
               {requestPickMode ? (
                 <div className="rounded-xl border border-amber-400/60 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100">
                   Click a skill or ability in the left column to build the request.
                 </div>
-              ) : null}
-              {quickRollsOpen ? (
-                <RollPanel
-                  stat={stat}
-                  disabled={false}
-                  highlightAbility={promptTarget?.kind === "ability" ? promptTarget.abilityKey : undefined}
-                  highlightSkill={promptTarget?.kind === "skill" ? promptTarget.skillKey : undefined}
-                  highlightDie={promptTarget?.kind === "die" ? promptTarget.die : undefined}
-                  onGuidedRoll={handleRollPanelGuided}
-                  lockRoll={submittingRoll}
-                  showAbilityChecks={false}
-                  showSkillChecks={false}
-                  showRollConsole={false}
-                  showManualEntry
-                  onRollComplete={handleQuickRollComplete}
-                  onRollLogged={handleQuickRollLogged}
-                />
               ) : null}
               {pendingPointChoices.length ? (
                 <PendingPointChoicePanel
