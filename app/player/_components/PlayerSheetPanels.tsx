@@ -406,7 +406,7 @@ export function CombinedChecksCard({
               </div>
 
               {groupedSkills.length ? (
-                <div className="mt-1 space-y-0.5">
+                <div className="mt-1 space-y-0">
                   {groupedSkills.map((skill) => {
                     const baseSkillBonus = totalAbilityBonus;
                     const hasOverride = Object.prototype.hasOwnProperty.call(skills, skill.key);
@@ -438,14 +438,14 @@ export function CombinedChecksCard({
                           );
                         }}
                         className={[
-                          "flex w-full items-center justify-between gap-2 rounded-lg border px-2 py-1 text-left transition disabled:cursor-not-allowed disabled:opacity-60",
+                          "flex w-full items-center justify-between gap-2 rounded-md border px-2 py-0.5 text-left transition disabled:cursor-not-allowed disabled:opacity-60",
                           highlightSkill === skill.key
                             ? "border-green-300 bg-green-500/15 shadow-[0_0_0_2px_rgba(74,222,128,0.45),0_0_18px_rgba(34,197,94,0.28)]"
                             : "border-neutral-800 bg-neutral-900/60",
                         ].join(" ")}
                       >
                         <div className="min-w-0">
-                          <div className="text-[11px] uppercase leading-tight tracking-wide text-neutral-500">{skill.label}</div>
+                          <div className="text-[11px] leading-tight tracking-wide text-neutral-400">{skill.label}</div>
                         </div>
                         <div className="flex items-center gap-1 text-sm font-semibold text-white">
                           <span
